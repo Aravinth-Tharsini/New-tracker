@@ -1,0 +1,1767 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Life Tracker</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.3.1",
+      "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+      "lucide-react": "https://esm.sh/lucide-react@0.383.0?external=react"
+    }
+  }
+  </script>
+</head>
+<body style="margin:0; background:#14181D;">
+  <div id="root"></div>
+  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+  <script type="text/babel" data-type="module" data-presets="react">
+import React from "react";
+import ReactDOM from "react-dom/client";
+
+// ---- storage polyfill: saves data in this browser using localStorage ----
+const PREFIX = "life-tracker:";
+function readAll() {
+  try {
+    const raw = localStorage.getItem(PREFIX + "__store__");
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+function writeAll(store) { localStorage.setItem(PREFIX + "__store__", JSON.stringify(store)); }
+window.storage = {
+  async get(key, shared = false) {
+    const store = readAll();
+    if (!(key in store)) return null;
+    return { key, value: store[key], shared };
+  },
+  async set(key, value, shared = false) {
+    const store = readAll();
+    store[key] = value;
+    writeAll(store);
+    return { key, value, shared };
+  },
+  async delete(key, shared = false) {
+    const store = readAll();
+    const existed = key in store;
+    delete store[key];
+    writeAll(store);
+    return existed ? { key, deleted: true, shared } : null;
+  },
+  async list(prefix = "", shared = false) {
+    const store = readAll();
+    const keys = Object.keys(store).filter((k) => k.startsWith(prefix));
+    return { keys, prefix, shared };
+  },
+};
+// ---- end storage polyfill ----
+
+import { useState, useEffect, useMemo, useRef } from "react";
+import {
+  CalendarDays, LayoutGrid, TrendingUp, Plus, Trash2, Check, Wallet, Briefcase, HeartPulse,
+  Settings2, Play, Square, ArrowUp, ArrowDown, Sun, Building2, Dumbbell, Moon, Droplet, Receipt,
+  Target, Clock, Pencil, ChevronUp, ChevronDown, Bell, BellOff, Flame, Download, FileJson,
+  Plane, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
+  ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
+} from "lucide-react";
+
+const INK = "#EDEAE0";
+const INK_DIM = "#9A968A";
+const INK_FAINT = "#6B6860";
+const PANEL = "#1B2027";
+const PANEL_2 = "#20262E";
+const BG = "#14181D";
+const LINE = "#2C333C";
+const BRASS = "#C89B3C";
+const BRASS_DIM = "#8A6B2A";
+const TEAL = "#4E9E90";
+const CORAL = "#C97256";
+
+const mono = "'JetBrains Mono', monospace";
+const disp = "'Space Grotesk', sans-serif";
+
+function pad2(n) { return String(n).padStart(2, "0"); }
+function dateKey(d = new Date()) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function monthKey(d = new Date()) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; }
+function formatDateLong(d) { return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); }
+function monthLabel(mk) { const [y, m] = mk.split("-"); return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" }); }
+function round(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+function durationToMonths(value, unit) {
+  const v = Number(value) || 0;
+  if (unit === "Weeks") return v * (12 / 52);
+  if (unit === "Years") return v * 12;
+  return v;
+}
+function computeLoanInterest(principal, ratePercent, rateUnit, durationValue, durationUnit) {
+  const p = Number(principal) || 0;
+  const rate = Number(ratePercent) || 0;
+  const months = durationToMonths(durationValue, durationUnit);
+  const interest = rateUnit === "month" ? p * (rate / 100) * months : p * (rate / 100) * (months / 12);
+  return { interest: round(interest), totalRepayment: round(p + interest), months: round(months) };
+}
+function durationToDays(value, unit) {
+  const v = Number(value) || 0;
+  if (unit === "Days") return v;
+  if (unit === "Weeks") return v * 7;
+  if (unit === "Years") return v * 365.2425;
+  return v * 30.436875;
+}
+function addDays(dateStr, days) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + Math.round(days));
+  return dateKey(d);
+}
+const REMINDER_OPTIONS = [
+  { value: "none", label: "On travel date only", days: 0 },
+  { value: "1d", label: "1 day before", days: 1 },
+  { value: "2d", label: "2 days before", days: 2 },
+  { value: "3d", label: "3 days before", days: 3 },
+  { value: "5d", label: "5 days before", days: 5 },
+  { value: "1w", label: "1 week before", days: 7 },
+  { value: "2w", label: "2 weeks before", days: 14 },
+  { value: "1m", label: "1 month before", days: 30 },
+  { value: "2m", label: "2 months before", days: 60 },
+];
+function reminderLeadDays(offset) {
+  const opt = REMINDER_OPTIONS.find((o) => o.value === offset);
+  return opt ? opt.days : 0;
+}
+function isTravelRelevantToday(plan, todayStr) {
+  if (!plan || !plan.travelDate) return false;
+  const lead = reminderLeadDays(plan.reminderOffset);
+  const remindFrom = addDays(plan.travelDate, -lead);
+  return todayStr >= remindFrom && todayStr <= plan.travelDate;
+}
+function computeRechargePlan(planAmount, durationValue, durationUnit, startDate) {
+  const amt = Number(planAmount) || 0;
+  const days = durationToDays(durationValue, durationUnit);
+  const avgDailyCost = days > 0 ? amt / days : 0;
+  return { avgDailyCost: round(avgDailyCost), nextDate: addDays(startDate, days), days: Math.round(days) };
+}
+function inr(n) { return "₹" + Math.round(n).toLocaleString("en-IN"); }
+function fmtClock12(d) { return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" }); }
+function fmtTime(iso) { return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); }
+function fmtDuration(min) { if (min == null) return "-"; const h = Math.floor(min / 60), m = Math.round(min % 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; }
+function fmtElapsed(ms) {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSec / 3600), m = Math.floor((totalSec % 3600) / 60), s = totalSec % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+function minutesSinceMidnight(iso) { const d = new Date(iso); return d.getHours() * 60 + d.getMinutes(); }
+function fmtClockFromMinutes(min) {
+  if (min == null) return "-";
+  const h24 = Math.floor(min / 60) % 24, m = Math.round(min % 60);
+  const period = h24 >= 12 ? "PM" : "AM"; let h12 = h24 % 12; if (h12 === 0) h12 = 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+function defaultLog() { return { expenses: [], intervalLogs: {} }; }
+function getIntervalLogs(log, itemId) {
+  const legacy = itemId === "water" ? (log.waterLogs || []) : [];
+  const own = (log.intervalLogs && log.intervalLogs[itemId]) || [];
+  return [...legacy, ...own];
+}
+function isIntervalDue(item, log, nowMs) {
+  const logs = getIntervalLogs(log, item.id);
+  const lastTime = logs.length ? logs[logs.length - 1].time : null;
+  const nextDueMs = lastTime ? new Date(lastTime).getTime() + item.intervalHours * 3600000 : nowMs;
+  return nowMs >= nextDueMs;
+}
+function computeStreak(dailyLogs, itemId) {
+  let streak = 0;
+  let d = new Date();
+  const todayDone = dailyLogs[dateKey(d)] && dailyLogs[dateKey(d)][itemId] && dailyLogs[dateKey(d)][itemId].status === "done";
+  if (!todayDone) d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
+  while (true) {
+    const k = dateKey(d);
+    const rec = dailyLogs[k] && dailyLogs[k][itemId];
+    if (rec && rec.status === "done") { streak += 1; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1); }
+    else break;
+  }
+  return streak;
+}
+function toCSV(rows) {
+  if (!rows.length) return "";
+  const headers = Object.keys(rows[0]);
+  const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  return [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");
+}
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+const ICON_MAP = {
+  Sun, Building2, Dumbbell, Moon, Droplet, Receipt, Target, Clock,
+  Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
+  ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
+};
+const ICON_NAMES = Object.keys(ICON_MAP);
+const TYPE_OPTIONS = [
+  { value: "instant", label: "Instant \u00b7 one button" },
+  { value: "duration", label: "Duration \u00b7 start / stop timer" },
+  { value: "interval", label: "Interval \u00b7 recurring reminder" },
+];
+const DEFAULT_EXPENSE_GROUPS = {
+  EMI: ["EMI"],
+  "Electricity Bill": ["Electricity Bill"],
+  Food: ["Breakfast", "Lunch", "Dinner", "Tea", "Snacks"],
+  Grocery: ["Vegetables", "Fruits", "Grocery items", "Household items"],
+  Recharge: ["Mobile recharge", "DTH / internet recharge"],
+  Fuel: ["Petrol", "Diesel"],
+  "Health Care": ["Grooming", "Medical", "Pharmacy"],
+  Travel: ["Car", "Train", "Bus", "Flight", "Other"],
+  Other: ["Shopping", "Bills", "Entertainment", "Personal"],
+};
+// Groups whose payments are driven from the saved Repayment Due data instead of manual entry;
+// these are hidden from the "Today's Expense" category picker and shown in their own Repayment section.
+const REPAYMENT_LINKED_EXPENSE_GROUPS = ["EMI", "Electricity Bill", "Recharge"];
+const REPAYMENT_CATEGORY_TO_EXPENSE_GROUP = { "EMI": "EMI", "Loan": "EMI", "Gold Loan": "EMI", "Electricity": "Electricity Bill", "Mobile Recharge": "Recharge", "Rent": "Other", "Other": "Other" };
+
+function isItemValid(item) {
+  if (!item || !item.name || !item.name.trim()) return false;
+  if (item.type === "interval") return Number(item.intervalHours) > 0 && Number(item.amount) > 0 && !!item.unit;
+  if (item.type === "expense") return Object.values(item.groups || {}).some((subs) => subs && subs.length > 0);
+  return item.type === "instant" || item.type === "duration";
+}
+
+const REPAYMENT_CATEGORIES = ["Gold Loan", "Loan", "EMI", "Electricity", "Rent", "Mobile Recharge", "Other"];
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const ROUTINE_CATEGORIES = ["career", "health"];
+const GOAL_TRACK_ICON = { career: "Building2", health: "Dumbbell" };
+function computeRoutineTotals(g) {
+  const session = Number(g.sessionMinutes) || 0;
+  if (!session) return { dailyMin: 0, weeklyMin: 0, monthlyMin: 0 };
+  if (g.frequency === "Weekly") {
+    const occurrences = (g.specificDays && g.specificDays.length) ? g.specificDays.length : (Number(g.daysPerWeek) || 0);
+    const weeklyMin = occurrences * session;
+    return { dailyMin: round(weeklyMin / 7), weeklyMin: round(weeklyMin), monthlyMin: round((weeklyMin * 30) / 7) };
+  }
+  if (g.frequency === "Monthly") {
+    return { dailyMin: round(session / 30), weeklyMin: round((session * 7) / 30), monthlyMin: round(session) };
+  }
+  return { dailyMin: round(session), weeklyMin: round(session * 7), monthlyMin: round(session * 30) };
+}
+const CATEGORY_DEFS = [
+  { id: "finance", label: "Finance", icon: Wallet },
+  { id: "career", label: "Career growth", icon: Briefcase },
+  { id: "health", label: "Healthcare", icon: HeartPulse },
+  { id: "trip", label: "Trip", icon: Plane },
+  { id: "activity", label: "Daily Routine", icon: Activity },
+];
+const GOAL_CATEGORY_DEFS = CATEGORY_DEFS.filter((c) => ["finance", "career", "health"].includes(c.id));
+const DAILY_TAB_CATEGORY_DEFS = [
+  { id: "expense", label: "Expense", icon: Receipt },
+  { id: "trip", label: "Trip", icon: Plane },
+  { id: "career", label: "Career growth", icon: Briefcase },
+  { id: "health", label: "Healthcare", icon: HeartPulse },
+  { id: "activity", label: "Daily Routine", icon: Activity },
+];
+// Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
+// EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
+const DAILY_EXPENSE_GROUPS = Object.fromEntries(Object.entries(DEFAULT_EXPENSE_GROUPS).filter(([g]) => !REPAYMENT_LINKED_EXPENSE_GROUPS.includes(g)));
+const EXPENSE_GROUP_ICON = { Food: UtensilsCrossed, Grocery: ShoppingBag, Fuel: Car, "Health Care": HeartPulse, Travel: Plane, Other: Receipt };
+
+function Card({ children, style }) { return <div style={{ background: PANEL, border: `1px solid ${LINE}`, borderRadius: 12, padding: "14px 16px", ...style }}>{children}</div>; }
+function SectionLabel({ children }) { return <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: INK_FAINT, marginBottom: 8 }}>{children}</div>; }
+function TextField(props) { return <input {...props} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 8, padding: "8px 10px", color: INK, fontSize: 13, outline: "none", ...props.style }} />; }
+function Select(props) { return <select {...props} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 8, color: INK, fontSize: 13, padding: "8px 6px", ...props.style }}>{props.children}</select>; }
+function IconBtn({ onClick, children }) { return <button onClick={onClick} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "0 12px", height: 32, color: BRASS, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>{children}</button>; }
+function ProgressBar({ pct, color = BRASS }) { return <div style={{ height: 6, background: PANEL_2, borderRadius: 4, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.min(100, Math.max(0, pct))}%`, background: color, borderRadius: 4 }} /></div>; }
+function ActionButton({ onClick, label, icon: Icon, tone = BRASS, big }) {
+  return <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, background: tone, border: "none", color: BG, borderRadius: 10, padding: big ? "14px 22px" : "8px 16px", fontSize: big ? 15 : 13, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}><Icon size={big ? 17 : 14} /> {label}</button>;
+}
+function ChipButton({ onClick, label, active }) {
+  return <button onClick={onClick} style={{ background: active ? "rgba(200,155,60,0.15)" : PANEL_2, border: `1px solid ${active ? BRASS : LINE}`, color: active ? BRASS : INK_DIM, borderRadius: 10, padding: "10px 14px", fontSize: 13, cursor: "pointer" }}>{label}</button>;
+}
+
+const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalHours: 2, amount: 250, unit: "ml", groups: {} });
+
+function LifeTracker() {
+  const [page, setPage] = useState("daily");
+  const [activeTab, setActiveTab] = useState(null);
+  const [expandedDailyCategory, setExpandedDailyCategory] = useState(null);
+  const [catTab, setCatTab] = useState("finance");
+  const [dailyItems, setDailyItems] = useState([]);
+  const [dailyLogs, setDailyLogs] = useState({});
+  const [goals, setGoals] = useState([]);
+  const [repayments, setRepayments] = useState([]);
+  const [travelPlans, setTravelPlans] = useState([]);
+  const [financeMonthly, setFinanceMonthly] = useState({});
+  const [remindersEnabled, setRemindersEnabled] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [now, setNow] = useState(new Date());
+  const notifiedRef = useRef({});
+  const today = dateKey();
+  const curMonth = monthKey();
+  const sortedTravelPlans = [...travelPlans].sort((a, b) => (a.travelDate || "9999").localeCompare(b.travelDate || "9999"));
+  const todaysTravelPlans = useMemo(() => sortedTravelPlans.filter((t) => !t.dismissed && isTravelRelevantToday(t, today)), [sortedTravelPlans, today]);
+
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+
+  useEffect(() => {
+    (async () => {
+      const keys = ["dailyItems", "dailyLogs", "goals", "repayments", "travelPlans", "financeMonthly", "remindersEnabled"];
+      const setters = [setDailyItems, setDailyLogs, setGoals, setRepayments, setTravelPlans, setFinanceMonthly, setRemindersEnabled];
+      for (let i = 0; i < keys.length; i++) {
+        try { const r = await window.storage.get(keys[i], false); if (r && r.value) setters[i](JSON.parse(r.value)); } catch (e) {}
+      }
+      setLoaded(true);
+    })();
+  }, []);
+  useEffect(() => { if (loaded) window.storage.set("dailyItems", JSON.stringify(dailyItems), false).catch(() => {}); }, [dailyItems, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("dailyLogs", JSON.stringify(dailyLogs), false).catch(() => {}); }, [dailyLogs, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("goals", JSON.stringify(goals), false).catch(() => {}); }, [goals, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("repayments", JSON.stringify(repayments), false).catch(() => {}); }, [repayments, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("travelPlans", JSON.stringify(travelPlans), false).catch(() => {}); }, [travelPlans, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("financeMonthly", JSON.stringify(financeMonthly), false).catch(() => {}); }, [financeMonthly, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("remindersEnabled", JSON.stringify(remindersEnabled), false).catch(() => {}); }, [remindersEnabled, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const hasExpenseItem = dailyItems.some((i) => i.type === "expense");
+    if (hasExpenseItem) {
+      setDailyItems((prev) => prev.filter((i) => i.type !== "expense"));
+    }
+  }, [loaded, dailyItems]);
+
+  const toggleReminders = () => {
+    setRemindersEnabled((v) => {
+      const next = !v;
+      if (next && typeof Notification !== "undefined" && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+      }
+      return next;
+    });
+  };
+
+  const goalTrackableItems = useMemo(() => goals
+    .filter((g) => ROUTINE_CATEGORIES.includes(g.category) && !g.done && g.trackingType)
+    .map((g) => ({
+      id: `goal-${g.id}`, name: g.title, type: g.trackingType,
+      icon: GOAL_TRACK_ICON[g.category] || "Target",
+      intervalHours: g.intervalHours, amount: g.amount, unit: g.unit,
+    }))
+    .filter(isItemValid), [goals]);
+  const validItems = useMemo(() => [
+    ...dailyItems.filter(isItemValid).map((i) => ({ ...i, category: "activity" })),
+    ...goalTrackableItems,
+  ], [dailyItems, goalTrackableItems]);
+  const todayLog = dailyLogs[today] || defaultLog();
+  const field = (id) => todayLog[id] || {};
+
+  const availableDailyCategories = useMemo(() => DAILY_TAB_CATEGORY_DEFS.filter((c) => (
+    c.id === "expense" ? true : c.id === "trip" ? todaysTravelPlans.length > 0 : validItems.some((i) => i.category === c.id)
+  )), [validItems, todaysTravelPlans]);
+
+  useEffect(() => {
+    if (expandedDailyCategory && !availableDailyCategories.some((c) => c.id === expandedDailyCategory)) {
+      setExpandedDailyCategory(null);
+    }
+  }, [availableDailyCategories, expandedDailyCategory]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    if (!expandedDailyCategory || expandedDailyCategory === "trip") return;
+    const itemsForCat = validItems.filter((i) => i.category === expandedDailyCategory);
+    if (activeTab && itemsForCat.some((i) => i.id === activeTab)) return;
+    const order = itemsForCat.filter((i) => i.type === "instant" || i.type === "duration");
+    const firstPending = order.find((i) => !(field(i.id).status === "done"));
+    setActiveTab((firstPending || itemsForCat[0] || {}).id || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, expandedDailyCategory, validItems.length]);
+
+  const updateField = (id, patch) => {
+    setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, [id]: { ...(log[id] || {}), ...patch } } }; });
+  };
+  const nextValidAfter = (id) => {
+    const itemsForCat = validItems.filter((i) => i.category === expandedDailyCategory);
+    const idx = itemsForCat.findIndex((i) => i.id === id);
+    if (idx === -1 || idx === itemsForCat.length - 1) return id;
+    return itemsForCat[idx + 1].id;
+  };
+  const goNext = (id) => setActiveTab(nextValidAfter(id));
+  const pressInstant = (id) => {
+    const item = validItems.find((i) => i.id === id);
+    const nowIso = new Date().toISOString();
+    updateField(id, { status: "done", time: nowIso });
+    if (item && /wake\s*-?\s*up/i.test(item.name)) {
+      setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, wakeUpTime: nowIso } }; });
+    }
+    goNext(id);
+  };
+  const startDuration = (id) => updateField(id, { status: "in_progress", startTime: new Date().toISOString(), endTime: undefined, durationMin: undefined });
+  const stopDuration = (id) => {
+    setDailyLogs((prev) => {
+      const log = prev[today] || defaultLog(); const rec = log[id] || {}; const endNow = new Date();
+      const durationMin = rec.startTime ? Math.round((endNow - new Date(rec.startTime)) / 60000) : null;
+      return { ...prev, [today]: { ...log, [id]: { ...rec, status: "done", endTime: endNow.toISOString(), durationMin } } };
+    });
+    goNext(id);
+  };
+  const logTimeSpent = (id, minutes) => {
+    const min = Number(minutes) || 0;
+    if (min <= 0) return;
+    const endNow = new Date();
+    const startTime = new Date(endNow.getTime() - min * 60000).toISOString();
+    setDailyLogs((prev) => {
+      const log = prev[today] || defaultLog();
+      return { ...prev, [today]: { ...log, [id]: { status: "done", startTime, endTime: endNow.toISOString(), durationMin: min } } };
+    });
+    goNext(id);
+  };
+  const logInterval = (item) => {
+    setDailyLogs((prev) => {
+      const log = prev[today] || defaultLog();
+      const entry = { time: new Date().toISOString(), amount: Number(item.amount) };
+      const own = (log.intervalLogs && log.intervalLogs[item.id]) || [];
+      return { ...prev, [today]: { ...log, intervalLogs: { ...(log.intervalLogs || {}), [item.id]: [...own, entry] } } };
+    });
+    goNext(item.id);
+  };
+
+  const [expenseFlow, setExpenseFlow] = useState({});
+  const [timeSpentInputs, setTimeSpentInputs] = useState({});
+  const getFlow = (itemId) => expenseFlow[itemId] || {};
+  const setFlow = (itemId, patch) => setExpenseFlow((prev) => ({ ...prev, [itemId]: { ...(prev[itemId] || {}), ...patch } }));
+  const addCustomOption = (item, group, name) => {
+    setDailyItems((prev) => prev.map((it) => it.id !== item.id ? it : { ...it, groups: { ...it.groups, [group]: [...(it.groups[group] || []), name] } }));
+    setFlow(item.id, { sub: name, adding: false, newOption: "" });
+  };
+  const confirmExpense = (item) => {
+    const flow = getFlow(item.id);
+    const groupNames = Object.keys(item.groups || {});
+    const group = flow.group || groupNames[0];
+    const subOptions = (item.groups && item.groups[group]) || [];
+    const sub = flow.sub || subOptions[0];
+    const amt = parseFloat(flow.amount);
+    if (!amt || amt <= 0 || !group || !sub) return;
+    setDailyLogs((prev) => {
+      const log = prev[today] || defaultLog();
+      const entry = { id: "e" + Date.now(), itemId: item.id, amount: amt, group, subcategory: sub, vendor: (flow.vendor || "").trim(), remarks: (flow.remarks || "").trim(), time: new Date().toISOString(), linkedRepaymentId: flow.linkedRepaymentId || null };
+      return { ...prev, [today]: { ...log, expenses: [...log.expenses, entry] } };
+    });
+    if (flow.linkedRepaymentId) {
+      const linked = repayments.find((r) => r.id === flow.linkedRepaymentId);
+      if (linked) {
+        if (repaymentCategoryClass(linked.category) === "loan") payNextEmi(linked.id);
+        else toggleRepaymentPaid(linked.id);
+      }
+    }
+    setFlow(item.id, { amount: "", vendor: "", remarks: "", linkedRepaymentId: null, sub: null });
+  };
+  const payRepayment = (r) => {
+    const group = REPAYMENT_CATEGORY_TO_EXPENSE_GROUP[r.category] || "Other";
+    setDailyLogs((prev) => {
+      const log = prev[today] || defaultLog();
+      const entry = { id: "e" + Date.now(), itemId: "expense", amount: r.amount, group, subcategory: r.name || r.category, vendor: "", remarks: r.remarks || "", time: new Date().toISOString(), linkedRepaymentId: r.id };
+      return { ...prev, [today]: { ...log, expenses: [...log.expenses, entry] } };
+    });
+    if (repaymentCategoryClass(r.category) === "loan") payNextEmi(r.id);
+    else toggleRepaymentPaid(r.id);
+  };
+  const deleteExpense = (id) => {
+    setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, expenses: log.expenses.filter((e) => e.id !== id) } }; });
+  };
+
+  const exportExpensesCSV = () => {
+    const rows = Object.entries(dailyLogs).flatMap(([day, log]) =>
+      (log.expenses || []).map((e) => ({ date: day, time: fmtTime(e.time), group: e.group, subcategory: e.subcategory, amount: e.amount, vendor: e.vendor || "", remarks: e.remarks || "" }))
+    ).sort((a, b) => a.date.localeCompare(b.date));
+    const csv = toCSV(rows);
+    if (!csv) return;
+    downloadFile(`expenses-${today}.csv`, csv, "text/csv");
+  };
+  const exportBackupJSON = () => {
+    downloadFile(`life-tracker-backup-${today}.json`, JSON.stringify({ dailyItems, dailyLogs, goals, financeMonthly }, null, 2), "application/json");
+  };
+
+  const expensesForMonth = (mk) => Object.entries(dailyLogs).filter(([d]) => d.slice(0, 7) === mk).reduce((s, [, log]) => s + (log.expenses || []).reduce((s2, e) => s2 + e.amount, 0), 0);
+  const [financeMonth, setFinanceMonth] = useState(curMonth);
+  const setFinanceField = (mk, f, v) => setFinanceMonthly((prev) => ({ ...prev, [mk]: { ...prev[mk], [f]: v } }));
+  const income = financeMonthly[curMonth]?.income ?? "";
+  const incomeNum = parseFloat(income) || 0;
+  const expensesNum = expensesForMonth(curMonth);
+  const savingsNum = incomeNum - expensesNum;
+
+  const [showAddGoal, setShowAddGoal] = useState(false);
+  const [editingGoalId, setEditingGoalId] = useState(null);
+  const goalMonthOptionsRef = () => { const arr = []; const nowD = new Date(); for (let i = -3; i <= 12; i++) arr.push(monthKey(new Date(nowD.getFullYear(), nowD.getMonth() + i, 1))); return arr; };
+  const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalHours: "2", intervalAmount: "1", intervalUnit: "session" });
+  const [goalForm, setGoalForm] = useState(blankGoalForm());
+  const isRoutineCategory = ROUTINE_CATEGORIES.includes(catTab);
+  const toggleSpecificDay = (day) => setGoalForm((f) => ({ ...f, specificDays: f.specificDays.includes(day) ? f.specificDays.filter((d) => d !== day) : [...f.specificDays, day] }));
+  const openEditGoal = (g) => {
+    const parts = g.title.split(" \u2014 ");
+    const suffix = parts.length > 1 ? parts[parts.length - 1] : "";
+    const rawTitle = parts.length > 1 ? parts.slice(0, -1).join(" \u2014 ") : g.title;
+    const matchMonth = goalMonthOptionsRef().find((mk) => monthLabel(mk) === suffix) || curMonth;
+    setGoalForm({
+      title: rawTitle, month: matchMonth, sequence: String(g.sequence || ""), targetAmount: g.targetAmount != null ? String(g.targetAmount) : "",
+      startDate: g.startDate || "", expectedYear: g.expectedYear || "", frequency: g.frequency || "Daily",
+      daysPerWeek: g.daysPerWeek != null ? String(g.daysPerWeek) : "3", specificDays: g.specificDays || [],
+      startTime: g.startTime || "", sessionMinutes: g.sessionMinutes != null ? String(g.sessionMinutes) : "30",
+      trackingType: g.trackingType || "instant", intervalHours: g.intervalHours != null ? String(g.intervalHours) : "2",
+      intervalAmount: g.amount != null ? String(g.amount) : "1", intervalUnit: g.unit || "session",
+    });
+    setEditingGoalId(g.id);
+    setShowAddGoal(true);
+  };
+  const addGoal = () => {
+    if (!goalForm.title.trim()) return;
+    const fullTitle = isRoutineCategory ? goalForm.title.trim() : `${goalForm.title.trim()} \u2014 ${monthLabel(goalForm.month)}`;
+    const routineFields = isRoutineCategory ? {
+      startDate: goalForm.startDate || "", expectedYear: goalForm.expectedYear || "", frequency: goalForm.frequency,
+      daysPerWeek: goalForm.frequency === "Weekly" ? (parseInt(goalForm.daysPerWeek) || 0) : undefined,
+      specificDays: goalForm.frequency === "Weekly" ? goalForm.specificDays : [],
+      startTime: goalForm.startTime || "", sessionMinutes: parseInt(goalForm.sessionMinutes) || 0,
+      trackingType: goalForm.trackingType || "instant",
+      intervalHours: goalForm.trackingType === "interval" ? (parseFloat(goalForm.intervalHours) || 0) : undefined,
+      amount: goalForm.trackingType === "interval" ? (parseFloat(goalForm.intervalAmount) || 0) : undefined,
+      unit: goalForm.trackingType === "interval" ? (goalForm.intervalUnit || "") : undefined,
+    } : {};
+    if (editingGoalId) {
+      setGoals((prev) => prev.map((g) => g.id !== editingGoalId ? g : { ...g, title: fullTitle, sequence: parseInt(goalForm.sequence) || 0, targetAmount: catTab === "finance" ? parseFloat(goalForm.targetAmount) || 0 : undefined, ...routineFields }));
+    } else {
+      setGoals((prev) => [...prev, { id: "g" + Date.now(), category: catTab, title: fullTitle, sequence: parseInt(goalForm.sequence) || 0, targetAmount: catTab === "finance" ? parseFloat(goalForm.targetAmount) || 0 : undefined, done: false, ...routineFields }]);
+    }
+    setGoalForm(blankGoalForm());
+    setEditingGoalId(null);
+    setShowAddGoal(false);
+  };
+  const cancelGoalForm = () => { setShowAddGoal(false); setEditingGoalId(null); setGoalForm(blankGoalForm()); };
+  const deleteGoal = (id) => setGoals((prev) => prev.filter((g) => g.id !== id));
+  const toggleGoalDone = (id) => setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, done: !g.done } : g)));
+  const categoryGoals = goals.filter((g) => g.category === catTab).sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+  const totalSavingsPool = useMemo(() => {
+    return Object.keys(financeMonthly).filter((mk) => financeMonthly[mk]?.income !== undefined && financeMonthly[mk]?.income !== "").reduce((sum, mk) => sum + (parseFloat(financeMonthly[mk].income) || 0) - expensesForMonth(mk), 0);
+  }, [financeMonthly, dailyLogs]);
+  const financeGoalsAll = goals.filter((g) => g.category === "finance");
+  const committedTotal = financeGoalsAll.filter((g) => g.done).reduce((s, g) => s + (g.targetAmount || 0), 0);
+  const financeBalanceAvailable = totalSavingsPool - committedTotal;
+  const financeAllocations = useMemo(() => {
+    if (catTab !== "finance") return {};
+    let remaining = financeBalanceAvailable;
+    const map = {};
+    categoryGoals.forEach((g) => {
+      if (g.done) { map[g.id] = g.targetAmount || 0; return; }
+      const target = g.targetAmount || 0;
+      const alloc = Math.min(target, Math.max(0, remaining));
+      map[g.id] = alloc;
+      remaining -= alloc;
+    });
+    return map;
+  }, [catTab, categoryGoals, financeBalanceAvailable]);
+
+  const [financeGoalView, setFinanceGoalView] = useState("goals");
+  const [showAddRepayment, setShowAddRepayment] = useState(false);
+  const [editingRepaymentId, setEditingRepaymentId] = useState(null);
+  const blankRepaymentForm = () => ({
+    category: REPAYMENT_CATEGORIES[0], name: "", remarks: "",
+    loanAmount: "", interestRate: "", interestRateUnit: "annum", durationValue: "", durationUnit: "Months",
+    goldWeight: "", location: "",
+    purpose: "", emiAmount: "", dueDate: "",
+    amount: "", frequency: "Monthly", dueDayStart: "", dueDayEnd: "",
+    planAmount: "", startDate: "",
+  });
+  const [repaymentForm, setRepaymentForm] = useState(blankRepaymentForm());
+  const repaymentCategoryClass = (cat) => (cat === "Gold Loan" ? "gold" : (cat === "Loan" || cat === "EMI") ? "loan" : cat === "Mobile Recharge" ? "recharge" : "simple");
+  const openEditRepayment = (r) => {
+    setRepaymentForm({
+      category: r.category, name: r.name || "", remarks: r.remarks || "",
+      loanAmount: r.loanAmount != null ? String(r.loanAmount) : "", interestRate: r.interestRate != null ? String(r.interestRate) : "", interestRateUnit: r.interestRateUnit || "annum",
+      durationValue: r.durationValue != null ? String(r.durationValue) : "", durationUnit: r.durationUnit || "Months",
+      goldWeight: r.goldWeight || "", location: r.location || "",
+      purpose: r.purpose || "", emiAmount: r.emiAmount != null ? String(r.emiAmount) : "", dueDate: r.dueDate || "",
+      amount: r.amount != null ? String(r.amount) : "",
+      frequency: r.frequency || "Monthly", dueDayStart: r.dueDayStart != null ? String(r.dueDayStart) : "", dueDayEnd: r.dueDayEnd != null ? String(r.dueDayEnd) : "",
+      planAmount: r.planAmount != null ? String(r.planAmount) : "", startDate: r.startDate || "",
+    });
+    setEditingRepaymentId(r.id);
+    setShowAddRepayment(true);
+  };
+  const cancelRepaymentForm = () => { setShowAddRepayment(false); setEditingRepaymentId(null); setRepaymentForm(blankRepaymentForm()); };
+  const addRepayment = () => {
+    const cls = repaymentCategoryClass(repaymentForm.category);
+    if (cls === "gold") {
+      const principal = parseFloat(repaymentForm.loanAmount) || 0;
+      if (principal <= 0) return;
+      const { interest, totalRepayment } = computeLoanInterest(principal, repaymentForm.interestRate, repaymentForm.interestRateUnit, repaymentForm.durationValue, repaymentForm.durationUnit);
+      const base = {
+        category: repaymentForm.category, name: repaymentForm.name.trim(), remarks: repaymentForm.remarks.trim(),
+        loanAmount: principal, interestRate: parseFloat(repaymentForm.interestRate) || 0, interestRateUnit: repaymentForm.interestRateUnit,
+        goldWeight: repaymentForm.goldWeight, location: repaymentForm.location, durationValue: repaymentForm.durationValue, durationUnit: repaymentForm.durationUnit,
+        interest, totalRepayment, amount: totalRepayment, dueDate: repaymentForm.dueDate || "",
+      };
+      if (editingRepaymentId) {
+        setRepayments((prev) => prev.map((r) => r.id !== editingRepaymentId ? r : { ...r, ...base, remainingAmount: r.paid ? 0 : totalRepayment }));
+      } else {
+        setRepayments((prev) => [...prev, { id: "r" + Date.now(), ...base, remainingAmount: totalRepayment, paid: false }]);
+      }
+    } else if (cls === "loan") {
+      const principal = parseFloat(repaymentForm.loanAmount) || 0;
+      const emiAmount = parseFloat(repaymentForm.emiAmount) || 0;
+      if (principal <= 0) return;
+      const { interest, totalRepayment } = computeLoanInterest(principal, repaymentForm.interestRate, repaymentForm.interestRateUnit, repaymentForm.durationValue, repaymentForm.durationUnit);
+      const installmentsTotal = emiAmount > 0 ? Math.ceil(totalRepayment / emiAmount) : 0;
+      const base = {
+        category: repaymentForm.category, name: repaymentForm.name.trim(), purpose: repaymentForm.purpose.trim(), remarks: repaymentForm.remarks.trim(),
+        loanAmount: principal, interestRate: parseFloat(repaymentForm.interestRate) || 0, interestRateUnit: repaymentForm.interestRateUnit,
+        durationValue: repaymentForm.durationValue, durationUnit: repaymentForm.durationUnit, emiAmount,
+        interest, totalRepayment, installmentsTotal, amount: emiAmount || totalRepayment, dueDate: repaymentForm.dueDate || "",
+      };
+      if (editingRepaymentId) {
+        setRepayments((prev) => prev.map((r) => {
+          if (r.id !== editingRepaymentId) return r;
+          const installmentsPaid = Math.min(r.installmentsPaid || 0, installmentsTotal);
+          const remainingAmount = Math.max(0, round(totalRepayment - installmentsPaid * emiAmount));
+          return { ...r, ...base, installmentsPaid, remainingAmount, paid: remainingAmount <= 0 };
+        }));
+      } else {
+        setRepayments((prev) => [...prev, { id: "r" + Date.now(), ...base, remainingAmount: totalRepayment, installmentsPaid: 0, paid: false }]);
+      }
+    } else if (cls === "recharge") {
+      const planAmount = parseFloat(repaymentForm.planAmount) || 0;
+      if (planAmount <= 0 || !repaymentForm.startDate) return;
+      const { avgDailyCost, nextDate } = computeRechargePlan(planAmount, repaymentForm.durationValue, repaymentForm.durationUnit, repaymentForm.startDate);
+      const base = {
+        category: repaymentForm.category, name: repaymentForm.name.trim(), remarks: repaymentForm.remarks.trim(),
+        planAmount, durationValue: repaymentForm.durationValue, durationUnit: repaymentForm.durationUnit, startDate: repaymentForm.startDate,
+        avgDailyCost, amount: planAmount, dueDate: nextDate,
+      };
+      if (editingRepaymentId) {
+        setRepayments((prev) => prev.map((r) => (r.id !== editingRepaymentId ? r : { ...r, ...base })));
+      } else {
+        setRepayments((prev) => [...prev, { id: "r" + Date.now(), ...base, paid: false }]);
+      }
+    } else {
+      const amt = parseFloat(repaymentForm.amount);
+      if (!amt || amt <= 0) return;
+      const base = {
+        category: repaymentForm.category, name: repaymentForm.name.trim(), remarks: repaymentForm.remarks.trim(), amount: amt, dueDate: repaymentForm.dueDate || "",
+        frequency: repaymentForm.frequency, dueDayStart: repaymentForm.dueDayStart ? parseInt(repaymentForm.dueDayStart) : null, dueDayEnd: repaymentForm.dueDayEnd ? parseInt(repaymentForm.dueDayEnd) : null,
+      };
+      if (editingRepaymentId) {
+        setRepayments((prev) => prev.map((r) => (r.id !== editingRepaymentId ? r : { ...r, ...base })));
+      } else {
+        setRepayments((prev) => [...prev, { id: "r" + Date.now(), ...base, paid: false }]);
+      }
+    }
+    setRepaymentForm(blankRepaymentForm());
+    setEditingRepaymentId(null);
+    setShowAddRepayment(false);
+  };
+  const deleteRepayment = (id) => setRepayments((prev) => prev.filter((r) => r.id !== id));
+  const advanceDueDate = (dueDate, frequency, dueDayStart) => {
+    if (!dueDate) return dueDate;
+    const d = new Date(dueDate);
+    if (frequency === "Daily") d.setDate(d.getDate() + 1);
+    else if (frequency === "Weekly") d.setDate(d.getDate() + 7);
+    else if (frequency === "Yearly") { d.setFullYear(d.getFullYear() + 1); if (dueDayStart) d.setDate(Number(dueDayStart)); }
+    else { d.setMonth(d.getMonth() + 1); if (dueDayStart) d.setDate(Number(dueDayStart)); }
+    return dateKey(d);
+  };
+  const toggleRepaymentPaid = (id) => setRepayments((prev) => prev.map((r) => {
+    if (r.id !== id) return r;
+    const cls = repaymentCategoryClass(r.category);
+    if (cls === "simple" && r.frequency && !r.paid) {
+      return { ...r, dueDate: advanceDueDate(r.dueDate, r.frequency, r.dueDayStart), paid: false };
+    }
+    if (cls === "recharge" && !r.paid) {
+      const newStart = r.dueDate || r.startDate;
+      const { avgDailyCost, nextDate } = computeRechargePlan(r.planAmount, r.durationValue, r.durationUnit, newStart);
+      return { ...r, startDate: newStart, dueDate: nextDate, avgDailyCost, paid: false };
+    }
+    return { ...r, paid: !r.paid };
+  }));
+  const advanceMonth = (dateStr) => { if (!dateStr) return ""; const d = new Date(dateStr); d.setMonth(d.getMonth() + 1); return dateKey(d); };
+  const payNextEmi = (id) => {
+    setRepayments((prev) => prev.map((r) => {
+      if (r.id !== id) return r;
+      const remainingAmount = Math.max(0, round((r.remainingAmount || 0) - (r.emiAmount || 0)));
+      const installmentsPaid = (r.installmentsPaid || 0) + 1;
+      const done = remainingAmount <= 0 || installmentsPaid >= (r.installmentsTotal || 0);
+      return { ...r, remainingAmount, installmentsPaid, dueDate: done ? r.dueDate : advanceMonth(r.dueDate), paid: done };
+    }));
+  };
+  const sortedRepayments = [...repayments].sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
+
+  const [showAddTravel, setShowAddTravel] = useState(false);
+  const [editingTravelId, setEditingTravelId] = useState(null);
+  const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", amount: "", bookingDetails: "", reminderOffset: "1d" });
+  const [travelForm, setTravelForm] = useState(blankTravelForm());
+  const openEditTravel = (t) => {
+    setTravelForm({
+      mode: t.mode || "Train", fromLocation: t.fromLocation || "", toLocation: t.toLocation || "",
+      travelDate: t.travelDate || "", amount: t.amount != null ? String(t.amount) : "",
+      bookingDetails: t.bookingDetails || "", reminderOffset: t.reminderOffset || "1d",
+    });
+    setEditingTravelId(t.id);
+    setShowAddTravel(true);
+  };
+  const cancelTravelForm = () => { setShowAddTravel(false); setEditingTravelId(null); setTravelForm(blankTravelForm()); };
+  const addTravelPlan = () => {
+    if (!travelForm.fromLocation.trim() || !travelForm.toLocation.trim() || !travelForm.travelDate) return;
+    const base = {
+      mode: travelForm.mode, fromLocation: travelForm.fromLocation.trim(), toLocation: travelForm.toLocation.trim(),
+      travelDate: travelForm.travelDate, amount: parseFloat(travelForm.amount) || 0,
+      bookingDetails: travelForm.bookingDetails.trim(), reminderOffset: travelForm.reminderOffset,
+    };
+    if (editingTravelId) {
+      setTravelPlans((prev) => prev.map((t) => (t.id !== editingTravelId ? t : { ...t, ...base })));
+    } else {
+      setTravelPlans((prev) => [...prev, { id: "trip" + Date.now(), ...base, dismissed: false }]);
+    }
+    cancelTravelForm();
+  };
+  const deleteTravelPlan = (id) => setTravelPlans((prev) => prev.filter((t) => t.id !== id));
+  const dismissTravelPlan = (id) => setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, dismissed: true } : t)));
+  const logTravelExpense = (plan) => {
+    const group = "Travel";
+    const sub = ["Car", "Train", "Bus", "Flight", "Other"].includes(plan.mode) ? plan.mode : "Other";
+    setDailyLogs((prev) => {
+      const log = prev[today] || defaultLog();
+      const entry = { id: "e" + Date.now(), itemId: "expense", amount: plan.amount || 0, group, subcategory: sub, vendor: `${plan.fromLocation} \u2192 ${plan.toLocation}`, remarks: plan.bookingDetails || "", time: new Date().toISOString(), linkedTravelId: plan.id };
+      return { ...prev, [today]: { ...log, expenses: [...log.expenses, entry] } };
+    });
+  };
+
+
+  const [itemForm, setItemForm] = useState(null);
+  const [addingGroup, setAddingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [addingSubTo, setAddingSubTo] = useState(null);
+  const [newSubName, setNewSubName] = useState("");
+  const openNewItemForm = () => setItemForm(blankItemForm());
+  const openEditItemForm = (item) => setItemForm({ ...blankItemForm(), ...item, groups: { ...(item.groups || {}) } });
+  const closeItemForm = () => { setItemForm(null); setAddingGroup(false); setAddingSubTo(null); };
+  const saveItemForm = () => {
+    if (!itemForm.name.trim()) return;
+    setDailyItems((prev) => {
+      if (itemForm.id) return prev.map((it) => (it.id === itemForm.id ? { ...itemForm } : it));
+      return [...prev, { ...itemForm, id: "item" + Date.now() }];
+    });
+    closeItemForm();
+  };
+  const deleteItem = (id) => setDailyItems((prev) => prev.filter((i) => i.id !== id));
+  const moveItem = (id, dir) => {
+    setDailyItems((prev) => {
+      const idx = prev.findIndex((i) => i.id === id); const swap = idx + dir;
+      if (swap < 0 || swap >= prev.length) return prev;
+      const copy = [...prev]; [copy[idx], copy[swap]] = [copy[swap], copy[idx]]; return copy;
+    });
+  };
+  const addGroupToForm = () => {
+    const name = newGroupName.trim(); if (!name) return;
+    setItemForm((f) => ({ ...f, groups: { ...f.groups, [name]: [] } }));
+    setNewGroupName(""); setAddingGroup(false);
+  };
+  const removeGroupFromForm = (g) => setItemForm((f) => { const copy = { ...f.groups }; delete copy[g]; return { ...f, groups: copy }; });
+  const addSubToForm = (g) => {
+    const name = newSubName.trim(); if (!name) return;
+    setItemForm((f) => ({ ...f, groups: { ...f.groups, [g]: [...(f.groups[g] || []), name] } }));
+    setNewSubName(""); setAddingSubTo(null);
+  };
+  const removeSubFromForm = (g, s) => setItemForm((f) => ({ ...f, groups: { ...f.groups, [g]: f.groups[g].filter((x) => x !== s) } }));
+
+  const monthDayLogs = useMemo(() => Object.entries(dailyLogs).filter(([d]) => d.slice(0, 7) === curMonth), [dailyLogs, curMonth]);
+  const monthExpenses = useMemo(() => monthDayLogs.flatMap(([, log]) => log.expenses || []), [monthDayLogs]);
+  const sumBy = (pred) => monthExpenses.filter(pred).reduce((s, e) => s + e.amount, 0);
+  const totalExpenseLogged = monthExpenses.reduce((s, e) => s + e.amount, 0);
+  const daysElapsedThisMonth = new Date().getDate();
+  const dailyAvgExpense = totalExpenseLogged / daysElapsedThisMonth;
+
+  const instantDurationItems = validItems.filter((i) => i.type === "instant" || i.type === "duration");
+  const intervalItems = validItems.filter((i) => i.type === "interval");
+
+  const streaks = useMemo(() => Object.fromEntries(instantDurationItems.map((i) => [i.id, computeStreak(dailyLogs, i.id)])), [dailyLogs, instantDurationItems]);
+
+  useEffect(() => {
+    if (!remindersEnabled) return;
+    intervalItems.forEach((item) => {
+      const logs = getIntervalLogs(todayLog, item.id);
+      const lastTime = logs.length ? logs[logs.length - 1].time : null;
+      const nextDueMs = lastTime ? new Date(lastTime).getTime() + item.intervalHours * 3600000 : 0;
+      const dueKey = lastTime ? nextDueMs : "initial";
+      const due = lastTime ? now.getTime() >= nextDueMs : true;
+      if (due && notifiedRef.current[item.id] !== dueKey) {
+        notifiedRef.current[item.id] = dueKey;
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          try { new Notification(`${item.name} is due`, { body: `Time to log ${item.amount} ${item.unit}` }); } catch (e) {}
+        }
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, remindersEnabled, intervalItems, todayLog]);
+
+  const doneRecordsFor = (id) => monthDayLogs.map(([, log]) => log[id]).filter((r) => r && r.status === "done");
+  const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
+
+  const habitCompletionPct = useMemo(() => {
+    if (!monthDayLogs.length || !instantDurationItems.length) return 0;
+    let total = 0, done = 0;
+    monthDayLogs.forEach(([, log]) => { instantDurationItems.forEach((i) => { total += 1; if (log[i.id] && log[i.id].status === "done") done += 1; }); });
+    return total ? round((done / total) * 100) : 0;
+  }, [monthDayLogs, instantDurationItems]);
+
+  const goalAchievementByCat = GOAL_CATEGORY_DEFS.map((c) => { const gs = goals.filter((g) => g.category === c.id); return { ...c, total: gs.length, done: gs.filter((g) => g.done).length }; });
+
+  const last12Months = useMemo(() => {
+    const arr = []; const nowD = new Date();
+    for (let i = 12; i >= 0; i--) {
+      const d = new Date(nowD.getFullYear(), nowD.getMonth() - i, 1); const mk = monthKey(d); const fin = financeMonthly[mk];
+      const inc = fin ? parseFloat(fin.income) || 0 : 0; const exp = expensesForMonth(mk);
+      arr.push({ mk, savings: inc - exp, hasData: !!(fin && fin.income !== undefined && fin.income !== "") });
+    }
+    return arr;
+  }, [financeMonthly, dailyLogs]);
+  const last6Months = last12Months.slice(-6);
+  const maxAbs = Math.max(1, ...last6Months.map((m) => Math.abs(m.savings)));
+  const prevMonthEntry = last12Months[last12Months.length - 2];
+  const monthlyImprovementPct = prevMonthEntry && prevMonthEntry.hasData && prevMonthEntry.savings !== 0 ? round(((savingsNum - prevMonthEntry.savings) / Math.abs(prevMonthEntry.savings)) * 100) : null;
+  const yearAgoEntry = last12Months[0];
+  const yearlyImprovementPct = yearAgoEntry && yearAgoEntry.hasData && yearAgoEntry.savings !== 0 ? round(((savingsNum - yearAgoEntry.savings) / Math.abs(yearAgoEntry.savings)) * 100) : null;
+  const goalMonthOptions = useMemo(() => {
+    const arr = []; const nowD = new Date();
+    for (let i = -3; i <= 12; i++) arr.push(monthKey(new Date(nowD.getFullYear(), nowD.getMonth() + i, 1)));
+    return arr;
+  }, []);
+
+  const fontImport = <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap" />;
+
+  return (
+    <div style={{ background: BG, minHeight: "100dvh", width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: "'Inter', sans-serif", color: INK, boxSizing: "border-box", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
+      {fontImport}
+      <style>{`*{box-sizing:border-box;} input,select,button{max-width:100%;}`}</style>
+
+      <div style={{ padding: "20px 20px 8px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: BRASS, fontFamily: disp }}>
+          {page === "daily" ? "Daily activity" : page === "categories" ? "Categories" : "Analysis and growth"}
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={toggleReminders} title={remindersEnabled ? "Reminders on" : "Reminders off"} style={{ background: "transparent", border: "none", color: remindersEnabled ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}>
+            {remindersEnabled ? <Bell size={15} /> : <BellOff size={15} />}
+          </button>
+          <span style={{ fontSize: 11, color: INK_DIM, fontFamily: mono }}>{formatDateLong(new Date())}</span>
+        </div>
+      </div>
+
+      {page === "daily" && (
+        <div style={{ padding: "8px 0 16px", flex: 1, minHeight: 0, width: "100%" }}>
+          {todayLog.wakeUpTime && (
+            <div style={{ padding: "0 20px 12px", display: "flex", justifyContent: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(200,155,60,0.10)", border: `1px solid ${BRASS_DIM}`, borderRadius: 20, padding: "5px 12px", fontSize: 11, color: BRASS, fontFamily: mono }}>
+                <Sun size={12} /> Woke up at {fmtTime(todayLog.wakeUpTime)}
+              </div>
+            </div>
+          )}
+          {availableDailyCategories.length === 0 ? (
+            <div style={{ padding: "40px 20px", textAlign: "center", color: INK_FAINT, fontSize: 13 }}>
+              Nothing to track yet. Go to <span style={{ color: BRASS }}>Categories</span> to add a Trip, or set up Daily Routine, Career growth, or Healthcare goals.
+            </div>
+          ) : (
+            <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 8 }}>
+              {availableDailyCategories.map((cat) => {
+                const CatIcon = cat.icon;
+                const expanded = expandedDailyCategory === cat.id;
+                const itemsForCat = validItems.filter((i) => i.category === cat.id);
+                const todaysExpenseCount = todayLog.expenses.length;
+                const todaysExpenseTotal = todayLog.expenses.reduce((s, e) => s + e.amount, 0);
+                const totalCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
+                const doneCount = cat.id === "trip" || cat.id === "expense" ? 0 : itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
+                const countLabel = cat.id === "trip" ? `${totalCount} upcoming` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}` : `${doneCount}/${totalCount} done`;
+                return (
+                  <div key={cat.id}>
+                    <button onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: expanded ? "rgba(200,155,60,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS_DIM : LINE}`, borderRadius: 14, padding: "10px 12px", cursor: "pointer", transition: "background 0.15s, border-color 0.15s" }}>
+                      <div style={{ width: 34, height: 34, borderRadius: 10, background: expanded ? "rgba(200,155,60,0.18)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <CatIcon size={16} color={expanded ? BRASS : INK_DIM} />
+                      </div>
+                      <div style={{ flex: 1, textAlign: "left" }}>
+                        <div style={{ fontSize: 13, color: expanded ? BRASS : INK, fontWeight: 500 }}>{cat.label}</div>
+                        {totalCount > 0 && <div style={{ fontSize: 10, color: INK_FAINT, marginTop: 1 }}>{countLabel}</div>}
+                      </div>
+                      <div style={{ color: INK_FAINT, display: "flex", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+                        <ChevronDown size={14} />
+                      </div>
+                    </button>
+                    {expanded && cat.id === "trip" && (
+                      <div style={{ marginTop: 8 }}>
+                        <Card>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {todaysTravelPlans.map((t) => (
+                              <div key={t.id} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 10, padding: "8px 12px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                  <div>
+                                    <div style={{ fontSize: 13, color: INK_DIM }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
+                                    <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>Travel date {t.travelDate}{t.amount ? ` \u00b7 ${inr(t.amount)}` : ""}</div>
+                                    {t.bookingDetails && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>{t.bookingDetails}</div>}
+                                  </div>
+                                  <div style={{ display: "flex", gap: 6 }}>
+                                    {t.amount > 0 && <button onClick={() => logTravelExpense(t)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "6px 9px", color: BG, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Log expense</button>}
+                                    <button onClick={() => dismissTravelPlan(t.id)} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 9px", color: INK_FAINT, cursor: "pointer", fontSize: 11 }}>Dismiss</button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </Card>
+                      </div>
+                    )}
+                    {expanded && cat.id === "expense" && (() => {
+                      const flow = getFlow("dailyExpense");
+                      const groupKeys = Object.keys(DAILY_EXPENSE_GROUPS);
+                      const activeGroup = flow.group || groupKeys[0];
+                      const subOptions = DAILY_EXPENSE_GROUPS[activeGroup] || [];
+                      const activeSub = flow.sub || subOptions[0];
+                      const canLog = parseFloat(flow.amount) > 0;
+                      return (
+                        <div style={{ marginTop: 8 }}>
+                          <Card style={{ marginBottom: 10 }}>
+                            <div>
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 8 }}>Category</div>
+                              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
+                                {groupKeys.map((g) => {
+                                  const GIcon = EXPENSE_GROUP_ICON[g] || Receipt;
+                                  const sel = activeGroup === g;
+                                  return (
+                                    <button key={g} onClick={() => setFlow("dailyExpense", { group: g, sub: null })} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 58 }}>
+                                      <div style={{ width: 44, height: 44, borderRadius: 13, background: sel ? "rgba(200,155,60,0.16)" : PANEL_2, border: `1.5px solid ${sel ? BRASS : LINE}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <GIcon size={17} color={sel ? BRASS : INK_DIM} />
+                                      </div>
+                                      <span style={{ fontSize: 9, color: sel ? BRASS : INK_FAINT, whiteSpace: "nowrap" }}>{g}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {subOptions.length > 0 && (
+                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
+                                  {subOptions.map((s) => (
+                                    <ChipButton key={s} label={s} active={activeSub === s} onClick={() => setFlow("dailyExpense", { sub: s })} />
+                                  ))}
+                                </div>
+                              )}
+
+                              <div style={{ textAlign: "center", padding: "18px 0 4px", borderTop: `1px solid ${LINE}`, marginTop: 14 }}>
+                                <div style={{ fontSize: 10, color: INK_FAINT, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>Amount</div>
+                                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 4 }}>
+                                  <span style={{ fontFamily: mono, fontSize: 22, color: BRASS_DIM }}>&#8377;</span>
+                                  <input type="number" inputMode="decimal" placeholder="0" value={flow.amount || ""} onChange={(e) => setFlow("dailyExpense", { amount: e.target.value })} style={{ background: "transparent", border: "none", outline: "none", textAlign: "center", color: BRASS, fontFamily: mono, fontSize: 34, fontWeight: 600, width: 140 }} />
+                                </div>
+                              </div>
+
+                              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                                <TextField placeholder="Vendor (optional)" value={flow.vendor || ""} onChange={(e) => setFlow("dailyExpense", { vendor: e.target.value })} style={{ flex: 1 }} />
+                                <TextField placeholder="Remarks (optional)" value={flow.remarks || ""} onChange={(e) => setFlow("dailyExpense", { remarks: e.target.value })} style={{ flex: 1 }} />
+                              </div>
+
+                              <div style={{ marginTop: 12 }}>
+                                <ActionButton onClick={() => canLog && confirmExpense({ id: "dailyExpense", groups: DAILY_EXPENSE_GROUPS })} label={`Log ${activeGroup} \u00b7 ${activeSub || ""}`} icon={Check} tone={canLog ? TEAL : LINE} big />
+                              </div>
+                            </div>
+                          </Card>
+                          <Card>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                              <SectionLabel>Today</SectionLabel>
+                              <span style={{ fontFamily: mono, fontSize: 14, fontWeight: 600, color: todaysExpenseTotal > 0 ? CORAL : INK_FAINT }}>{inr(todaysExpenseTotal)}</span>
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {todayLog.expenses.length === 0 && <span style={{ color: INK_FAINT, fontSize: 12 }}>Nothing logged yet.</span>}
+                              {[...todayLog.expenses].reverse().map((e) => {
+                                const EIcon = EXPENSE_GROUP_ICON[e.group] || Receipt;
+                                return (
+                                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 10, background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 10, padding: "8px 10px" }}>
+                                    <div style={{ width: 30, height: 30, borderRadius: 9, background: PANEL, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                      <EIcon size={14} color={INK_DIM} />
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: 12, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.subcategory}{e.vendor ? ` \u00b7 ${e.vendor}` : ""}</div>
+                                      <div style={{ fontSize: 10, color: INK_FAINT, marginTop: 1 }}>{fmtTime(e.time)}</div>
+                                    </div>
+                                    <span style={{ fontFamily: mono, fontSize: 13, color: CORAL, flexShrink: 0 }}>{inr(e.amount)}</span>
+                                    <button onClick={() => deleteExpense(e.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer", flexShrink: 0 }}><Trash2 size={13} /></button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </Card>
+                        </div>
+                      );
+                    })()}
+                    {expanded && cat.id !== "trip" && cat.id !== "expense" && (
+                      <div style={{ marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 10, paddingBottom: 14, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                {itemsForCat.map((item) => {
+                  const Icon = ICON_MAP[item.icon] || Target;
+                  const active = activeTab === item.id;
+                  const done = (item.type === "instant" || item.type === "duration") && field(item.id).status === "done";
+                  const due = item.type === "interval" && isIntervalDue(item, todayLog, now.getTime());
+                  const streak = streaks[item.id] || 0;
+                  const ringColor = active ? BRASS : done ? TEAL : due ? CORAL : LINE;
+                  return (
+                    <button key={item.id} onClick={() => setActiveTab(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 58 }}>
+                      <div style={{ position: "relative", width: 44, height: 44, borderRadius: 13, background: active ? "rgba(200,155,60,0.16)" : PANEL, border: `1.5px solid ${ringColor}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Icon size={17} color={active ? BRASS : done ? TEAL : due ? CORAL : INK_FAINT} />
+                        {streak > 0 && (
+                          <div style={{ position: "absolute", top: -6, right: -6, display: "flex", alignItems: "center", gap: 1, background: BG, border: `1px solid ${BRASS_DIM}`, borderRadius: 8, padding: "1px 4px", fontSize: 8, color: BRASS, fontFamily: mono }}>
+                            <Flame size={7} /> {streak}
+                          </div>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 9, color: active ? BRASS : INK_FAINT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 58 }}>{item.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div>
+                <div style={{ textAlign: "center", fontFamily: mono, fontSize: 28, fontWeight: 600, color: INK, marginBottom: 16, letterSpacing: "0.02em" }}>{fmtClock12(now)}</div>
+
+                {itemsForCat.filter((i) => i.id === activeTab).map((item) => {
+                  const Icon = ICON_MAP[item.icon] || Target;
+                  const rec = field(item.id);
+
+                  if (item.type === "instant") {
+                    return (
+                      <Card key={item.id} style={{ textAlign: "center", padding: "24px 16px" }}>
+                        {rec.status === "done" ? (
+                          <><div style={{ fontSize: 13, color: INK_DIM, marginBottom: 6 }}>{item.name} recorded</div><div style={{ fontFamily: mono, fontSize: 22, color: TEAL, fontWeight: 600 }}>{fmtTime(rec.time)}</div></>
+                        ) : (
+                          <><Icon size={28} color={BRASS} style={{ marginBottom: 10 }} /><div style={{ fontSize: 14, color: INK_DIM, marginBottom: 14 }}>Tap when {item.name.toLowerCase()} happens</div><ActionButton onClick={() => pressInstant(item.id)} label="Done" icon={Check} tone={TEAL} big /></>
+                        )}
+                        {streaks[item.id] > 0 && (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, marginTop: 14, fontSize: 12, color: BRASS, fontFamily: mono }}>
+                            <Flame size={13} /> {streaks[item.id]} day streak
+                          </div>
+                        )}
+                      </Card>
+                    );
+                  }
+                  if (item.type === "duration") {
+                    return (
+                      <Card key={item.id} style={{ textAlign: "center", padding: "24px 16px" }}>
+                        {rec.status === "done" ? (
+                          <><div style={{ fontSize: 13, color: INK_DIM, marginBottom: 6 }}>{item.name} completed</div><div style={{ fontFamily: mono, fontSize: 22, color: TEAL, fontWeight: 600 }}>{fmtDuration(rec.durationMin)}</div></>
+                        ) : rec.status === "in_progress" ? (
+                          <><Icon size={28} color={BRASS} style={{ marginBottom: 10 }} /><div style={{ fontFamily: mono, fontSize: 30, color: BRASS, fontWeight: 600, marginBottom: 14 }}>{fmtElapsed(now - new Date(rec.startTime))}</div><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></>
+                        ) : (
+                          <>
+                            <Icon size={28} color={BRASS} style={{ marginBottom: 10 }} /><div style={{ fontSize: 14, color: INK_DIM, marginBottom: 14 }}>Start when {item.name.toLowerCase()} begins</div><ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 14 }}>
+                              <span style={{ fontSize: 11, color: INK_FAINT }}>or log time spent (min)</span>
+                              <TextField type="number" value={timeSpentInputs[item.id] || ""} onChange={(e) => setTimeSpentInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 60, fontFamily: mono, textAlign: "center" }} />
+                              <button onClick={() => logTimeSpent(item.id, timeSpentInputs[item.id])} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 10px", color: TEAL, cursor: "pointer", fontSize: 12 }}>Log</button>
+                            </div>
+                          </>
+                        )}
+                        {streaks[item.id] > 0 && (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, marginTop: 14, fontSize: 12, color: BRASS, fontFamily: mono }}>
+                            <Flame size={13} /> {streaks[item.id]} day streak
+                          </div>
+                        )}
+                      </Card>
+                    );
+                  }
+                  if (item.type === "interval") {
+                    const logs = getIntervalLogs(todayLog, item.id);
+                    const total = logs.reduce((s, w) => s + w.amount, 0);
+                    const lastTime = logs.length ? logs[logs.length - 1].time : null;
+                    const nextDueMs = lastTime ? new Date(lastTime).getTime() + item.intervalHours * 3600000 : now.getTime();
+                    const due = now.getTime() >= nextDueMs;
+                    return (
+                      <div key={item.id}>
+                        <Card style={{ textAlign: "center", padding: "24px 16px", marginBottom: 12 }}>
+                          <Icon size={28} color={BRASS} style={{ marginBottom: 10 }} />
+                          <div style={{ fontSize: 13, color: INK_DIM, marginBottom: 4 }}>{due ? "An interval is due" : `Next at ${fmtTime(new Date(nextDueMs).toISOString())}`}</div>
+                          <div style={{ fontFamily: mono, fontSize: 22, color: BRASS, fontWeight: 600, marginBottom: 14 }}>{item.amount} {item.unit}</div>
+                          <ActionButton onClick={() => logInterval(item)} label={`Log ${item.amount}${item.unit}`} icon={Check} tone={TEAL} big />
+                        </Card>
+                        <Card>
+                          <SectionLabel>Today &middot; {total} {item.unit}</SectionLabel>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {logs.length === 0 && <span style={{ color: INK_FAINT, fontSize: 12 }}>Nothing logged yet.</span>}
+                            {logs.map((w, i) => <span key={i} style={{ fontFamily: mono, fontSize: 11, background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 6, padding: "4px 8px", color: INK_DIM }}>{fmtTime(w.time)}</span>)}
+                          </div>
+                        </Card>
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {page === "categories" && (
+        <div style={{ padding: "8px 20px 16px", flex: 1, minHeight: 0, width: "100%" }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+            {CATEGORY_DEFS.map((c) => {
+              const Icon = c.icon; const active = catTab === c.id;
+              return <button key={c.id} onClick={() => { setCatTab(c.id); closeItemForm(); }} style={{ display: "flex", alignItems: "center", gap: 5, background: active ? "rgba(200,155,60,0.12)" : "transparent", border: `1px solid ${active ? BRASS_DIM : LINE}`, borderRadius: 8, padding: "6px 10px", color: active ? BRASS : INK_DIM, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}><Icon size={13} /> {c.label}</button>;
+            })}
+          </div>
+
+          {catTab === "finance" && (
+            <Card style={{ marginBottom: 16 }}>
+              <SectionLabel>Monthly money</SectionLabel>
+              <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 120px" }}>
+                  <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Month</div>
+                  <Select value={financeMonth} onChange={(e) => setFinanceMonth(e.target.value)} style={{ width: "100%" }}>
+                    {last12Months.map((m) => <option key={m.mk} value={m.mk}>{monthLabel(m.mk)}</option>)}
+                  </Select>
+                </div>
+                <div style={{ flex: "1 1 140px" }}>
+                  <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>How much money I have</div>
+                  <TextField type="number" value={financeMonthly[financeMonth]?.income ?? ""} onChange={(e) => setFinanceField(financeMonth, "income", e.target.value)} placeholder="30000" style={{ width: "100%", fontFamily: mono }} />
+                </div>
+              </div>
+              <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, color: INK_FAINT }}>Expenses (auto-calculated from what you've logged)</span>
+                  <span style={{ fontFamily: mono, fontSize: 14, color: CORAL }}>{inr(expensesForMonth(financeMonth))}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 6, marginTop: 2 }}>
+                  <span style={{ fontSize: 12, color: INK_FAINT }}>Total amount you have</span>
+                  <span style={{ fontFamily: mono, fontSize: 18, fontWeight: 600, color: financeBalanceAvailable >= 0 ? TEAL : CORAL }}>{inr(financeBalanceAvailable)}</span>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {(catTab === "trip" || catTab === "activity") ? (
+            <>
+              {!itemForm && catTab === "trip" && (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <SectionLabel>Travel</SectionLabel>
+                    <button onClick={() => (showAddTravel ? cancelTravelForm() : setShowAddTravel(true))} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}><Plus size={13} /> Add trip</button>
+                  </div>
+                  <div style={{ fontSize: 12, color: INK_FAINT, marginBottom: 12 }}>Train, bus, flight, or other trips. They'll appear on the Daily tab from your chosen reminder lead time through the travel date.</div>
+                  {showAddTravel && (
+                    <Card style={{ marginBottom: 12 }}>
+                      <SectionLabel>{editingTravelId ? "Edit trip" : "New trip"}</SectionLabel>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <Select value={travelForm.mode} onChange={(e) => setTravelForm({ ...travelForm, mode: e.target.value })}>
+                          <option value="Train">Train</option>
+                          <option value="Bus">Bus</option>
+                          <option value="Flight">Flight</option>
+                          <option value="Other">Other</option>
+                        </Select>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <TextField placeholder="From location" value={travelForm.fromLocation} onChange={(e) => setTravelForm({ ...travelForm, fromLocation: e.target.value })} style={{ flex: 1 }} />
+                          <TextField placeholder="To location" value={travelForm.toLocation} onChange={(e) => setTravelForm({ ...travelForm, toLocation: e.target.value })} style={{ flex: 1 }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Travel date</div>
+                          <TextField type="date" value={travelForm.travelDate} onChange={(e) => setTravelForm({ ...travelForm, travelDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                        </div>
+                        <TextField type="number" placeholder="Amount" value={travelForm.amount} onChange={(e) => setTravelForm({ ...travelForm, amount: e.target.value })} style={{ fontFamily: mono }} />
+                        <TextField placeholder="Ticket / booking details" value={travelForm.bookingDetails} onChange={(e) => setTravelForm({ ...travelForm, bookingDetails: e.target.value })} />
+                        <div>
+                          <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Remind me before travel date</div>
+                          <Select value={travelForm.reminderOffset} onChange={(e) => setTravelForm({ ...travelForm, reminderOffset: e.target.value })} style={{ width: "100%" }}>
+                            {REMINDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </Select>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                          <button onClick={addTravelPlan} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: BG, cursor: "pointer", fontSize: 13 }}>{editingTravelId ? "Save changes" : "Save trip"}</button>
+                          <button onClick={cancelTravelForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                    {sortedTravelPlans.map((t) => (
+                      <Card key={t.id} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13 }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
+                          <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>{t.travelDate}{t.amount ? ` \u00b7 ${inr(t.amount)}` : ""} &middot; reminder {(REMINDER_OPTIONS.find((o) => o.value === t.reminderOffset) || REMINDER_OPTIONS[1]).label.toLowerCase()}{t.dismissed ? " \u00b7 dismissed" : ""}</div>
+                        </div>
+                        <button onClick={() => openEditTravel(t)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={14} /></button>
+                        <button onClick={() => deleteTravelPlan(t.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Trash2 size={14} /></button>
+                      </Card>
+                    ))}
+                    {sortedTravelPlans.length === 0 && <div style={{ color: INK_FAINT, fontSize: 13, textAlign: "center", padding: "16px 0" }}>No trips added yet.</div>}
+                  </div>
+                </>
+              )}
+              {catTab === "activity" && (!itemForm ? (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <SectionLabel>Daily routine</SectionLabel>
+                    <button onClick={openNewItemForm} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}><Plus size={13} /> Add routine</button>
+                  </div>
+                  <div style={{ fontSize: 12, color: INK_FAINT, marginBottom: 12 }}>Only items with their required fields filled in show up on the Daily tab.</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {dailyItems.map((item, idx) => {
+                      const Icon = ICON_MAP[item.icon] || Target;
+                      const valid = isItemValid(item);
+                      return (
+                        <Card key={item.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <Icon size={16} color={valid ? BRASS : INK_FAINT} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13 }}>{item.name || <span style={{ color: INK_FAINT }}>(unnamed)</span>}</div>
+                            <div style={{ fontSize: 11, color: valid ? TEAL : CORAL, marginTop: 2 }}>{item.type} &middot; {valid ? "on Daily tab" : "incomplete \u2014 hidden"}</div>
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column" }}>
+                            <button onClick={() => moveItem(item.id, -1)} disabled={idx === 0} style={{ background: "transparent", border: "none", color: idx === 0 ? "#3A4048" : INK_FAINT, cursor: idx === 0 ? "default" : "pointer", padding: 0 }}><ChevronUp size={13} /></button>
+                            <button onClick={() => moveItem(item.id, 1)} disabled={idx === dailyItems.length - 1} style={{ background: "transparent", border: "none", color: idx === dailyItems.length - 1 ? "#3A4048" : INK_FAINT, cursor: idx === dailyItems.length - 1 ? "default" : "pointer", padding: 0 }}><ChevronDown size={13} /></button>
+                          </div>
+                          <button onClick={() => openEditItemForm(item)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={14} /></button>
+                          <button onClick={() => deleteItem(item.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Trash2 size={14} /></button>
+                        </Card>
+                      );
+                    })}
+                    {dailyItems.length === 0 && <div style={{ color: INK_FAINT, fontSize: 13, textAlign: "center", padding: "16px 0" }}>No routines yet.</div>}
+                  </div>
+                </>
+              ) : (
+                <Card>
+                  <SectionLabel>{itemForm.id ? "Edit routine" : "New routine"}</SectionLabel>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <TextField placeholder="Name" value={itemForm.name} onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))} />
+                    <Select value={itemForm.type} onChange={(e) => setItemForm((f) => ({ ...f, type: e.target.value }))}>
+                      {TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </Select>
+                    <div>
+                      <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 8 }}>Icon</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+                        {ICON_NAMES.map((name) => {
+                          const I = ICON_MAP[name]; const sel = itemForm.icon === name;
+                          return (
+                            <button key={name} onClick={() => setItemForm((f) => ({ ...f, icon: name }))} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, height: 56, borderRadius: 10, background: sel ? "rgba(200,155,60,0.15)" : PANEL_2, border: `1px solid ${sel ? BRASS : LINE}`, cursor: "pointer" }}>
+                              <I size={17} color={sel ? BRASS : INK_DIM} />
+                              <span style={{ fontSize: 8, color: sel ? BRASS : INK_FAINT, textTransform: "uppercase", letterSpacing: "0.03em" }}>{name}</span>
+                              {sel && <div style={{ position: "absolute", top: 4, right: 4, width: 12, height: 12, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Check size={8} color={BG} /></div>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {itemForm.type === "interval" && (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ flex: "1 1 90px" }}><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Interval (hrs)</div><TextField type="number" value={itemForm.intervalHours} onChange={(e) => setItemForm((f) => ({ ...f, intervalHours: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} /></div>
+                        <div style={{ flex: "1 1 90px" }}><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Amount</div><TextField type="number" value={itemForm.amount} onChange={(e) => setItemForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} /></div>
+                        <div style={{ flex: "0 1 70px" }}><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Unit</div><TextField value={itemForm.unit} onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value }))} style={{ width: "100%" }} /></div>
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 6 }}>
+                      <button onClick={saveItemForm} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: BG, cursor: "pointer", fontSize: 13 }}>Save</button>
+                      <button onClick={closeItemForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </>
+          ) : (
+            <>
+              {catTab === "finance" && (
+                <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                  <ChipButton label="Goals" active={financeGoalView === "goals"} onClick={() => setFinanceGoalView("goals")} />
+                  <ChipButton label="Repayment due" active={financeGoalView === "repayments"} onClick={() => setFinanceGoalView("repayments")} />
+                </div>
+              )}
+              {catTab === "finance" && financeGoalView === "repayments" ? (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <SectionLabel>Repayment due</SectionLabel>
+                    <button onClick={() => (showAddRepayment ? cancelRepaymentForm() : setShowAddRepayment(true))} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}><Plus size={13} /> Add</button>
+                  </div>
+                  {showAddRepayment && (
+                    <Card style={{ marginBottom: 12 }}>
+                      <SectionLabel>{editingRepaymentId ? "Edit repayment" : "New repayment"}</SectionLabel>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <Select value={repaymentForm.category} onChange={(e) => setRepaymentForm({ ...blankRepaymentForm(), category: e.target.value })}>
+                          {REPAYMENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </Select>
+                        <TextField placeholder="Lender / details (e.g. HDFC)" value={repaymentForm.name} onChange={(e) => setRepaymentForm({ ...repaymentForm, name: e.target.value })} />
+
+                        {repaymentCategoryClass(repaymentForm.category) === "loan" && (
+                          <TextField placeholder="Loan purpose" value={repaymentForm.purpose} onChange={(e) => setRepaymentForm({ ...repaymentForm, purpose: e.target.value })} />
+                        )}
+
+                        {(repaymentCategoryClass(repaymentForm.category) === "gold" || repaymentCategoryClass(repaymentForm.category) === "loan") ? (
+                          <>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Loan amount</div><TextField type="number" value={repaymentForm.loanAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, loanAmount: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Interest rate %</div>
+                                <div style={{ display: "flex", gap: 4 }}>
+                                  <TextField type="number" value={repaymentForm.interestRate} onChange={(e) => setRepaymentForm({ ...repaymentForm, interestRate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                                  <Select value={repaymentForm.interestRateUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, interestRateUnit: e.target.value })} style={{ width: 92 }}>
+                                    <option value="annum">% / year</option>
+                                    <option value="month">% / month</option>
+                                  </Select>
+                                </div>
+                              </div>
+                            </div>
+                            {repaymentCategoryClass(repaymentForm.category) === "gold" && (
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <TextField placeholder="Gold weight (g)" value={repaymentForm.goldWeight} onChange={(e) => setRepaymentForm({ ...repaymentForm, goldWeight: e.target.value })} style={{ flex: 1 }} />
+                                <TextField placeholder="Location" value={repaymentForm.location} onChange={(e) => setRepaymentForm({ ...repaymentForm, location: e.target.value })} style={{ flex: 1 }} />
+                              </div>
+                            )}
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Duration</div><TextField type="number" value={repaymentForm.durationValue} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Unit</div>
+                                <Select value={repaymentForm.durationUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationUnit: e.target.value })} style={{ width: "100%" }}>
+                                  <option value="Weeks">Weeks</option>
+                                  <option value="Months">Months</option>
+                                  <option value="Years">Years</option>
+                                </Select>
+                              </div>
+                            </div>
+                            {repaymentCategoryClass(repaymentForm.category) === "loan" && (
+                              <TextField type="number" placeholder="EMI amount" value={repaymentForm.emiAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, emiAmount: e.target.value })} style={{ fontFamily: mono }} />
+                            )}
+                            <TextField type="date" value={repaymentForm.dueDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDate: e.target.value })} style={{ fontFamily: mono }} />
+                            {repaymentForm.loanAmount && (
+                              <div style={{ fontSize: 11, color: INK_FAINT, background: PANEL_2, borderRadius: 8, padding: "8px 10px" }}>
+                                {(() => { const c = computeLoanInterest(repaymentForm.loanAmount, repaymentForm.interestRate, repaymentForm.interestRateUnit, repaymentForm.durationValue, repaymentForm.durationUnit); return <>Interest {inr(c.interest)} &middot; Total repayment {inr(c.totalRepayment)}</>; })()}
+                              </div>
+                            )}
+                          </>
+                        ) : repaymentCategoryClass(repaymentForm.category) === "recharge" ? (
+                          <>
+                            <TextField type="number" placeholder="Plan amount" value={repaymentForm.planAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, planAmount: e.target.value })} style={{ fontFamily: mono }} />
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Plan duration</div><TextField type="number" value={repaymentForm.durationValue} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Unit</div>
+                                <Select value={repaymentForm.durationUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationUnit: e.target.value })} style={{ width: "100%" }}>
+                                  <option value="Days">Days</option>
+                                  <option value="Weeks">Weeks</option>
+                                  <option value="Months">Months</option>
+                                  <option value="Years">Years</option>
+                                </Select>
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Start date</div>
+                              <TextField type="date" value={repaymentForm.startDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, startDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                            </div>
+                            {repaymentForm.planAmount && repaymentForm.startDate && (
+                              <div style={{ fontSize: 11, color: INK_FAINT, background: PANEL_2, borderRadius: 8, padding: "8px 10px" }}>
+                                {(() => { const c = computeRechargePlan(repaymentForm.planAmount, repaymentForm.durationValue, repaymentForm.durationUnit, repaymentForm.startDate); return <>Next repayment {c.nextDate || "-"} &middot; Avg daily cost {inr(c.avgDailyCost)}</>; })()}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <TextField type="number" placeholder="Amount" value={repaymentForm.amount} onChange={(e) => setRepaymentForm({ ...repaymentForm, amount: e.target.value })} style={{ fontFamily: mono }} />
+                        )}
+
+                        {repaymentCategoryClass(repaymentForm.category) === "simple" && (
+                          <>
+                            <div>
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Next due date</div>
+                              <TextField type="date" value={repaymentForm.dueDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Payment frequency</div>
+                              <Select value={repaymentForm.frequency} onChange={(e) => setRepaymentForm({ ...repaymentForm, frequency: e.target.value })} style={{ width: "100%" }}>
+                                <option value="Daily">Daily</option>
+                                <option value="Weekly">Weekly</option>
+                                <option value="Monthly">Monthly</option>
+                                <option value="Yearly">Yearly</option>
+                              </Select>
+                            </div>
+                            {(repaymentForm.frequency === "Monthly" || repaymentForm.frequency === "Yearly") && (
+                              <div>
+                                <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Due window (day of month, e.g. 1 to 10)</div>
+                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                  <TextField type="number" min="1" max="31" placeholder="From" value={repaymentForm.dueDayStart} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDayStart: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
+                                  <span style={{ color: INK_FAINT, fontSize: 12 }}>to</span>
+                                  <TextField type="number" min="1" max="31" placeholder="To" value={repaymentForm.dueDayEnd} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDayEnd: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        <TextField placeholder="Remarks (optional)" value={repaymentForm.remarks} onChange={(e) => setRepaymentForm({ ...repaymentForm, remarks: e.target.value })} />
+                        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                          <button onClick={addRepayment} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: BG, cursor: "pointer", fontSize: 13 }}>{editingRepaymentId ? "Save changes" : "Save"}</button>
+                          <button onClick={cancelRepaymentForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {sortedRepayments.map((r) => {
+                      const cls = repaymentCategoryClass(r.category);
+                      const overdue = !r.paid && r.dueDate && r.dueDate < today;
+                      return (
+                        <Card key={r.id}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 14, fontWeight: 500, textDecoration: r.paid ? "line-through" : "none", color: r.paid ? INK_FAINT : INK }}>{r.name || r.category}{r.purpose ? ` \u00b7 ${r.purpose}` : ""}</div>
+                              <div style={{ fontSize: 11, color: overdue ? CORAL : INK_FAINT, marginTop: 3, fontFamily: mono }}>
+                                {r.category}{cls === "gold" ? ` \u00b7 ${r.goldWeight || "?"}g \u00b7 ${r.location || ""}` : ""}{cls === "recharge" ? ` \u00b7 renews ${r.dueDate || "-"}` : r.dueDate ? ` \u00b7 due ${r.dueDate}` : ""}{cls === "simple" && r.frequency ? ` \u00b7 ${r.frequency}${r.dueDayStart ? ` (day ${r.dueDayStart}${r.dueDayEnd ? `\u2013${r.dueDayEnd}` : ""})` : ""}` : ""}{overdue ? " \u00b7 overdue" : ""}
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <span style={{ fontFamily: mono, fontSize: 14, color: CORAL }}>{inr(r.amount)}</span>
+                              {cls === "loan" ? (
+                                r.paid ? (
+                                  <span style={{ fontSize: 11, color: TEAL, fontFamily: mono }}>Closed</span>
+                                ) : (
+                                  <button onClick={() => payNextEmi(r.id)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "5px 10px", color: BG, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Pay EMI</button>
+                                )
+                              ) : (
+                                <button onClick={() => toggleRepaymentPaid(r.id)} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${r.paid ? BRASS : INK_FAINT}`, background: r.paid ? BRASS : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{r.paid && <Check size={13} strokeWidth={3} color={BG} />}</button>
+                              )}
+                              <button onClick={() => openEditRepayment(r)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={14} /></button>
+                              <button onClick={() => deleteRepayment(r.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Trash2 size={14} /></button>
+                            </div>
+                          </div>
+                          {(cls === "gold" || cls === "loan") && (
+                            <div style={{ marginTop: 10, borderTop: `1px solid ${LINE}`, paddingTop: 8, display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: INK_DIM, fontFamily: mono }}>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Interest</span><span>{inr(r.interest)}</span></div>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total repayment</span><span>{inr(r.totalRepayment)}</span></div>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Due amount</span><span style={{ color: r.remainingAmount > 0 ? CORAL : TEAL }}>{inr(r.remainingAmount)}</span></div>
+                              {cls === "loan" && r.installmentsTotal > 0 && (
+                                <div style={{ display: "flex", justifyContent: "space-between" }}><span>EMI schedule</span><span>{r.installmentsPaid || 0} of {r.installmentsTotal} paid &middot; {inr(r.emiAmount)}/mo</span></div>
+                              )}
+                            </div>
+                          )}
+                          {cls === "recharge" && (
+                            <div style={{ marginTop: 10, borderTop: `1px solid ${LINE}`, paddingTop: 8, display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: INK_DIM, fontFamily: mono }}>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Plan amount</span><span>{inr(r.planAmount)}</span></div>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Start date</span><span>{r.startDate || "-"}</span></div>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Avg daily cost</span><span>{inr(r.avgDailyCost)}</span></div>
+                            </div>
+                          )}
+                          {r.remarks && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 6 }}>{r.remarks}</div>}
+                        </Card>
+                      );
+                    })}
+                    {sortedRepayments.length === 0 && <div style={{ color: INK_FAINT, fontSize: 13, textAlign: "center", padding: "16px 0" }}>No repayments added yet.</div>}
+                  </div>
+                </>
+              ) : (
+                <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <SectionLabel>Goals</SectionLabel>
+                <button onClick={() => (showAddGoal ? cancelGoalForm() : setShowAddGoal(true))} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}><Plus size={13} /> Add goal</button>
+              </div>
+              {isRoutineCategory && categoryGoals.some((g) => !g.done && g.sessionMinutes) && (
+                <Card style={{ marginBottom: 12 }}>
+                  <SectionLabel>Total time spent (auto-tracked from schedules)</SectionLabel>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    {(() => {
+                      const totals = categoryGoals.filter((g) => !g.done).reduce((acc, g) => {
+                        const t = computeRoutineTotals(g);
+                        return { dailyMin: acc.dailyMin + t.dailyMin, weeklyMin: acc.weeklyMin + t.weeklyMin, monthlyMin: acc.monthlyMin + t.monthlyMin };
+                      }, { dailyMin: 0, weeklyMin: 0, monthlyMin: 0 });
+                      return (
+                        <>
+                          <div style={{ flex: 1 }}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Per day</div><div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, marginTop: 3, color: BRASS }}>{fmtDuration(totals.dailyMin)}</div></div>
+                          <div style={{ flex: 1 }}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Per week</div><div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, marginTop: 3, color: BRASS }}>{fmtDuration(totals.weeklyMin)}</div></div>
+                          <div style={{ flex: 1 }}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Per month</div><div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, marginTop: 3, color: BRASS }}>{fmtDuration(totals.monthlyMin)}</div></div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </Card>
+              )}
+              {showAddGoal && (
+                <Card style={{ marginBottom: 12 }}>
+                  <SectionLabel>{editingGoalId ? "Edit goal" : "New goal"}</SectionLabel>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <TextField placeholder="Goal title" value={goalForm.title} onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })} />
+                    {!isRoutineCategory && (
+                      <div>
+                        <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Month</div>
+                        <Select value={goalForm.month} onChange={(e) => setGoalForm({ ...goalForm, month: e.target.value })} style={{ width: "100%" }}>
+                          {goalMonthOptions.map((mk) => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                        </Select>
+                      </div>
+                    )}
+                    <div>
+                      <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Sequence number</div>
+                      <TextField type="number" placeholder="1" value={goalForm.sequence} onChange={(e) => setGoalForm({ ...goalForm, sequence: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                    </div>
+                    {catTab === "finance" && (
+                      <TextField placeholder="Target amount" type="number" value={goalForm.targetAmount} onChange={(e) => setGoalForm({ ...goalForm, targetAmount: e.target.value })} style={{ fontFamily: mono }} />
+                    )}
+                    {isRoutineCategory && (
+                      <>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Start date</div>
+                            <TextField type="date" value={goalForm.startDate} onChange={(e) => setGoalForm({ ...goalForm, startDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Expected year</div>
+                            <TextField type="date" value={goalForm.expectedYear} onChange={(e) => setGoalForm({ ...goalForm, expectedYear: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Frequency</div>
+                          <Select value={goalForm.frequency} onChange={(e) => setGoalForm({ ...goalForm, frequency: e.target.value })} style={{ width: "100%" }}>
+                            <option value="Daily">Daily</option>
+                            <option value="Weekly">Weekly</option>
+                            <option value="Monthly">Monthly</option>
+                          </Select>
+                        </div>
+                        {goalForm.frequency === "Weekly" && (
+                          <>
+                            <div>
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Days per week</div>
+                              <TextField type="number" min="0" max="7" value={goalForm.daysPerWeek} onChange={(e) => setGoalForm({ ...goalForm, daysPerWeek: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Specific days (optional \u2014 overrides count above)</div>
+                              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                                {WEEKDAYS.map((day) => {
+                                  const sel = goalForm.specificDays.includes(day);
+                                  return <button key={day} onClick={() => toggleSpecificDay(day)} style={{ background: sel ? "rgba(200,155,60,0.15)" : PANEL_2, border: `1px solid ${sel ? BRASS : LINE}`, color: sel ? BRASS : INK_DIM, borderRadius: 7, padding: "5px 9px", fontSize: 11, cursor: "pointer" }}>{day}</button>;
+                                })}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Start time</div>
+                            <TextField type="time" value={goalForm.startTime} onChange={(e) => setGoalForm({ ...goalForm, startTime: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Time per session (min)</div>
+                            <TextField type="number" value={goalForm.sessionMinutes} onChange={(e) => setGoalForm({ ...goalForm, sessionMinutes: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Track activity on Daily tab as</div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <ChipButton label="OK / Done" active={goalForm.trackingType === "instant"} onClick={() => setGoalForm({ ...goalForm, trackingType: "instant" })} />
+                            <ChipButton label="Start / Stop Timer" active={goalForm.trackingType === "duration"} onClick={() => setGoalForm({ ...goalForm, trackingType: "duration" })} />
+                            <ChipButton label="Interval Reminder" active={goalForm.trackingType === "interval"} onClick={() => setGoalForm({ ...goalForm, trackingType: "interval" })} />
+                          </div>
+                        </div>
+                        {goalForm.trackingType === "interval" && (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <div style={{ flex: "1 1 90px" }}>
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Interval (hrs)</div>
+                              <TextField type="number" value={goalForm.intervalHours} onChange={(e) => setGoalForm({ ...goalForm, intervalHours: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                            </div>
+                            <div style={{ flex: "1 1 90px" }}>
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Amount</div>
+                              <TextField type="number" value={goalForm.intervalAmount} onChange={(e) => setGoalForm({ ...goalForm, intervalAmount: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                            </div>
+                            <div style={{ flex: "0 1 70px" }}>
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Unit</div>
+                              <TextField value={goalForm.intervalUnit} onChange={(e) => setGoalForm({ ...goalForm, intervalUnit: e.target.value })} style={{ width: "100%" }} />
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                      <button onClick={addGoal} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: BG, cursor: "pointer", fontSize: 13 }}>{editingGoalId ? "Save changes" : "Save goal"}</button>
+                      <button onClick={cancelGoalForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+                    </div>
+                  </div>
+                </Card>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {categoryGoals.map((g) => {
+                  const allocated = catTab === "finance" ? (financeAllocations[g.id] || 0) : null;
+                  const pct = catTab === "finance" && g.targetAmount ? round((allocated / g.targetAmount) * 100) : null;
+                  return (
+                    <Card key={g.id}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 10, color: INK_FAINT, border: `1px solid ${LINE}`, borderRadius: 5, padding: "1px 6px", fontFamily: mono }}>#{g.sequence || 0}</span>
+                            <span style={{ fontSize: 14, fontWeight: 500, textDecoration: g.done ? "line-through" : "none", color: g.done ? INK_FAINT : INK }}>{g.title}</span>
+                          </div>
+                          {ROUTINE_CATEGORIES.includes(g.category) && g.trackingType && (
+                            <div style={{ fontSize: 10, color: INK_FAINT, marginTop: 4 }}>
+                              {g.done ? "Not on Daily tab \u2014 goal closed" : g.trackingType === "instant" ? "Daily tab \u00b7 OK / Done" : g.trackingType === "duration" ? "Daily tab \u00b7 Start / Stop Timer" : `Daily tab \u00b7 Interval Reminder (${g.amount || 0} ${g.unit || ""} / ${g.intervalHours || 0}h)`}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          {catTab === "finance" && g.targetAmount > 0 ? (
+                            g.done ? (
+                              <button onClick={() => toggleGoalDone(g.id)} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "5px 10px", color: BG, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Closed</button>
+                            ) : (
+                              <button onClick={() => pct >= 100 && toggleGoalDone(g.id)} disabled={pct < 100} style={{ background: pct >= 100 ? TEAL : "transparent", border: `1px solid ${pct >= 100 ? TEAL : LINE}`, borderRadius: 8, padding: "5px 10px", color: pct >= 100 ? BG : INK_FAINT, cursor: pct >= 100 ? "pointer" : "default", fontSize: 11, fontWeight: 600 }}>Close goal</button>
+                            )
+                          ) : (
+                            <button onClick={() => toggleGoalDone(g.id)} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${g.done ? BRASS : INK_FAINT}`, background: g.done ? BRASS : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{g.done && <Check size={13} strokeWidth={3} color={BG} />}</button>
+                          )}
+                          <button onClick={() => openEditGoal(g)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={14} /></button>
+                          <button onClick={() => deleteGoal(g.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                      {catTab === "finance" && g.targetAmount > 0 && (
+                        <div style={{ marginTop: 10 }}>
+                          <ProgressBar pct={pct} color={TEAL} />
+                          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 11, color: INK_DIM, fontFamily: mono }}>
+                            <span>{inr(allocated)} of {inr(g.targetAmount)} &middot; {pct}%{g.done ? " \u2014 closed" : pct >= 100 ? " \u2014 ready to close" : ""}</span>
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })}
+                {categoryGoals.length === 0 && <div style={{ color: INK_FAINT, fontSize: 13, textAlign: "center", padding: "16px 0" }}>No goals yet in this category.</div>}
+              </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {page === "analysis" && (
+        <div style={{ padding: "8px 20px 20px", flex: 1, minHeight: 0, width: "100%" }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+            <IconBtn onClick={exportExpensesCSV}><Download size={13} /> Export CSV</IconBtn>
+            <IconBtn onClick={exportBackupJSON}><FileJson size={13} /> Backup JSON</IconBtn>
+          </div>
+
+          {instantDurationItems.length > 0 && (
+            <>
+              <SectionLabel>Streaks</SectionLabel>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                {instantDurationItems.map((i) => {
+                  const Icon = ICON_MAP[i.icon] || Target;
+                  const s = streaks[i.id] || 0;
+                  return (
+                    <Card key={i.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <Icon size={15} color={INK_DIM} />
+                      <span style={{ flex: 1, fontSize: 13, color: INK_DIM }}>{i.name}</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 4, fontFamily: mono, fontSize: 14, fontWeight: 600, color: s > 0 ? BRASS : INK_FAINT }}>
+                        <Flame size={13} /> {s} {s === 1 ? "day" : "days"}
+                      </span>
+                    </Card>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {monthExpenses.length > 0 && (
+            <>
+              <SectionLabel>Expenses this month &middot; {monthLabel(curMonth)}</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                {monthExpenses.map((e) => e.group).filter((v, i, a) => a.indexOf(v) === i).map((g) => (
+                  <Card key={g}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>{g}</div><div style={{ fontFamily: mono, fontSize: 17, fontWeight: 600, marginTop: 4 }}>{inr(sumBy((e) => e.group === g))}</div></Card>
+                ))}
+                <Card><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Total logged</div><div style={{ fontFamily: mono, fontSize: 17, fontWeight: 600, marginTop: 4 }}>{inr(totalExpenseLogged)}</div></Card>
+                <Card><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Daily average</div><div style={{ fontFamily: mono, fontSize: 17, fontWeight: 600, marginTop: 4 }}>{inr(dailyAvgExpense)}</div></Card>
+              </div>
+            </>
+          )}
+
+          <SectionLabel>Savings</SectionLabel>
+          <Card style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: INK_FAINT }}>Monthly savings (income minus set expenses)</span>
+            <span style={{ fontFamily: mono, fontSize: 18, fontWeight: 600, color: savingsNum >= 0 ? TEAL : CORAL }}>{inr(savingsNum)}</span>
+          </Card>
+
+          {(instantDurationItems.length > 0 || intervalItems.length > 0) && (
+            <>
+              <SectionLabel>Lifestyle</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                {instantDurationItems.filter((i) => i.type === "duration").map((i) => {
+                  const v = avg(doneRecordsFor(i.id).map((r) => r.durationMin).filter((x) => x != null));
+                  return <Card key={i.id}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Avg {i.name.toLowerCase()}</div><div style={{ fontFamily: mono, fontSize: 16, fontWeight: 600, marginTop: 4 }}>{v != null ? fmtDuration(v) : "-"}</div></Card>;
+                })}
+                {instantDurationItems.filter((i) => i.type === "instant").map((i) => {
+                  const v = avg(doneRecordsFor(i.id).map((r) => minutesSinceMidnight(r.time)));
+                  return <Card key={i.id}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Avg {i.name.toLowerCase()}</div><div style={{ fontFamily: mono, fontSize: 16, fontWeight: 600, marginTop: 4 }}>{v != null ? fmtClockFromMinutes(v) : "-"}</div></Card>;
+                })}
+                {intervalItems.map((i) => {
+                  const logs = monthDayLogs.flatMap(([, log]) => getIntervalLogs(log, i.id));
+                  const total = logs.reduce((s, w) => s + w.amount, 0);
+                  const avgPerDay = monthDayLogs.length ? round(total / monthDayLogs.length) : 0;
+                  return <Card key={i.id}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Avg {i.name.toLowerCase()} / day</div><div style={{ fontFamily: mono, fontSize: 16, fontWeight: 600, marginTop: 4 }}>{avgPerDay} {i.unit}</div></Card>;
+                })}
+                {instantDurationItems.length > 0 && <Card><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Habit completion</div><div style={{ fontFamily: mono, fontSize: 16, fontWeight: 600, marginTop: 4, color: BRASS }}>{habitCompletionPct}%</div></Card>}
+              </div>
+            </>
+          )}
+
+          <SectionLabel>Improvement</SectionLabel>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+            <Card>
+              <div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Monthly improvement</div>
+              {monthlyImprovementPct !== null ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, color: monthlyImprovementPct >= 0 ? TEAL : CORAL }}>{monthlyImprovementPct >= 0 ? <ArrowUp size={15} /> : <ArrowDown size={15} />}<span style={{ fontFamily: mono, fontSize: 16, fontWeight: 600 }}>{Math.abs(monthlyImprovementPct)}%</span></div>
+              ) : <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 6 }}>Add last month's data to compare</div>}
+            </Card>
+            <Card>
+              <div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Yearly improvement</div>
+              {yearlyImprovementPct !== null ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, color: yearlyImprovementPct >= 0 ? TEAL : CORAL }}>{yearlyImprovementPct >= 0 ? <ArrowUp size={15} /> : <ArrowDown size={15} />}<span style={{ fontFamily: mono, fontSize: 16, fontWeight: 600 }}>{Math.abs(yearlyImprovementPct)}%</span></div>
+              ) : <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 6 }}>Need a year of data to compare</div>}
+            </Card>
+          </div>
+
+          <SectionLabel>Goal achievement by category</SectionLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+            {goalAchievementByCat.map((c) => {
+              const Icon = c.icon; const pct = c.total ? round((c.done / c.total) * 100) : 0;
+              return (
+                <Card key={c.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Icon size={16} color={BRASS} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: INK_DIM, marginBottom: 5 }}><span>{c.label}</span><span style={{ fontFamily: mono }}>{c.done}/{c.total}</span></div>
+                    <ProgressBar pct={pct} color={TEAL} />
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+
+          <SectionLabel>Savings trend &middot; last 6 months</SectionLabel>
+          <Card>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 110 }}>
+              {last6Months.map((m) => {
+                const h = Math.round((Math.abs(m.savings) / maxAbs) * 80) || 2;
+                return (
+                  <div key={m.mk} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                    <div style={{ fontSize: 9, color: INK_FAINT, fontFamily: mono }}>{m.savings !== 0 ? inr(m.savings) : "-"}</div>
+                    <div style={{ width: "70%", height: h, background: m.savings >= 0 ? TEAL : CORAL, borderRadius: 3 }} />
+                    <div style={{ fontSize: 10, color: INK_FAINT, fontFamily: mono }}>{monthLabel(m.mk).split(" ")[0]}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: PANEL }}>
+        {[{ id: "daily", label: "Daily", icon: CalendarDays }, { id: "categories", label: "Categories", icon: LayoutGrid }, { id: "analysis", label: "Analysis", icon: TrendingUp }].map((p) => {
+          const Icon = p.icon; const active = page === p.id;
+          return <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 0 8px", background: "transparent", border: "none", cursor: "pointer", color: active ? BRASS : INK_FAINT }}><Icon size={19} strokeWidth={1.8} /><span style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: disp }}>{p.label}</span></button>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<LifeTracker />);
+  </script>
+</body>
+</html>
