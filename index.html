@@ -168,6 +168,7 @@ function computeRechargePlan(planAmount, durationValue, durationUnit, startDate)
 function inr(n) { return "₹" + Math.round(n).toLocaleString("en-IN"); }
 function fmtClock12(d) { return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" }); }
 function fmtTime(iso) { return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); }
+function hhmm(d) { const dt = d instanceof Date ? d : new Date(d); return `${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`; }
 function fmtDuration(min) { if (min == null) return "-"; const h = Math.floor(min / 60), m = Math.round(min % 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; }
 function fmtElapsed(ms) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -260,6 +261,8 @@ const REPAYMENT_CATEGORIES = ["Gold Loan", "Loan", "EMI", "Electricity", "Rent",
 // Electricity and Mobile Recharge are variable: the reminder schedule stays fixed, but the amount is editable at pay time.
 const REPAYMENT_VARIABLE_CATEGORIES = ["Electricity", "Mobile Recharge"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+function weekdayLabel(date) { return WEEKDAYS[(date.getDay() + 6) % 7]; }
+function isItemScheduledToday(item, date) { return !item.days || item.days.length === 0 || item.days.includes(weekdayLabel(date)); }
 const ROUTINE_CATEGORIES = ["career", "health"];
 const GOAL_TRACK_ICON = { career: "Building2", health: "Dumbbell" };
 function computeRoutineTotals(g) {
@@ -308,7 +311,7 @@ function ChipButton({ onClick, label, active }) {
   return <button onClick={onClick} style={{ background: active ? BRASS : PANEL_2, border: "none", color: active ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "10px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{label}</button>;
 }
 
-const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalHours: 2, amount: 250, unit: "ml", groups: {} });
+const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalHours: 2, amount: 250, unit: "ml", groups: {}, days: [], scheduledTime: "" });
 
 function LifeTracker() {
   const [page, setPage] = useState("daily");
@@ -469,9 +472,9 @@ function LifeTracker() {
     }))
     .filter(isItemValid), [goals]);
   const validItems = useMemo(() => [
-    ...dailyItems.filter(isItemValid).map((i) => ({ ...i, category: "activity" })),
+    ...dailyItems.filter(isItemValid).filter((i) => isItemScheduledToday(i, new Date(today))).map((i) => ({ ...i, category: "activity" })),
     ...goalTrackableItems,
-  ], [dailyItems, goalTrackableItems]);
+  ], [dailyItems, goalTrackableItems, today]);
   const todayLog = dailyLogs[today] || defaultLog();
   const field = (id) => todayLog[id] || {};
 
@@ -506,14 +509,26 @@ function LifeTracker() {
     return itemsForCat[idx + 1].id;
   };
   const goNext = (id) => setActiveTab(nextValidAfter(id));
-  const pressInstant = (id) => {
+  const pressInstant = (id, hhmm) => {
     const item = validItems.find((i) => i.id === id);
-    const nowIso = new Date().toISOString();
+    let when = new Date();
+    if (hhmm) {
+      const [h, m] = hhmm.split(":").map(Number);
+      when = new Date(); when.setHours(h, m, 0, 0);
+    }
+    const nowIso = when.toISOString();
     updateField(id, { status: "done", time: nowIso });
     if (item && /wake\s*-?\s*up/i.test(item.name)) {
       setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, wakeUpTime: nowIso } }; });
     }
     goNext(id);
+  };
+  const editInstantTime = (id, hhmm) => {
+    if (!hhmm) return;
+    const [h, m] = hhmm.split(":").map(Number);
+    const when = new Date(); when.setHours(h, m, 0, 0);
+    updateField(id, { time: when.toISOString() });
+    setEditingInstantTime((p) => ({ ...p, [id]: false }));
   };
   const startDuration = (id) => updateField(id, { status: "in_progress", startTime: new Date().toISOString(), endTime: undefined, durationMin: undefined });
   const stopDuration = (id) => {
@@ -547,6 +562,8 @@ function LifeTracker() {
 
   const [expenseFlow, setExpenseFlow] = useState({});
   const [timeSpentInputs, setTimeSpentInputs] = useState({});
+  const [instantTimeInputs, setInstantTimeInputs] = useState({});
+  const [editingInstantTime, setEditingInstantTime] = useState({});
   const getFlow = (itemId) => expenseFlow[itemId] || {};
   const setFlow = (itemId, patch) => setExpenseFlow((prev) => ({ ...prev, [itemId]: { ...(prev[itemId] || {}), ...patch } }));
   const addCustomOption = (item, group, name) => {
@@ -937,6 +954,27 @@ function LifeTracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, remindersEnabled, intervalItems, todayLog]);
 
+  useEffect(() => {
+    if (!remindersEnabled) return;
+    const GRACE_MIN = 30;
+    instantDurationItems.forEach((item) => {
+      if (!item.scheduledTime) return;
+      const [h, m] = item.scheduledTime.split(":").map(Number);
+      const scheduled = new Date(now); scheduled.setHours(h, m, 0, 0);
+      const dueAt = new Date(scheduled.getTime() + GRACE_MIN * 60000);
+      const rec = field(item.id);
+      const done = rec.status === "done";
+      const notifyKey = `${today}:${item.scheduledTime}`;
+      if (!done && now >= dueAt && notifiedRef.current[`missed:${item.id}`] !== notifyKey) {
+        notifiedRef.current[`missed:${item.id}`] = notifyKey;
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          try { new Notification(`${item.name} not done yet`, { body: `Scheduled for ${item.scheduledTime} \u2014 tap to log it.` }); } catch (e) {}
+        }
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, remindersEnabled, instantDurationItems, todayLog]);
+
   const doneRecordsFor = (id) => monthDayLogs.map(([, log]) => log[id]).filter((r) => r && r.status === "done");
   const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
 
@@ -1204,9 +1242,30 @@ function LifeTracker() {
                     return (
                       <Card key={item.id} style={{ textAlign: "center", padding: "24px 16px" }}>
                         {rec.status === "done" ? (
-                          <><div style={{ fontSize: 13, color: INK_DIM, marginBottom: 6 }}>{item.name} recorded</div><div style={{ fontFamily: mono, fontSize: 22, color: TEAL, fontWeight: 600 }}>{fmtTime(rec.time)}</div></>
+                          <>
+                            <div style={{ fontSize: 13, color: INK_DIM, marginBottom: 6 }}>{item.name} recorded</div>
+                            {editingInstantTime[item.id] ? (
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                <TextField type="time" value={instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(rec.time)} onChange={(e) => setInstantTimeInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 120, fontFamily: mono, textAlign: "center" }} />
+                                <button onClick={() => editInstantTime(item.id, instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(rec.time))} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "8px 10px", color: "#FFFFFF", cursor: "pointer" }}><Check size={14} /></button>
+                              </div>
+                            ) : (
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                                <div style={{ fontFamily: mono, fontSize: 22, color: TEAL, fontWeight: 600 }}>{fmtTime(rec.time)}</div>
+                                <button onClick={() => { setInstantTimeInputs((p) => ({ ...p, [item.id]: hhmm(rec.time) })); setEditingInstantTime((p) => ({ ...p, [item.id]: true })); }} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={13} /></button>
+                              </div>
+                            )}
+                          </>
                         ) : (
-                          <><Icon size={28} color={BRASS} style={{ marginBottom: 10 }} /><div style={{ fontSize: 14, color: INK_DIM, marginBottom: 14 }}>Tap when {item.name.toLowerCase()} happens</div><ActionButton onClick={() => pressInstant(item.id)} label="Done" icon={Check} tone={TEAL} big /></>
+                          <>
+                            <Icon size={28} color={BRASS} style={{ marginBottom: 10 }} />
+                            <div style={{ fontSize: 14, color: INK_DIM, marginBottom: 14 }}>Tap when {item.name.toLowerCase()} happens</div>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 14 }}>
+                              <span style={{ fontSize: 11, color: INK_FAINT }}>at</span>
+                              <TextField type="time" value={instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(now)} onChange={(e) => setInstantTimeInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 120, fontFamily: mono, textAlign: "center" }} />
+                            </div>
+                            <ActionButton onClick={() => pressInstant(item.id, instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(now))} label="Done" icon={Check} tone={TEAL} big />
+                          </>
                         )}
                         {streaks[item.id] > 0 && (
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, marginTop: 14, fontSize: 12, color: BRASS, fontFamily: mono }}>
@@ -1389,6 +1448,11 @@ function LifeTracker() {
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 13 }}>{item.name || <span style={{ color: INK_FAINT }}>(unnamed)</span>}</div>
                             <div style={{ fontSize: 11, color: valid ? TEAL : CORAL, marginTop: 2 }}>{item.type} &middot; {valid ? "on Daily tab" : "incomplete \u2014 hidden"}</div>
+                            {(item.scheduledTime || (item.days && item.days.length > 0)) && (
+                              <div style={{ fontSize: 10, color: INK_FAINT, marginTop: 2, fontFamily: mono }}>
+                                {item.scheduledTime ? `at ${item.scheduledTime}` : ""}{item.scheduledTime && item.days && item.days.length > 0 ? " \u00b7 " : ""}{item.days && item.days.length > 0 ? item.days.join(", ") : (item.scheduledTime ? "every day" : "")}
+                              </div>
+                            )}
                           </div>
                           <div style={{ display: "flex", flexDirection: "column" }}>
                             <button onClick={() => moveItem(item.id, -1)} disabled={idx === 0} style={{ background: "transparent", border: "none", color: idx === 0 ? "#3A4048" : INK_FAINT, cursor: idx === 0 ? "default" : "pointer", padding: 0 }}><ChevronUp size={13} /></button>
@@ -1433,6 +1497,25 @@ function LifeTracker() {
                         <div style={{ flex: "0 1 70px" }}><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Unit</div><TextField value={itemForm.unit} onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value }))} style={{ width: "100%" }} /></div>
                       </div>
                     )}
+
+                    {(itemForm.type === "instant" || itemForm.type === "duration") && (
+                      <div>
+                        <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Scheduled time (optional \u2014 used for reminders)</div>
+                        <TextField type="time" value={itemForm.scheduledTime} onChange={(e) => setItemForm((f) => ({ ...f, scheduledTime: e.target.value }))} style={{ width: "100%", fontFamily: mono }} />
+                      </div>
+                    )}
+
+                    <div>
+                      <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 8 }}>Days (leave blank for every day)</div>
+                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                        {WEEKDAYS.map((day) => {
+                          const sel = itemForm.days.includes(day);
+                          return (
+                            <button key={day} onClick={() => setItemForm((f) => ({ ...f, days: f.days.includes(day) ? f.days.filter((d) => d !== day) : [...f.days, day] }))} style={{ background: sel ? BRASS : PANEL_2, border: "none", color: sel ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "7px 12px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{day}</button>
+                          );
+                        })}
+                      </div>
+                    </div>
 
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 6 }}>
                       <button onClick={saveItemForm} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: "#FFFFFF", cursor: "pointer", fontSize: 13 }}>Save</button>
@@ -1634,7 +1717,7 @@ function LifeTracker() {
                               <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total repayment</span><span>{inr(r.totalRepayment)}</span></div>
                               <div style={{ display: "flex", justifyContent: "space-between" }}><span>Due amount</span><span style={{ color: r.remainingAmount > 0 ? CORAL : TEAL }}>{inr(r.remainingAmount)}</span></div>
                               {r.totalRepayment > 0 && (
-                                <div style={{ display: "flex", justifyContent: "space-between" }}><span>Interest remaining</span><span>{inr(round((r.interest || 0) * ((r.remainingAmount || 0) / r.totalRepayment)))}</span></div>
+                                <div style={{ display: "flex", justifyContent: "space-between" }}><span>Interest on due amount</span><span>{inr(computeLoanInterest(r.remainingAmount, r.interestRate, r.interestRateUnit, r.durationValue, r.durationUnit).interest)}</span></div>
                               )}
                               {cls === "loan" && r.installmentsTotal > 0 && (
                                 <>
