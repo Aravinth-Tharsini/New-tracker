@@ -145,9 +145,13 @@ function reminderLeadDays(offset) {
   const opt = REMINDER_OPTIONS.find((o) => o.value === offset);
   return opt ? opt.days : 0;
 }
+function maxReminderLeadDays(offsets) {
+  if (!offsets || offsets.length === 0) return 0;
+  return Math.max(...offsets.map(reminderLeadDays));
+}
 function isTravelRelevantToday(plan, todayStr) {
   if (!plan || !plan.travelDate) return false;
-  const lead = reminderLeadDays(plan.reminderOffset);
+  const lead = maxReminderLeadDays(plan.reminderOffsets || (plan.reminderOffset ? [plan.reminderOffset] : []));
   const remindFrom = addDays(plan.travelDate, -lead);
   return todayStr >= remindFrom && todayStr <= plan.travelDate;
 }
@@ -340,7 +344,11 @@ function LifeTracker() {
   const notifiedRef = useRef({});
   const today = dateKey();
   const curMonth = monthKey();
-  const sortedTravelPlans = [...travelPlans].sort((a, b) => (a.travelDate || "9999").localeCompare(b.travelDate || "9999"));
+  const sortedTravelPlans = [...travelPlans].sort((a, b) => {
+    const ad = a.travelDate || "9999-12-31", bd = b.travelDate || "9999-12-31";
+    if (ad !== bd) return ad.localeCompare(bd);
+    return (a.travelTime || "99:99").localeCompare(b.travelTime || "99:99");
+  });
   const todaysTravelPlans = useMemo(() => sortedTravelPlans.filter((t) => !t.dismissed && isTravelRelevantToday(t, today)), [sortedTravelPlans, today]);
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
@@ -848,13 +856,14 @@ function LifeTracker() {
 
   const [showAddTravel, setShowAddTravel] = useState(false);
   const [editingTravelId, setEditingTravelId] = useState(null);
-  const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", amount: "", bookingDetails: "", reminderOffset: "1d" });
+  const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", amount: "", bookingDetails: "", reminderOffsets: ["1d"] });
   const [travelForm, setTravelForm] = useState(blankTravelForm());
+  const toggleTravelReminder = (offset) => setTravelForm((f) => ({ ...f, reminderOffsets: f.reminderOffsets.includes(offset) ? f.reminderOffsets.filter((o) => o !== offset) : [...f.reminderOffsets, offset] }));
   const openEditTravel = (t) => {
     setTravelForm({
       mode: t.mode || "Train", fromLocation: t.fromLocation || "", toLocation: t.toLocation || "",
-      travelDate: t.travelDate || "", amount: t.amount != null ? String(t.amount) : "",
-      bookingDetails: t.bookingDetails || "", reminderOffset: t.reminderOffset || "1d",
+      travelDate: t.travelDate || "", travelTime: t.travelTime || "", amount: t.amount != null ? String(t.amount) : "",
+      bookingDetails: t.bookingDetails || "", reminderOffsets: t.reminderOffsets || (t.reminderOffset ? [t.reminderOffset] : ["1d"]),
     });
     setEditingTravelId(t.id);
     setShowAddTravel(true);
@@ -864,8 +873,8 @@ function LifeTracker() {
     if (!travelForm.fromLocation.trim() || !travelForm.toLocation.trim() || !travelForm.travelDate) return;
     const base = {
       mode: travelForm.mode, fromLocation: travelForm.fromLocation.trim(), toLocation: travelForm.toLocation.trim(),
-      travelDate: travelForm.travelDate, amount: parseFloat(travelForm.amount) || 0,
-      bookingDetails: travelForm.bookingDetails.trim(), reminderOffset: travelForm.reminderOffset,
+      travelDate: travelForm.travelDate, travelTime: travelForm.travelTime, amount: parseFloat(travelForm.amount) || 0,
+      bookingDetails: travelForm.bookingDetails.trim(), reminderOffsets: travelForm.reminderOffsets,
     };
     if (editingTravelId) {
       setTravelPlans((prev) => prev.map((t) => (t.id !== editingTravelId ? t : { ...t, ...base })));
@@ -975,6 +984,27 @@ function LifeTracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, remindersEnabled, instantDurationItems, todayLog]);
 
+  useEffect(() => {
+    if (!remindersEnabled) return;
+    travelPlans.forEach((plan) => {
+      if (plan.dismissed || !plan.travelDate) return;
+      const offsets = plan.reminderOffsets && plan.reminderOffsets.length ? plan.reminderOffsets : (plan.reminderOffset ? [plan.reminderOffset] : []);
+      offsets.forEach((offset) => {
+        const remindDate = addDays(plan.travelDate, -reminderLeadDays(offset));
+        if (today !== remindDate) return;
+        const notifyKey = `${today}:${offset}`;
+        if (notifiedRef.current[`travel:${plan.id}:${offset}`] !== notifyKey) {
+          notifiedRef.current[`travel:${plan.id}:${offset}`] = notifyKey;
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            const label = (REMINDER_OPTIONS.find((o) => o.value === offset) || {}).label || "";
+            try { new Notification(`Upcoming trip: ${plan.fromLocation} \u2192 ${plan.toLocation}`, { body: `${plan.mode} on ${plan.travelDate}${plan.travelTime ? ` at ${plan.travelTime}` : ""} \u2014 ${label.toLowerCase()}` }); } catch (e) {}
+          }
+        }
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, remindersEnabled, travelPlans, today]);
+
   const doneRecordsFor = (id) => monthDayLogs.map(([, log]) => log[id]).filter((r) => r && r.status === "done");
   const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
 
@@ -1081,7 +1111,7 @@ function LifeTracker() {
                                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                                     <div>
                                       <div style={{ fontSize: 13, color: INK_DIM }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
-                                      <div style={{ fontSize: 11, color: due ? BRASS : INK_FAINT, marginTop: 2 }}>Travel date {t.travelDate}{t.amount ? ` \u00b7 ${inr(t.amount)}` : ""}{due ? " \u00b7 reminder active" : ""}</div>
+                                      <div style={{ fontSize: 11, color: due ? BRASS : INK_FAINT, marginTop: 2 }}>Travel date {t.travelDate}{t.travelTime ? ` \u00b7 ${t.travelTime}` : ""}{t.amount ? ` \u00b7 ${inr(t.amount)}` : ""}{due ? " \u00b7 reminder active" : ""}</div>
                                       {t.bookingDetails && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>{t.bookingDetails}</div>}
                                     </div>
                                     <div style={{ display: "flex", gap: 6 }}>
@@ -1404,17 +1434,28 @@ function LifeTracker() {
                           <TextField placeholder="From location" value={travelForm.fromLocation} onChange={(e) => setTravelForm({ ...travelForm, fromLocation: e.target.value })} style={{ flex: 1 }} />
                           <TextField placeholder="To location" value={travelForm.toLocation} onChange={(e) => setTravelForm({ ...travelForm, toLocation: e.target.value })} style={{ flex: 1 }} />
                         </div>
-                        <div>
-                          <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Travel date</div>
-                          <TextField type="date" value={travelForm.travelDate} onChange={(e) => setTravelForm({ ...travelForm, travelDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Travel date</div>
+                            <TextField type="date" value={travelForm.travelDate} onChange={(e) => setTravelForm({ ...travelForm, travelDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Travel time</div>
+                            <TextField type="time" value={travelForm.travelTime} onChange={(e) => setTravelForm({ ...travelForm, travelTime: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
                         </div>
                         <TextField type="number" placeholder="Amount" value={travelForm.amount} onChange={(e) => setTravelForm({ ...travelForm, amount: e.target.value })} style={{ fontFamily: mono }} />
                         <TextField placeholder="Ticket / booking details" value={travelForm.bookingDetails} onChange={(e) => setTravelForm({ ...travelForm, bookingDetails: e.target.value })} />
                         <div>
-                          <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Remind me before travel date</div>
-                          <Select value={travelForm.reminderOffset} onChange={(e) => setTravelForm({ ...travelForm, reminderOffset: e.target.value })} style={{ width: "100%" }}>
-                            {REMINDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                          </Select>
+                          <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 6 }}>Remind me before travel date (pick as many as you like)</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                            {REMINDER_OPTIONS.map((o) => {
+                              const sel = travelForm.reminderOffsets.includes(o.value);
+                              return (
+                                <button key={o.value} onClick={() => toggleTravelReminder(o.value)} style={{ background: sel ? BRASS : PANEL_2, border: "none", color: sel ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "7px 12px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{o.label}</button>
+                              );
+                            })}
+                          </div>
                         </div>
                         <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                           <button onClick={addTravelPlan} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: "#FFFFFF", cursor: "pointer", fontSize: 13 }}>{editingTravelId ? "Save changes" : "Save trip"}</button>
@@ -1428,7 +1469,8 @@ function LifeTracker() {
                       <Card key={t.id} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 13 }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
-                          <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>{t.travelDate}{t.amount ? ` \u00b7 ${inr(t.amount)}` : ""} &middot; reminder {(REMINDER_OPTIONS.find((o) => o.value === t.reminderOffset) || REMINDER_OPTIONS[1]).label.toLowerCase()}{t.dismissed ? " \u00b7 dismissed" : ""}</div>
+                          <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>{t.travelDate}{t.travelTime ? ` \u00b7 ${t.travelTime}` : ""}{t.amount ? ` \u00b7 ${inr(t.amount)}` : ""}{t.dismissed ? " \u00b7 dismissed" : ""}</div>
+                          <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>Reminders: {(t.reminderOffsets && t.reminderOffsets.length ? t.reminderOffsets : (t.reminderOffset ? [t.reminderOffset] : [])).map((v) => (REMINDER_OPTIONS.find((o) => o.value === v) || {}).label).filter(Boolean).join(", ") || "none"}</div>
                         </div>
                         <button onClick={() => openEditTravel(t)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={14} /></button>
                         <button onClick={() => deleteTravelPlan(t.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Trash2 size={14} /></button>
