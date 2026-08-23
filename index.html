@@ -1049,11 +1049,18 @@ function LifeTracker() {
                 const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
                 const doneCount = cat.id === "trip" || cat.id === "expense" ? 0 : itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
                 const countLabel = cat.id === "trip" ? `${totalCount} upcoming${todaysTravelPlans.length ? ` \u00b7 ${todaysTravelPlans.length} due` : ""}` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}${todaysRepaymentReminders.length ? ` \u00b7 ${todaysRepaymentReminders.length} due` : ""}` : `${doneCount}/${totalCount} done`;
+                const trackableCount = cat.id === "trip" || cat.id === "expense" ? 0 : itemsForCat.filter((i) => i.type !== "interval").length;
+                const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "expense" ? todaysRepaymentReminders.length : Math.max(0, trackableCount - doneCount);
                 return (
                   <div key={cat.id}>
                     <button onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS_DIM : LINE}`, borderRadius: 14, padding: "10px 12px", cursor: "pointer", transition: "background 0.15s, border-color 0.15s" }}>
-                      <div style={{ width: 34, height: 34, borderRadius: 10, background: expanded ? "rgba(0,113,227,0.18)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <div style={{ position: "relative", width: 34, height: 34, borderRadius: 10, background: expanded ? "rgba(0,113,227,0.18)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <CatIcon size={16} color={expanded ? BRASS : INK_DIM} />
+                        {attentionCount > 0 && (
+                          <div style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, borderRadius: 999, background: CORAL, color: "#FFFFFF", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", border: "2px solid " + BG, fontFamily: mono }}>
+                            {attentionCount > 9 ? "9+" : attentionCount}
+                          </div>
+                        )}
                       </div>
                       <div style={{ flex: 1, textAlign: "left" }}>
                         <div style={{ fontSize: 13, color: expanded ? BRASS : INK, fontWeight: 500 }}>{cat.label}</div>
