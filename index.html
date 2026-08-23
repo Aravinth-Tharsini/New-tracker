@@ -2,8 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
   <title>Life Tracker</title>
+
+  <!-- Home screen icon + full-screen app behavior -->
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="theme-color" content="#F5F5F7" />
+
+  <!-- iOS: run as a standalone app with no browser chrome when added to Home Screen -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Life Tracker" />
+
+  <!-- Android/Chrome: same, for "Add to Home screen" -->
+  <meta name="mobile-web-app-capable" content="yes" />
+
   <script type="importmap">
   {
     "imports": {
@@ -866,7 +881,7 @@ function LifeTracker() {
     <div style={{ background: BG, minHeight: "100dvh", width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: disp, color: INK, boxSizing: "border-box", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
       <style>{`*{box-sizing:border-box;} input,select,button{max-width:100%; font-family:${disp};}`}</style>
 
-      <div style={{ padding: "22px 20px 10px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+      <div style={{ padding: "calc(22px + env(safe-area-inset-top)) 20px 10px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
           {page === "daily" ? "Daily" : page === "categories" ? "Categories" : "Analysis"}
         </span>
@@ -874,7 +889,7 @@ function LifeTracker() {
           <button onClick={toggleReminders} title={remindersEnabled ? "Reminders on" : "Reminders off"} style={{ background: "transparent", border: "none", color: remindersEnabled ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}>
             {remindersEnabled ? <Bell size={16} /> : <BellOff size={16} />}
           </button>
-          <span style={{ fontSize: 12, color: INK_FAINT, fontFamily: mono }}>{formatDateLong(new Date())}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: INK_FAINT, fontFamily: mono }}><CalendarDays size={12} /> {formatDateLong(new Date())}</span>
         </div>
       </div>
 
@@ -1083,7 +1098,10 @@ function LifeTracker() {
               </div>
 
               <div>
-                <div style={{ textAlign: "center", fontFamily: mono, fontSize: 28, fontWeight: 600, color: INK, marginBottom: 16, letterSpacing: "0.02em" }}>{fmtClock12(now)}</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 }}>
+                  <Clock size={20} color={INK_FAINT} />
+                  <div style={{ textAlign: "center", fontFamily: mono, fontSize: 28, fontWeight: 600, color: INK, letterSpacing: "0.02em" }}>{fmtClock12(now)}</div>
+                </div>
 
                 {itemsForCat.filter((i) => i.id === activeTab).map((item) => {
                   const Icon = ICON_MAP[item.icon] || Target;
@@ -1820,7 +1838,7 @@ function LifeTracker() {
         </div>
       )}
 
-      <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px)", position: "sticky", bottom: 0 }}>
+      <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px)", position: "sticky", bottom: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
         {[{ id: "daily", label: "Daily", icon: CalendarDays }, { id: "categories", label: "Categories", icon: LayoutGrid }, { id: "analysis", label: "Analysis", icon: TrendingUp }].map((p) => {
           const Icon = p.icon; const active = page === p.id;
           return <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0 10px", background: "transparent", border: "none", cursor: "pointer", color: active ? BRASS : INK_FAINT }}><Icon size={22} strokeWidth={active ? 2.2 : 1.8} /><span style={{ fontSize: 10, fontWeight: active ? 600 : 500, fontFamily: disp }}>{p.label}</span></button>;
