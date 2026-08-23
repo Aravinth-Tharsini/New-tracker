@@ -1630,11 +1630,18 @@ function LifeTracker() {
                           {(cls === "gold" || cls === "loan") && (
                             <div style={{ marginTop: 10, borderTop: `1px solid ${LINE}`, paddingTop: 8, display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: INK_DIM, fontFamily: mono }}>
                               <div style={{ display: "flex", justifyContent: "space-between" }}><span>Loan amount</span><span>{inr(r.loanAmount)}</span></div>
-                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Interest</span><span>{inr(r.interest)}</span></div>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Interest (total)</span><span>{inr(r.interest)}</span></div>
                               <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total repayment</span><span>{inr(r.totalRepayment)}</span></div>
                               <div style={{ display: "flex", justifyContent: "space-between" }}><span>Due amount</span><span style={{ color: r.remainingAmount > 0 ? CORAL : TEAL }}>{inr(r.remainingAmount)}</span></div>
+                              {r.totalRepayment > 0 && (
+                                <div style={{ display: "flex", justifyContent: "space-between" }}><span>Interest remaining</span><span>{inr(round((r.interest || 0) * ((r.remainingAmount || 0) / r.totalRepayment)))}</span></div>
+                              )}
                               {cls === "loan" && r.installmentsTotal > 0 && (
-                                <div style={{ display: "flex", justifyContent: "space-between" }}><span>EMI schedule</span><span>{r.installmentsPaid || 0} of {r.installmentsTotal} paid &middot; {inr(r.emiAmount)}/mo</span></div>
+                                <>
+                                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}><span>EMIs completed</span><span style={{ color: (r.installmentsPaid || 0) >= r.installmentsTotal ? TEAL : INK_DIM, fontWeight: 600 }}>{r.installmentsPaid || 0}/{r.installmentsTotal} completed</span></div>
+                                  <ProgressBar pct={((r.installmentsPaid || 0) / r.installmentsTotal) * 100} color={(r.installmentsPaid || 0) >= r.installmentsTotal ? TEAL : BRASS} />
+                                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>EMI amount</span><span>{inr(r.emiAmount)}/mo</span></div>
+                                </>
                               )}
                             </div>
                           )}
