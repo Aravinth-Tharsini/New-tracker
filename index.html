@@ -700,7 +700,7 @@ function LifeTracker() {
     category: REPAYMENT_CATEGORIES[0], name: "", remarks: "",
     loanAmount: "", interestRate: "", interestRateUnit: "annum", durationValue: "", durationUnit: "Months",
     goldWeight: "", location: "",
-    purpose: "", emiAmount: "", dueDate: "",
+    purpose: "", emiAmount: "", dueDate: "", receivedDate: "",
     amount: "", frequency: "Monthly", dueDayStart: "", dueDayEnd: "",
     planAmount: "", startDate: "",
     reminderOffset: "3d",
@@ -713,7 +713,7 @@ function LifeTracker() {
       loanAmount: r.loanAmount != null ? String(r.loanAmount) : "", interestRate: r.interestRate != null ? String(r.interestRate) : "", interestRateUnit: r.interestRateUnit || "annum",
       durationValue: r.durationValue != null ? String(r.durationValue) : "", durationUnit: r.durationUnit || "Months",
       goldWeight: r.goldWeight || "", location: r.location || "",
-      purpose: r.purpose || "", emiAmount: r.emiAmount != null ? String(r.emiAmount) : "", dueDate: r.dueDate || "",
+      purpose: r.purpose || "", emiAmount: r.emiAmount != null ? String(r.emiAmount) : "", dueDate: r.dueDate || "", receivedDate: r.receivedDate || "",
       amount: r.amount != null ? String(r.amount) : "",
       frequency: r.frequency || "Monthly", dueDayStart: r.dueDayStart != null ? String(r.dueDayStart) : "", dueDayEnd: r.dueDayEnd != null ? String(r.dueDayEnd) : "",
       planAmount: r.planAmount != null ? String(r.planAmount) : "", startDate: r.startDate || "",
@@ -730,10 +730,10 @@ function LifeTracker() {
       if (principal <= 0) return;
       const { interest, totalRepayment } = computeLoanInterest(principal, repaymentForm.interestRate, repaymentForm.interestRateUnit, repaymentForm.durationValue, repaymentForm.durationUnit);
       const base = {
-        category: repaymentForm.category, name: repaymentForm.name.trim(), remarks: repaymentForm.remarks.trim(),
+        category: repaymentForm.category, name: repaymentForm.name.trim(), purpose: repaymentForm.purpose.trim(), remarks: repaymentForm.remarks.trim(),
         loanAmount: principal, interestRate: parseFloat(repaymentForm.interestRate) || 0, interestRateUnit: repaymentForm.interestRateUnit,
         goldWeight: repaymentForm.goldWeight, location: repaymentForm.location, durationValue: repaymentForm.durationValue, durationUnit: repaymentForm.durationUnit,
-        interest, totalRepayment, amount: totalRepayment, dueDate: repaymentForm.dueDate || "", reminderOffset: repaymentForm.reminderOffset,
+        interest, totalRepayment, amount: totalRepayment, dueDate: repaymentForm.dueDate || "", receivedDate: repaymentForm.receivedDate || "", reminderOffset: repaymentForm.reminderOffset,
       };
       if (editingRepaymentId) {
         setRepayments((prev) => prev.map((r) => r.id !== editingRepaymentId ? r : { ...r, ...base, remainingAmount: r.paid ? 0 : totalRepayment }));
@@ -750,7 +750,7 @@ function LifeTracker() {
         category: repaymentForm.category, name: repaymentForm.name.trim(), purpose: repaymentForm.purpose.trim(), remarks: repaymentForm.remarks.trim(),
         loanAmount: principal, interestRate: parseFloat(repaymentForm.interestRate) || 0, interestRateUnit: repaymentForm.interestRateUnit,
         durationValue: repaymentForm.durationValue, durationUnit: repaymentForm.durationUnit, emiAmount,
-        interest, totalRepayment, installmentsTotal, amount: emiAmount || totalRepayment, dueDate: repaymentForm.dueDate || "", reminderOffset: repaymentForm.reminderOffset,
+        interest, totalRepayment, installmentsTotal, amount: emiAmount || totalRepayment, dueDate: repaymentForm.dueDate || "", receivedDate: repaymentForm.receivedDate || "", reminderOffset: repaymentForm.reminderOffset,
       };
       if (editingRepaymentId) {
         setRepayments((prev) => prev.map((r) => {
@@ -1465,7 +1465,7 @@ function LifeTracker() {
                         </Select>
                         <TextField placeholder="Lender / details (e.g. HDFC)" value={repaymentForm.name} onChange={(e) => setRepaymentForm({ ...repaymentForm, name: e.target.value })} />
 
-                        {repaymentCategoryClass(repaymentForm.category) === "loan" && (
+                        {(repaymentCategoryClass(repaymentForm.category) === "loan" || repaymentCategoryClass(repaymentForm.category) === "gold") && (
                           <TextField placeholder="Loan purpose" value={repaymentForm.purpose} onChange={(e) => setRepaymentForm({ ...repaymentForm, purpose: e.target.value })} />
                         )}
 
@@ -1504,7 +1504,16 @@ function LifeTracker() {
                             {repaymentCategoryClass(repaymentForm.category) === "loan" && (
                               <TextField type="number" placeholder="EMI amount" value={repaymentForm.emiAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, emiAmount: e.target.value })} style={{ fontFamily: mono }} />
                             )}
-                            <TextField type="date" value={repaymentForm.dueDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDate: e.target.value })} style={{ fontFamily: mono }} />
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Received date</div>
+                                <TextField type="date" value={repaymentForm.receivedDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, receivedDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Due date</div>
+                                <TextField type="date" value={repaymentForm.dueDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              </div>
+                            </div>
                             {repaymentForm.loanAmount && (
                               <div style={{ fontSize: 11, color: INK_FAINT, background: PANEL_2, borderRadius: 8, padding: "8px 10px" }}>
                                 {(() => { const c = computeLoanInterest(repaymentForm.loanAmount, repaymentForm.interestRate, repaymentForm.interestRateUnit, repaymentForm.durationValue, repaymentForm.durationUnit); return <>Interest {inr(c.interest)} &middot; Total repayment {inr(c.totalRepayment)}</>; })()}
@@ -1587,11 +1596,11 @@ function LifeTracker() {
                       const overdue = !r.paid && r.dueDate && r.dueDate < today;
                       return (
                         <Card key={r.id}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div style={{ flex: 1 }}>
                               <div style={{ fontSize: 14, fontWeight: 500, textDecoration: r.paid ? "line-through" : "none", color: r.paid ? INK_FAINT : INK }}>{r.name || r.category}{r.purpose ? ` \u00b7 ${r.purpose}` : ""}</div>
                               <div style={{ fontSize: 11, color: overdue ? CORAL : INK_FAINT, marginTop: 3, fontFamily: mono }}>
-                                {r.category}{cls === "gold" ? ` \u00b7 ${r.goldWeight || "?"}g \u00b7 ${r.location || ""}` : ""}{cls === "recharge" ? ` \u00b7 renews ${r.dueDate || "-"}` : r.dueDate ? ` \u00b7 due ${r.dueDate}` : ""}{cls === "simple" && r.frequency ? ` \u00b7 ${r.frequency}${r.dueDayStart ? ` (day ${r.dueDayStart}${r.dueDayEnd ? `\u2013${r.dueDayEnd}` : ""})` : ""}` : ""}{overdue ? " \u00b7 overdue" : ""}{r.dueDate && !r.paid ? ` \u00b7 reminder ${(REMINDER_OPTIONS.find((o) => o.value === r.reminderOffset) || REMINDER_OPTIONS[3]).label.toLowerCase()}` : ""}
+                                {r.category}{cls === "gold" ? ` \u00b7 ${r.goldWeight || "?"}g${r.location ? ` \u00b7 ${r.location}` : ""}` : ""}{cls === "recharge" ? ` \u00b7 renews ${r.dueDate || "-"}` : ""}{r.receivedDate ? ` \u00b7 received ${r.receivedDate}` : ""}{cls !== "recharge" && r.dueDate ? ` \u00b7 due ${r.dueDate}` : ""}{cls === "simple" && r.frequency ? ` \u00b7 ${r.frequency}${r.dueDayStart ? ` (day ${r.dueDayStart}${r.dueDayEnd ? `\u2013${r.dueDayEnd}` : ""})` : ""}` : ""}{overdue ? " \u00b7 overdue" : ""}{r.dueDate && !r.paid ? ` \u00b7 reminder ${(REMINDER_OPTIONS.find((o) => o.value === r.reminderOffset) || REMINDER_OPTIONS[3]).label.toLowerCase()}` : ""}
                               </div>
                             </div>
                             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -1611,6 +1620,7 @@ function LifeTracker() {
                           </div>
                           {(cls === "gold" || cls === "loan") && (
                             <div style={{ marginTop: 10, borderTop: `1px solid ${LINE}`, paddingTop: 8, display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: INK_DIM, fontFamily: mono }}>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Loan amount</span><span>{inr(r.loanAmount)}</span></div>
                               <div style={{ display: "flex", justifyContent: "space-between" }}><span>Interest</span><span>{inr(r.interest)}</span></div>
                               <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total repayment</span><span>{inr(r.totalRepayment)}</span></div>
                               <div style={{ display: "flex", justifyContent: "space-between" }}><span>Due amount</span><span style={{ color: r.remainingAmount > 0 ? CORAL : TEAL }}>{inr(r.remainingAmount)}</span></div>
