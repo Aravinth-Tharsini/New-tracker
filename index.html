@@ -1599,8 +1599,17 @@ function LifeTracker() {
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div style={{ flex: 1 }}>
                               <div style={{ fontSize: 14, fontWeight: 500, textDecoration: r.paid ? "line-through" : "none", color: r.paid ? INK_FAINT : INK }}>{r.name || r.category}{r.purpose ? ` \u00b7 ${r.purpose}` : ""}</div>
-                              <div style={{ fontSize: 11, color: overdue ? CORAL : INK_FAINT, marginTop: 3, fontFamily: mono }}>
-                                {r.category}{cls === "gold" ? ` \u00b7 ${r.goldWeight || "?"}g${r.location ? ` \u00b7 ${r.location}` : ""}` : ""}{cls === "recharge" ? ` \u00b7 renews ${r.dueDate || "-"}` : ""}{r.receivedDate ? ` \u00b7 received ${r.receivedDate}` : ""}{cls !== "recharge" && r.dueDate ? ` \u00b7 due ${r.dueDate}` : ""}{cls === "simple" && r.frequency ? ` \u00b7 ${r.frequency}${r.dueDayStart ? ` (day ${r.dueDayStart}${r.dueDayEnd ? `\u2013${r.dueDayEnd}` : ""})` : ""}` : ""}{overdue ? " \u00b7 overdue" : ""}{r.dueDate && !r.paid ? ` \u00b7 reminder ${(REMINDER_OPTIONS.find((o) => o.value === r.reminderOffset) || REMINDER_OPTIONS[3]).label.toLowerCase()}` : ""}
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 4, fontFamily: mono, display: "flex", flexDirection: "column", gap: 2 }}>
+                                <span>{r.category}{cls === "gold" ? ` \u00b7 ${r.goldWeight || "?"}g${r.location ? ` \u00b7 ${r.location}` : ""}` : ""}{cls === "simple" && r.frequency ? ` \u00b7 ${r.frequency}${r.dueDayStart ? ` (day ${r.dueDayStart}${r.dueDayEnd ? `\u2013${r.dueDayEnd}` : ""})` : ""}` : ""}</span>
+                                {r.receivedDate && <span>Received {r.receivedDate}</span>}
+                                {cls === "recharge" ? (
+                                  <span>Renews {r.dueDate || "-"}</span>
+                                ) : r.dueDate ? (
+                                  <span style={{ color: overdue ? CORAL : INK_FAINT }}>Due {r.dueDate}{overdue ? " \u00b7 overdue" : ""}</span>
+                                ) : null}
+                                {r.dueDate && !r.paid && (
+                                  <span>Reminder {(REMINDER_OPTIONS.find((o) => o.value === r.reminderOffset) || REMINDER_OPTIONS[3]).label.toLowerCase()}</span>
+                                )}
                               </div>
                             </div>
                             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
