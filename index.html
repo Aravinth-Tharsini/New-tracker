@@ -14,7 +14,7 @@
   }
   </script>
 </head>
-<body style="margin:0; background:#14181D;">
+<body style="margin:0; background:#F5F5F7;">
   <div id="root"></div>
   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
   <script type="text/babel" data-type="module" data-presets="react">
@@ -66,20 +66,21 @@ import {
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
 } from "lucide-react";
 
-const INK = "#EDEAE0";
-const INK_DIM = "#9A968A";
-const INK_FAINT = "#6B6860";
-const PANEL = "#1B2027";
-const PANEL_2 = "#20262E";
-const BG = "#14181D";
-const LINE = "#2C333C";
-const BRASS = "#C89B3C";
-const BRASS_DIM = "#8A6B2A";
-const TEAL = "#4E9E90";
-const CORAL = "#C97256";
+const INK = "#1D1D1F";
+const INK_DIM = "#6E6E73";
+const INK_FAINT = "#AEAEB2";
+const PANEL = "#FFFFFF";
+const PANEL_2 = "#F2F2F7";
+const BG = "#F5F5F7";
+const LINE = "#E5E5EA";
+const BRASS = "#0071E3";
+const BRASS_DIM = "#B9DBFB";
+const TEAL = "#34C759";
+const CORAL = "#FF3B30";
 
-const mono = "'JetBrains Mono', monospace";
-const disp = "'Space Grotesk', sans-serif";
+const mono = "ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace";
+const disp = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', 'Inter', sans-serif";
+const CARD_SHADOW = "0 1px 2px rgba(0,0,0,0.04), 0 1px 8px rgba(0,0,0,0.04)";
 
 function pad2(n) { return String(n).padStart(2, "0"); }
 function dateKey(d = new Date()) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
@@ -114,7 +115,7 @@ function addDays(dateStr, days) {
   return dateKey(d);
 }
 const REMINDER_OPTIONS = [
-  { value: "none", label: "On travel date only", days: 0 },
+  { value: "none", label: "On the day itself", days: 0 },
   { value: "1d", label: "1 day before", days: 1 },
   { value: "2d", label: "2 days before", days: 2 },
   { value: "3d", label: "3 days before", days: 3 },
@@ -133,6 +134,14 @@ function isTravelRelevantToday(plan, todayStr) {
   const lead = reminderLeadDays(plan.reminderOffset);
   const remindFrom = addDays(plan.travelDate, -lead);
   return todayStr >= remindFrom && todayStr <= plan.travelDate;
+}
+// A repayment reminder stays visible from its lead window through to payment (it doesn't
+// disappear at the due date the way a travel reminder does, since it's still owed until paid).
+function isRepaymentRelevantToday(r, todayStr) {
+  if (!r || r.paid || !r.dueDate) return false;
+  const lead = reminderLeadDays(r.reminderOffset);
+  const remindFrom = addDays(r.dueDate, -lead);
+  return todayStr >= remindFrom;
 }
 function computeRechargePlan(planAmount, durationValue, durationUnit, startDate) {
   const amt = Number(planAmount) || 0;
@@ -231,6 +240,9 @@ function isItemValid(item) {
 }
 
 const REPAYMENT_CATEGORIES = ["Gold Loan", "Loan", "EMI", "Electricity", "Rent", "Mobile Recharge", "Other"];
+// EMI/Loan/Gold Loan/Rent/Other are fixed: amount and schedule come from what's saved in Repayment due.
+// Electricity and Mobile Recharge are variable: the reminder schedule stays fixed, but the amount is editable at pay time.
+const REPAYMENT_VARIABLE_CATEGORIES = ["Electricity", "Mobile Recharge"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const ROUTINE_CATEGORIES = ["career", "health"];
 const GOAL_TRACK_ICON = { career: "Building2", health: "Dumbbell" };
@@ -267,17 +279,17 @@ const DAILY_TAB_CATEGORY_DEFS = [
 const DAILY_EXPENSE_GROUPS = Object.fromEntries(Object.entries(DEFAULT_EXPENSE_GROUPS).filter(([g]) => !REPAYMENT_LINKED_EXPENSE_GROUPS.includes(g)));
 const EXPENSE_GROUP_ICON = { Food: UtensilsCrossed, Grocery: ShoppingBag, Fuel: Car, "Health Care": HeartPulse, Travel: Plane, Other: Receipt };
 
-function Card({ children, style }) { return <div style={{ background: PANEL, border: `1px solid ${LINE}`, borderRadius: 12, padding: "14px 16px", ...style }}>{children}</div>; }
-function SectionLabel({ children }) { return <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: INK_FAINT, marginBottom: 8 }}>{children}</div>; }
-function TextField(props) { return <input {...props} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 8, padding: "8px 10px", color: INK, fontSize: 13, outline: "none", ...props.style }} />; }
-function Select(props) { return <select {...props} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 8, color: INK, fontSize: 13, padding: "8px 6px", ...props.style }}>{props.children}</select>; }
-function IconBtn({ onClick, children }) { return <button onClick={onClick} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "0 12px", height: 32, color: BRASS, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>{children}</button>; }
-function ProgressBar({ pct, color = BRASS }) { return <div style={{ height: 6, background: PANEL_2, borderRadius: 4, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.min(100, Math.max(0, pct))}%`, background: color, borderRadius: 4 }} /></div>; }
+function Card({ children, style }) { return <div style={{ background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 16, padding: "14px 16px", ...style }}>{children}</div>; }
+function SectionLabel({ children }) { return <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: INK_FAINT, marginBottom: 8, fontWeight: 600 }}>{children}</div>; }
+function TextField(props) { return <input {...props} style={{ background: PANEL_2, border: "none", borderRadius: 10, padding: "9px 12px", color: INK, fontSize: 14, outline: "none", ...props.style }} />; }
+function Select(props) { return <select {...props} style={{ background: PANEL_2, border: "none", borderRadius: 10, color: INK, fontSize: 14, padding: "9px 8px", outline: "none", ...props.style }}>{props.children}</select>; }
+function IconBtn({ onClick, children }) { return <button onClick={onClick} style={{ background: PANEL_2, border: "none", borderRadius: 10, padding: "0 12px", height: 34, color: BRASS, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>{children}</button>; }
+function ProgressBar({ pct, color = BRASS }) { return <div style={{ height: 6, background: PANEL_2, borderRadius: 999, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.min(100, Math.max(0, pct))}%`, background: color, borderRadius: 999 }} /></div>; }
 function ActionButton({ onClick, label, icon: Icon, tone = BRASS, big }) {
-  return <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, background: tone, border: "none", color: BG, borderRadius: 10, padding: big ? "14px 22px" : "8px 16px", fontSize: big ? 15 : 13, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}><Icon size={big ? 17 : 14} /> {label}</button>;
+  return <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, background: tone, border: "none", color: "#FFFFFF", borderRadius: 980, padding: big ? "14px 26px" : "9px 18px", fontSize: big ? 15 : 13, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}><Icon size={big ? 17 : 14} /> {label}</button>;
 }
 function ChipButton({ onClick, label, active }) {
-  return <button onClick={onClick} style={{ background: active ? "rgba(200,155,60,0.15)" : PANEL_2, border: `1px solid ${active ? BRASS : LINE}`, color: active ? BRASS : INK_DIM, borderRadius: 10, padding: "10px 14px", fontSize: 13, cursor: "pointer" }}>{label}</button>;
+  return <button onClick={onClick} style={{ background: active ? BRASS : PANEL_2, border: "none", color: active ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "10px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{label}</button>;
 }
 
 const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalHours: 2, amount: 250, unit: "ml", groups: {} });
@@ -343,7 +355,7 @@ function LifeTracker() {
   const goalTrackableItems = useMemo(() => goals
     .filter((g) => ROUTINE_CATEGORIES.includes(g.category) && !g.done && g.trackingType)
     .map((g) => ({
-      id: `goal-${g.id}`, name: g.title, type: g.trackingType,
+      id: `goal-${g.id}`, name: g.title, type: g.trackingType, category: g.category,
       icon: GOAL_TRACK_ICON[g.category] || "Target",
       intervalHours: g.intervalHours, amount: g.amount, unit: g.unit,
     }))
@@ -356,8 +368,8 @@ function LifeTracker() {
   const field = (id) => todayLog[id] || {};
 
   const availableDailyCategories = useMemo(() => DAILY_TAB_CATEGORY_DEFS.filter((c) => (
-    c.id === "expense" ? true : c.id === "trip" ? todaysTravelPlans.length > 0 : validItems.some((i) => i.category === c.id)
-  )), [validItems, todaysTravelPlans]);
+    c.id === "expense" ? true : c.id === "trip" ? sortedTravelPlans.some((t) => !t.dismissed) : validItems.some((i) => i.category === c.id)
+  )), [validItems, sortedTravelPlans]);
 
   useEffect(() => {
     if (expandedDailyCategory && !availableDailyCategories.some((c) => c.id === expandedDailyCategory)) {
@@ -465,6 +477,21 @@ function LifeTracker() {
     if (repaymentCategoryClass(r.category) === "loan") payNextEmi(r.id);
     else toggleRepaymentPaid(r.id);
   };
+  // Used from the Daily tab's repayment reminder card. Fixed categories (EMI, Loan, Gold Loan, Rent, Other)
+  // pay using the amount and schedule already saved in Repayment due. Variable categories (Electricity,
+  // Mobile Recharge) let the amount be edited here first, while the reminder schedule itself stays fixed.
+  const payRepaymentQuick = (r) => {
+    if (REPAYMENT_VARIABLE_CATEGORIES.includes(r.category)) {
+      const amt = parseFloat(getFlow(`repay-${r.id}`).amount);
+      if (!amt || amt <= 0) return;
+      const cls = repaymentCategoryClass(r.category);
+      setRepayments((prev) => prev.map((x) => (x.id !== r.id ? x : { ...x, amount: amt, ...(cls === "recharge" ? { planAmount: amt } : {}) })));
+      payRepayment({ ...r, amount: amt });
+      setFlow(`repay-${r.id}`, { amount: "" });
+    } else {
+      payRepayment(r);
+    }
+  };
   const deleteExpense = (id) => {
     setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, expenses: log.expenses.filter((e) => e.id !== id) } }; });
   };
@@ -568,6 +595,7 @@ function LifeTracker() {
     purpose: "", emiAmount: "", dueDate: "",
     amount: "", frequency: "Monthly", dueDayStart: "", dueDayEnd: "",
     planAmount: "", startDate: "",
+    reminderOffset: "3d",
   });
   const [repaymentForm, setRepaymentForm] = useState(blankRepaymentForm());
   const repaymentCategoryClass = (cat) => (cat === "Gold Loan" ? "gold" : (cat === "Loan" || cat === "EMI") ? "loan" : cat === "Mobile Recharge" ? "recharge" : "simple");
@@ -581,6 +609,7 @@ function LifeTracker() {
       amount: r.amount != null ? String(r.amount) : "",
       frequency: r.frequency || "Monthly", dueDayStart: r.dueDayStart != null ? String(r.dueDayStart) : "", dueDayEnd: r.dueDayEnd != null ? String(r.dueDayEnd) : "",
       planAmount: r.planAmount != null ? String(r.planAmount) : "", startDate: r.startDate || "",
+      reminderOffset: r.reminderOffset || "3d",
     });
     setEditingRepaymentId(r.id);
     setShowAddRepayment(true);
@@ -596,7 +625,7 @@ function LifeTracker() {
         category: repaymentForm.category, name: repaymentForm.name.trim(), remarks: repaymentForm.remarks.trim(),
         loanAmount: principal, interestRate: parseFloat(repaymentForm.interestRate) || 0, interestRateUnit: repaymentForm.interestRateUnit,
         goldWeight: repaymentForm.goldWeight, location: repaymentForm.location, durationValue: repaymentForm.durationValue, durationUnit: repaymentForm.durationUnit,
-        interest, totalRepayment, amount: totalRepayment, dueDate: repaymentForm.dueDate || "",
+        interest, totalRepayment, amount: totalRepayment, dueDate: repaymentForm.dueDate || "", reminderOffset: repaymentForm.reminderOffset,
       };
       if (editingRepaymentId) {
         setRepayments((prev) => prev.map((r) => r.id !== editingRepaymentId ? r : { ...r, ...base, remainingAmount: r.paid ? 0 : totalRepayment }));
@@ -613,7 +642,7 @@ function LifeTracker() {
         category: repaymentForm.category, name: repaymentForm.name.trim(), purpose: repaymentForm.purpose.trim(), remarks: repaymentForm.remarks.trim(),
         loanAmount: principal, interestRate: parseFloat(repaymentForm.interestRate) || 0, interestRateUnit: repaymentForm.interestRateUnit,
         durationValue: repaymentForm.durationValue, durationUnit: repaymentForm.durationUnit, emiAmount,
-        interest, totalRepayment, installmentsTotal, amount: emiAmount || totalRepayment, dueDate: repaymentForm.dueDate || "",
+        interest, totalRepayment, installmentsTotal, amount: emiAmount || totalRepayment, dueDate: repaymentForm.dueDate || "", reminderOffset: repaymentForm.reminderOffset,
       };
       if (editingRepaymentId) {
         setRepayments((prev) => prev.map((r) => {
@@ -632,7 +661,7 @@ function LifeTracker() {
       const base = {
         category: repaymentForm.category, name: repaymentForm.name.trim(), remarks: repaymentForm.remarks.trim(),
         planAmount, durationValue: repaymentForm.durationValue, durationUnit: repaymentForm.durationUnit, startDate: repaymentForm.startDate,
-        avgDailyCost, amount: planAmount, dueDate: nextDate,
+        avgDailyCost, amount: planAmount, dueDate: nextDate, reminderOffset: repaymentForm.reminderOffset,
       };
       if (editingRepaymentId) {
         setRepayments((prev) => prev.map((r) => (r.id !== editingRepaymentId ? r : { ...r, ...base })));
@@ -643,7 +672,7 @@ function LifeTracker() {
       const amt = parseFloat(repaymentForm.amount);
       if (!amt || amt <= 0) return;
       const base = {
-        category: repaymentForm.category, name: repaymentForm.name.trim(), remarks: repaymentForm.remarks.trim(), amount: amt, dueDate: repaymentForm.dueDate || "",
+        category: repaymentForm.category, name: repaymentForm.name.trim(), remarks: repaymentForm.remarks.trim(), amount: amt, dueDate: repaymentForm.dueDate || "", reminderOffset: repaymentForm.reminderOffset,
         frequency: repaymentForm.frequency, dueDayStart: repaymentForm.dueDayStart ? parseInt(repaymentForm.dueDayStart) : null, dueDayEnd: repaymentForm.dueDayEnd ? parseInt(repaymentForm.dueDayEnd) : null,
       };
       if (editingRepaymentId) {
@@ -690,6 +719,7 @@ function LifeTracker() {
     }));
   };
   const sortedRepayments = [...repayments].sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
+  const todaysRepaymentReminders = useMemo(() => sortedRepayments.filter((r) => isRepaymentRelevantToday(r, today)), [sortedRepayments, today]);
 
   const [showAddTravel, setShowAddTravel] = useState(false);
   const [editingTravelId, setEditingTravelId] = useState(null);
@@ -832,22 +862,19 @@ function LifeTracker() {
     return arr;
   }, []);
 
-  const fontImport = <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap" />;
-
   return (
-    <div style={{ background: BG, minHeight: "100dvh", width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: "'Inter', sans-serif", color: INK, boxSizing: "border-box", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
-      {fontImport}
-      <style>{`*{box-sizing:border-box;} input,select,button{max-width:100%;}`}</style>
+    <div style={{ background: BG, minHeight: "100dvh", width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: disp, color: INK, boxSizing: "border-box", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
+      <style>{`*{box-sizing:border-box;} input,select,button{max-width:100%; font-family:${disp};}`}</style>
 
-      <div style={{ padding: "20px 20px 8px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: BRASS, fontFamily: disp }}>
-          {page === "daily" ? "Daily activity" : page === "categories" ? "Categories" : "Analysis and growth"}
+      <div style={{ padding: "22px 20px 10px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
+          {page === "daily" ? "Daily" : page === "categories" ? "Categories" : "Analysis"}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={toggleReminders} title={remindersEnabled ? "Reminders on" : "Reminders off"} style={{ background: "transparent", border: "none", color: remindersEnabled ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}>
-            {remindersEnabled ? <Bell size={15} /> : <BellOff size={15} />}
+            {remindersEnabled ? <Bell size={16} /> : <BellOff size={16} />}
           </button>
-          <span style={{ fontSize: 11, color: INK_DIM, fontFamily: mono }}>{formatDateLong(new Date())}</span>
+          <span style={{ fontSize: 12, color: INK_FAINT, fontFamily: mono }}>{formatDateLong(new Date())}</span>
         </div>
       </div>
 
@@ -855,7 +882,7 @@ function LifeTracker() {
         <div style={{ padding: "8px 0 16px", flex: 1, minHeight: 0, width: "100%" }}>
           {todayLog.wakeUpTime && (
             <div style={{ padding: "0 20px 12px", display: "flex", justifyContent: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(200,155,60,0.10)", border: `1px solid ${BRASS_DIM}`, borderRadius: 20, padding: "5px 12px", fontSize: 11, color: BRASS, fontFamily: mono }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(0,113,227,0.10)", border: `1px solid ${BRASS_DIM}`, borderRadius: 20, padding: "5px 12px", fontSize: 11, color: BRASS, fontFamily: mono }}>
                 <Sun size={12} /> Woke up at {fmtTime(todayLog.wakeUpTime)}
               </div>
             </div>
@@ -872,13 +899,14 @@ function LifeTracker() {
                 const itemsForCat = validItems.filter((i) => i.category === cat.id);
                 const todaysExpenseCount = todayLog.expenses.length;
                 const todaysExpenseTotal = todayLog.expenses.reduce((s, e) => s + e.amount, 0);
-                const totalCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
+                const visibleTrips = sortedTravelPlans.filter((t) => !t.dismissed);
+                const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
                 const doneCount = cat.id === "trip" || cat.id === "expense" ? 0 : itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
-                const countLabel = cat.id === "trip" ? `${totalCount} upcoming` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}` : `${doneCount}/${totalCount} done`;
+                const countLabel = cat.id === "trip" ? `${totalCount} upcoming${todaysTravelPlans.length ? ` \u00b7 ${todaysTravelPlans.length} due` : ""}` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}${todaysRepaymentReminders.length ? ` \u00b7 ${todaysRepaymentReminders.length} due` : ""}` : `${doneCount}/${totalCount} done`;
                 return (
                   <div key={cat.id}>
-                    <button onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: expanded ? "rgba(200,155,60,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS_DIM : LINE}`, borderRadius: 14, padding: "10px 12px", cursor: "pointer", transition: "background 0.15s, border-color 0.15s" }}>
-                      <div style={{ width: 34, height: 34, borderRadius: 10, background: expanded ? "rgba(200,155,60,0.18)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <button onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS_DIM : LINE}`, borderRadius: 14, padding: "10px 12px", cursor: "pointer", transition: "background 0.15s, border-color 0.15s" }}>
+                      <div style={{ width: 34, height: 34, borderRadius: 10, background: expanded ? "rgba(0,113,227,0.18)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <CatIcon size={16} color={expanded ? BRASS : INK_DIM} />
                       </div>
                       <div style={{ flex: 1, textAlign: "left" }}>
@@ -893,21 +921,24 @@ function LifeTracker() {
                       <div style={{ marginTop: 8 }}>
                         <Card>
                           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                            {todaysTravelPlans.map((t) => (
-                              <div key={t.id} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 10, padding: "8px 12px" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                                  <div>
-                                    <div style={{ fontSize: 13, color: INK_DIM }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
-                                    <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>Travel date {t.travelDate}{t.amount ? ` \u00b7 ${inr(t.amount)}` : ""}</div>
-                                    {t.bookingDetails && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>{t.bookingDetails}</div>}
-                                  </div>
-                                  <div style={{ display: "flex", gap: 6 }}>
-                                    {t.amount > 0 && <button onClick={() => logTravelExpense(t)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "6px 9px", color: BG, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Log expense</button>}
-                                    <button onClick={() => dismissTravelPlan(t.id)} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 9px", color: INK_FAINT, cursor: "pointer", fontSize: 11 }}>Dismiss</button>
+                            {visibleTrips.map((t) => {
+                              const due = isTravelRelevantToday(t, today);
+                              return (
+                                <div key={t.id} style={{ background: PANEL_2, border: `1px solid ${due ? BRASS_DIM : LINE}`, borderRadius: 10, padding: "8px 12px" }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                    <div>
+                                      <div style={{ fontSize: 13, color: INK_DIM }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
+                                      <div style={{ fontSize: 11, color: due ? BRASS : INK_FAINT, marginTop: 2 }}>Travel date {t.travelDate}{t.amount ? ` \u00b7 ${inr(t.amount)}` : ""}{due ? " \u00b7 reminder active" : ""}</div>
+                                      {t.bookingDetails && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>{t.bookingDetails}</div>}
+                                    </div>
+                                    <div style={{ display: "flex", gap: 6 }}>
+                                      {t.amount > 0 && <button onClick={() => logTravelExpense(t)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "6px 9px", color: "#FFFFFF", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Log expense</button>}
+                                      <button onClick={() => dismissTravelPlan(t.id)} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 9px", color: INK_FAINT, cursor: "pointer", fontSize: 11 }}>Dismiss</button>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </Card>
                       </div>
@@ -921,7 +952,39 @@ function LifeTracker() {
                       const canLog = parseFloat(flow.amount) > 0;
                       return (
                         <div style={{ marginTop: 8 }}>
+                          {todaysRepaymentReminders.length > 0 && (
+                            <Card style={{ marginBottom: 10 }}>
+                              <SectionLabel>Repayments due</SectionLabel>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                {todaysRepaymentReminders.map((r) => {
+                                  const cls = repaymentCategoryClass(r.category);
+                                  const variable = REPAYMENT_VARIABLE_CATEGORIES.includes(r.category);
+                                  const overdue = r.dueDate && r.dueDate < today;
+                                  return (
+                                    <div key={r.id} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 10, padding: "10px 12px" }}>
+                                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                                        <div style={{ flex: 1 }}>
+                                          <div style={{ fontSize: 13, color: INK }}>{r.name || r.category}</div>
+                                          <div style={{ fontSize: 11, color: overdue ? CORAL : INK_FAINT, marginTop: 2 }}>{r.category} &middot; due {r.dueDate}{overdue ? " \u00b7 overdue" : ""}</div>
+                                        </div>
+                                        {!variable && <span style={{ fontFamily: mono, fontSize: 14, color: CORAL, flexShrink: 0 }}>{inr(r.amount)}</span>}
+                                      </div>
+                                      {variable ? (
+                                        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                          <TextField type="number" placeholder={`Amount (last ${inr(r.amount)})`} value={getFlow(`repay-${r.id}`).amount || ""} onChange={(e) => setFlow(`repay-${r.id}`, { amount: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
+                                          <button onClick={() => payRepaymentQuick(r)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "0 16px", color: "#FFFFFF", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Pay</button>
+                                        </div>
+                                      ) : (
+                                        <button onClick={() => payRepaymentQuick(r)} style={{ width: "100%", marginTop: 8, background: TEAL, border: "none", borderRadius: 8, padding: "7px 0", color: "#FFFFFF", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{cls === "loan" ? "Pay EMI" : "Pay"}</button>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </Card>
+                          )}
                           <Card style={{ marginBottom: 10 }}>
+                            <SectionLabel>Log an expense</SectionLabel>
                             <div>
                               <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 8 }}>Category</div>
                               <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
@@ -930,7 +993,7 @@ function LifeTracker() {
                                   const sel = activeGroup === g;
                                   return (
                                     <button key={g} onClick={() => setFlow("dailyExpense", { group: g, sub: null })} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 58 }}>
-                                      <div style={{ width: 44, height: 44, borderRadius: 13, background: sel ? "rgba(200,155,60,0.16)" : PANEL_2, border: `1.5px solid ${sel ? BRASS : LINE}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                      <div style={{ width: 44, height: 44, borderRadius: 13, background: sel ? "rgba(0,113,227,0.16)" : PANEL_2, border: `1.5px solid ${sel ? BRASS : LINE}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                                         <GIcon size={17} color={sel ? BRASS : INK_DIM} />
                                       </div>
                                       <span style={{ fontSize: 9, color: sel ? BRASS : INK_FAINT, whiteSpace: "nowrap" }}>{g}</span>
@@ -961,7 +1024,7 @@ function LifeTracker() {
                               </div>
 
                               <div style={{ marginTop: 12 }}>
-                                <ActionButton onClick={() => canLog && confirmExpense({ id: "dailyExpense", groups: DAILY_EXPENSE_GROUPS })} label={`Log ${activeGroup} \u00b7 ${activeSub || ""}`} icon={Check} tone={canLog ? TEAL : LINE} big />
+                                <ActionButton onClick={() => canLog && confirmExpense({ id: "dailyExpense", groups: DAILY_EXPENSE_GROUPS })} label="Save expense" icon={Check} tone={canLog ? TEAL : LINE} big />
                               </div>
                             </div>
                           </Card>
@@ -1005,7 +1068,7 @@ function LifeTracker() {
                   const ringColor = active ? BRASS : done ? TEAL : due ? CORAL : LINE;
                   return (
                     <button key={item.id} onClick={() => setActiveTab(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 58 }}>
-                      <div style={{ position: "relative", width: 44, height: 44, borderRadius: 13, background: active ? "rgba(200,155,60,0.16)" : PANEL, border: `1.5px solid ${ringColor}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <div style={{ position: "relative", width: 44, height: 44, borderRadius: 13, background: active ? "rgba(0,113,227,0.16)" : PANEL, border: `1.5px solid ${ringColor}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <Icon size={17} color={active ? BRASS : done ? TEAL : due ? CORAL : INK_FAINT} />
                         {streak > 0 && (
                           <div style={{ position: "absolute", top: -6, right: -6, display: "flex", alignItems: "center", gap: 1, background: BG, border: `1px solid ${BRASS_DIM}`, borderRadius: 8, padding: "1px 4px", fontSize: 8, color: BRASS, fontFamily: mono }}>
@@ -1109,7 +1172,7 @@ function LifeTracker() {
           <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
             {CATEGORY_DEFS.map((c) => {
               const Icon = c.icon; const active = catTab === c.id;
-              return <button key={c.id} onClick={() => { setCatTab(c.id); closeItemForm(); }} style={{ display: "flex", alignItems: "center", gap: 5, background: active ? "rgba(200,155,60,0.12)" : "transparent", border: `1px solid ${active ? BRASS_DIM : LINE}`, borderRadius: 8, padding: "6px 10px", color: active ? BRASS : INK_DIM, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}><Icon size={13} /> {c.label}</button>;
+              return <button key={c.id} onClick={() => { setCatTab(c.id); closeItemForm(); }} style={{ display: "flex", alignItems: "center", gap: 5, background: active ? "rgba(0,113,227,0.12)" : "transparent", border: `1px solid ${active ? BRASS_DIM : LINE}`, borderRadius: 8, padding: "6px 10px", color: active ? BRASS : INK_DIM, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}><Icon size={13} /> {c.label}</button>;
             })}
           </div>
 
@@ -1149,7 +1212,7 @@ function LifeTracker() {
                     <SectionLabel>Travel</SectionLabel>
                     <button onClick={() => (showAddTravel ? cancelTravelForm() : setShowAddTravel(true))} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}><Plus size={13} /> Add trip</button>
                   </div>
-                  <div style={{ fontSize: 12, color: INK_FAINT, marginBottom: 12 }}>Train, bus, flight, or other trips. They'll appear on the Daily tab from your chosen reminder lead time through the travel date.</div>
+                  <div style={{ fontSize: 12, color: INK_FAINT, marginBottom: 12 }}>Train, bus, flight, or other trips. They'll appear on the Daily tab as soon as you add them, and highlight once your chosen reminder lead time kicks in.</div>
                   {showAddTravel && (
                     <Card style={{ marginBottom: 12 }}>
                       <SectionLabel>{editingTravelId ? "Edit trip" : "New trip"}</SectionLabel>
@@ -1177,7 +1240,7 @@ function LifeTracker() {
                           </Select>
                         </div>
                         <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                          <button onClick={addTravelPlan} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: BG, cursor: "pointer", fontSize: 13 }}>{editingTravelId ? "Save changes" : "Save trip"}</button>
+                          <button onClick={addTravelPlan} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: "#FFFFFF", cursor: "pointer", fontSize: 13 }}>{editingTravelId ? "Save changes" : "Save trip"}</button>
                           <button onClick={cancelTravelForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 13 }}>Cancel</button>
                         </div>
                       </div>
@@ -1242,7 +1305,7 @@ function LifeTracker() {
                         {ICON_NAMES.map((name) => {
                           const I = ICON_MAP[name]; const sel = itemForm.icon === name;
                           return (
-                            <button key={name} onClick={() => setItemForm((f) => ({ ...f, icon: name }))} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, height: 56, borderRadius: 10, background: sel ? "rgba(200,155,60,0.15)" : PANEL_2, border: `1px solid ${sel ? BRASS : LINE}`, cursor: "pointer" }}>
+                            <button key={name} onClick={() => setItemForm((f) => ({ ...f, icon: name }))} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, height: 56, borderRadius: 10, background: sel ? "rgba(0,113,227,0.15)" : PANEL_2, border: `1px solid ${sel ? BRASS : LINE}`, cursor: "pointer" }}>
                               <I size={17} color={sel ? BRASS : INK_DIM} />
                               <span style={{ fontSize: 8, color: sel ? BRASS : INK_FAINT, textTransform: "uppercase", letterSpacing: "0.03em" }}>{name}</span>
                               {sel && <div style={{ position: "absolute", top: 4, right: 4, width: 12, height: 12, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Check size={8} color={BG} /></div>}
@@ -1261,7 +1324,7 @@ function LifeTracker() {
                     )}
 
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 6 }}>
-                      <button onClick={saveItemForm} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: BG, cursor: "pointer", fontSize: 13 }}>Save</button>
+                      <button onClick={saveItemForm} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: "#FFFFFF", cursor: "pointer", fontSize: 13 }}>Save</button>
                       <button onClick={closeItemForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 13 }}>Cancel</button>
                     </div>
                   </div>
@@ -1393,9 +1456,15 @@ function LifeTracker() {
                             )}
                           </>
                         )}
+                        <div>
+                          <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Remind me before due date</div>
+                          <Select value={repaymentForm.reminderOffset} onChange={(e) => setRepaymentForm({ ...repaymentForm, reminderOffset: e.target.value })} style={{ width: "100%" }}>
+                            {REMINDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </Select>
+                        </div>
                         <TextField placeholder="Remarks (optional)" value={repaymentForm.remarks} onChange={(e) => setRepaymentForm({ ...repaymentForm, remarks: e.target.value })} />
                         <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                          <button onClick={addRepayment} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: BG, cursor: "pointer", fontSize: 13 }}>{editingRepaymentId ? "Save changes" : "Save"}</button>
+                          <button onClick={addRepayment} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: "#FFFFFF", cursor: "pointer", fontSize: 13 }}>{editingRepaymentId ? "Save changes" : "Save"}</button>
                           <button onClick={cancelRepaymentForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 13 }}>Cancel</button>
                         </div>
                       </div>
@@ -1411,7 +1480,7 @@ function LifeTracker() {
                             <div style={{ flex: 1 }}>
                               <div style={{ fontSize: 14, fontWeight: 500, textDecoration: r.paid ? "line-through" : "none", color: r.paid ? INK_FAINT : INK }}>{r.name || r.category}{r.purpose ? ` \u00b7 ${r.purpose}` : ""}</div>
                               <div style={{ fontSize: 11, color: overdue ? CORAL : INK_FAINT, marginTop: 3, fontFamily: mono }}>
-                                {r.category}{cls === "gold" ? ` \u00b7 ${r.goldWeight || "?"}g \u00b7 ${r.location || ""}` : ""}{cls === "recharge" ? ` \u00b7 renews ${r.dueDate || "-"}` : r.dueDate ? ` \u00b7 due ${r.dueDate}` : ""}{cls === "simple" && r.frequency ? ` \u00b7 ${r.frequency}${r.dueDayStart ? ` (day ${r.dueDayStart}${r.dueDayEnd ? `\u2013${r.dueDayEnd}` : ""})` : ""}` : ""}{overdue ? " \u00b7 overdue" : ""}
+                                {r.category}{cls === "gold" ? ` \u00b7 ${r.goldWeight || "?"}g \u00b7 ${r.location || ""}` : ""}{cls === "recharge" ? ` \u00b7 renews ${r.dueDate || "-"}` : r.dueDate ? ` \u00b7 due ${r.dueDate}` : ""}{cls === "simple" && r.frequency ? ` \u00b7 ${r.frequency}${r.dueDayStart ? ` (day ${r.dueDayStart}${r.dueDayEnd ? `\u2013${r.dueDayEnd}` : ""})` : ""}` : ""}{overdue ? " \u00b7 overdue" : ""}{r.dueDate && !r.paid ? ` \u00b7 reminder ${(REMINDER_OPTIONS.find((o) => o.value === r.reminderOffset) || REMINDER_OPTIONS[3]).label.toLowerCase()}` : ""}
                               </div>
                             </div>
                             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -1420,7 +1489,7 @@ function LifeTracker() {
                                 r.paid ? (
                                   <span style={{ fontSize: 11, color: TEAL, fontFamily: mono }}>Closed</span>
                                 ) : (
-                                  <button onClick={() => payNextEmi(r.id)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "5px 10px", color: BG, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Pay EMI</button>
+                                  <button onClick={() => payNextEmi(r.id)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "5px 10px", color: "#FFFFFF", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Pay EMI</button>
                                 )
                               ) : (
                                 <button onClick={() => toggleRepaymentPaid(r.id)} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${r.paid ? BRASS : INK_FAINT}`, background: r.paid ? BRASS : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{r.paid && <Check size={13} strokeWidth={3} color={BG} />}</button>
@@ -1530,7 +1599,7 @@ function LifeTracker() {
                               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                                 {WEEKDAYS.map((day) => {
                                   const sel = goalForm.specificDays.includes(day);
-                                  return <button key={day} onClick={() => toggleSpecificDay(day)} style={{ background: sel ? "rgba(200,155,60,0.15)" : PANEL_2, border: `1px solid ${sel ? BRASS : LINE}`, color: sel ? BRASS : INK_DIM, borderRadius: 7, padding: "5px 9px", fontSize: 11, cursor: "pointer" }}>{day}</button>;
+                                  return <button key={day} onClick={() => toggleSpecificDay(day)} style={{ background: sel ? "rgba(0,113,227,0.15)" : PANEL_2, border: `1px solid ${sel ? BRASS : LINE}`, color: sel ? BRASS : INK_DIM, borderRadius: 7, padding: "5px 9px", fontSize: 11, cursor: "pointer" }}>{day}</button>;
                                 })}
                               </div>
                             </div>
@@ -1573,7 +1642,7 @@ function LifeTracker() {
                       </>
                     )}
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                      <button onClick={addGoal} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: BG, cursor: "pointer", fontSize: 13 }}>{editingGoalId ? "Save changes" : "Save goal"}</button>
+                      <button onClick={addGoal} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: "#FFFFFF", cursor: "pointer", fontSize: 13 }}>{editingGoalId ? "Save changes" : "Save goal"}</button>
                       <button onClick={cancelGoalForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 13 }}>Cancel</button>
                     </div>
                   </div>
@@ -1600,7 +1669,7 @@ function LifeTracker() {
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           {catTab === "finance" && g.targetAmount > 0 ? (
                             g.done ? (
-                              <button onClick={() => toggleGoalDone(g.id)} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "5px 10px", color: BG, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Closed</button>
+                              <button onClick={() => toggleGoalDone(g.id)} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "5px 10px", color: "#FFFFFF", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Closed</button>
                             ) : (
                               <button onClick={() => pct >= 100 && toggleGoalDone(g.id)} disabled={pct < 100} style={{ background: pct >= 100 ? TEAL : "transparent", border: `1px solid ${pct >= 100 ? TEAL : LINE}`, borderRadius: 8, padding: "5px 10px", color: pct >= 100 ? BG : INK_FAINT, cursor: pct >= 100 ? "pointer" : "default", fontSize: 11, fontWeight: 600 }}>Close goal</button>
                             )
@@ -1751,10 +1820,10 @@ function LifeTracker() {
         </div>
       )}
 
-      <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: PANEL }}>
+      <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px)", position: "sticky", bottom: 0 }}>
         {[{ id: "daily", label: "Daily", icon: CalendarDays }, { id: "categories", label: "Categories", icon: LayoutGrid }, { id: "analysis", label: "Analysis", icon: TrendingUp }].map((p) => {
           const Icon = p.icon; const active = page === p.id;
-          return <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 0 8px", background: "transparent", border: "none", cursor: "pointer", color: active ? BRASS : INK_FAINT }}><Icon size={19} strokeWidth={1.8} /><span style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: disp }}>{p.label}</span></button>;
+          return <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0 10px", background: "transparent", border: "none", cursor: "pointer", color: active ? BRASS : INK_FAINT }}><Icon size={22} strokeWidth={active ? 2.2 : 1.8} /><span style={{ fontSize: 10, fontWeight: active ? 600 : 500, fontFamily: disp }}>{p.label}</span></button>;
         })}
       </div>
     </div>
