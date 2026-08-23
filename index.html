@@ -271,16 +271,32 @@ const ROUTINE_CATEGORIES = ["career", "health"];
 const GOAL_TRACK_ICON = { career: "Building2", health: "Dumbbell" };
 function computeRoutineTotals(g) {
   const session = Number(g.sessionMinutes) || 0;
-  if (!session) return { dailyMin: 0, weeklyMin: 0, monthlyMin: 0 };
+  if (!session) return { dailyMin: 0, weeklyMin: 0, monthlyMin: 0, yearlyMin: 0 };
   if (g.frequency === "Weekly") {
     const occurrences = (g.specificDays && g.specificDays.length) ? g.specificDays.length : (Number(g.daysPerWeek) || 0);
     const weeklyMin = occurrences * session;
-    return { dailyMin: round(weeklyMin / 7), weeklyMin: round(weeklyMin), monthlyMin: round((weeklyMin * 30) / 7) };
+    return { dailyMin: round(weeklyMin / 7), weeklyMin: round(weeklyMin), monthlyMin: round((weeklyMin * 30) / 7), yearlyMin: round(weeklyMin * 52) };
   }
   if (g.frequency === "Monthly") {
-    return { dailyMin: round(session / 30), weeklyMin: round((session * 7) / 30), monthlyMin: round(session) };
+    return { dailyMin: round(session / 30), weeklyMin: round((session * 7) / 30), monthlyMin: round(session), yearlyMin: round(session * 12) };
   }
-  return { dailyMin: round(session), weeklyMin: round(session * 7), monthlyMin: round(session * 30) };
+  return { dailyMin: round(session), weeklyMin: round(session * 7), monthlyMin: round(session * 30), yearlyMin: round(session * 365) };
+}
+// Actual minutes logged for one goal's Daily-tab item, from real saved activity
+// (Start/Stop Timer or Log Time Spent) — not the schedule estimate above.
+function computeLoggedTimeTotals(itemId, dailyLogs, todayStr) {
+  const curMonth = todayStr.slice(0, 7);
+  const curYear = todayStr.slice(0, 4);
+  let dayMin = 0, monthMin = 0, yearMin = 0;
+  for (const d in dailyLogs) {
+    const rec = dailyLogs[d] && dailyLogs[d][itemId];
+    const min = rec && Number(rec.durationMin) > 0 ? Number(rec.durationMin) : 0;
+    if (!min) continue;
+    if (d === todayStr) dayMin += min;
+    if (d.slice(0, 7) === curMonth) monthMin += min;
+    if (d.slice(0, 4) === curYear) yearMin += min;
+  }
+  return { dayMin, monthMin, yearMin };
 }
 const CATEGORY_DEFS = [
   { id: "finance", label: "Finance", icon: Wallet },
@@ -1549,7 +1565,7 @@ function LifeTracker() {
 
                     {(itemForm.type === "instant" || itemForm.type === "duration") && (
                       <div>
-                        <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Scheduled time (optional \u2014 used for reminders)</div>
+                        <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Scheduled time (optional — used for reminders)</div>
                         <TextField type="time" value={itemForm.scheduledTime} onChange={(e) => setItemForm((f) => ({ ...f, scheduledTime: e.target.value }))} style={{ width: "100%", fontFamily: mono }} />
                       </div>
                     )}
@@ -1799,21 +1815,41 @@ function LifeTracker() {
               </div>
               {isRoutineCategory && categoryGoals.some((g) => !g.done && g.sessionMinutes) && (
                 <Card style={{ marginBottom: 12 }}>
-                  <SectionLabel>Total time spent (auto-tracked from schedules)</SectionLabel>
+                  <SectionLabel>Planned time (from schedule)</SectionLabel>
                   <div style={{ display: "flex", gap: 10 }}>
                     {(() => {
                       const totals = categoryGoals.filter((g) => !g.done).reduce((acc, g) => {
                         const t = computeRoutineTotals(g);
-                        return { dailyMin: acc.dailyMin + t.dailyMin, weeklyMin: acc.weeklyMin + t.weeklyMin, monthlyMin: acc.monthlyMin + t.monthlyMin };
-                      }, { dailyMin: 0, weeklyMin: 0, monthlyMin: 0 });
+                        return { dailyMin: acc.dailyMin + t.dailyMin, weeklyMin: acc.weeklyMin + t.weeklyMin, monthlyMin: acc.monthlyMin + t.monthlyMin, yearlyMin: acc.yearlyMin + t.yearlyMin };
+                      }, { dailyMin: 0, weeklyMin: 0, monthlyMin: 0, yearlyMin: 0 });
                       return (
                         <>
                           <div style={{ flex: 1 }}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Per day</div><div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, marginTop: 3, color: BRASS }}>{fmtDuration(totals.dailyMin)}</div></div>
                           <div style={{ flex: 1 }}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Per week</div><div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, marginTop: 3, color: BRASS }}>{fmtDuration(totals.weeklyMin)}</div></div>
                           <div style={{ flex: 1 }}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Per month</div><div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, marginTop: 3, color: BRASS }}>{fmtDuration(totals.monthlyMin)}</div></div>
+                          <div style={{ flex: 1 }}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Per year</div><div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, marginTop: 3, color: BRASS }}>{fmtDuration(totals.yearlyMin)}</div></div>
                         </>
                       );
                     })()}
+                  </div>
+                </Card>
+              )}
+              {isRoutineCategory && categoryGoals.some((g) => !g.done && g.trackingType) && (
+                <Card style={{ marginBottom: 12 }}>
+                  <SectionLabel>Goal Summary — time spent</SectionLabel>
+                  <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 10 }}>Actual time logged from the Daily tab, updated automatically every time you save an activity.</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {categoryGoals.filter((g) => !g.done && g.trackingType).map((g) => {
+                      const t = computeLoggedTimeTotals(`goal-${g.id}`, dailyLogs, today);
+                      return (
+                        <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
+                          <div style={{ flex: "1 1 40%", fontSize: 12, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.title}</div>
+                          <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Day</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(t.dayMin)}</div></div>
+                          <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Month</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(t.monthMin)}</div></div>
+                          <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Year</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(t.yearMin)}</div></div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </Card>
               )}
@@ -1864,7 +1900,7 @@ function LifeTracker() {
                               <TextField type="number" min="0" max="7" value={goalForm.daysPerWeek} onChange={(e) => setGoalForm({ ...goalForm, daysPerWeek: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                             </div>
                             <div>
-                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Specific days (optional \u2014 overrides count above)</div>
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Specific days (optional — overrides count above)</div>
                               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                                 {WEEKDAYS.map((day) => {
                                   const sel = goalForm.specificDays.includes(day);
@@ -2173,7 +2209,7 @@ function doPost(e) {
                   6. Deploy, then copy the Web App URL it gives you.<br />
                   7. Paste that URL above and tap the checkmark.
                 </div>
-                <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 10 }}>This only happens once, inside Google's own site \u2014 there's no login step inside this app. Your data is stored as one JSON block in a "LifeTrackerData" tab, not as separate spreadsheet columns.</div>
+                <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 10 }}>This only happens once, inside Google's own site — there's no login step inside this app. Your data is stored as one JSON block in a "LifeTrackerData" tab, not as separate spreadsheet columns.</div>
               </Card>
             </>
           )}
