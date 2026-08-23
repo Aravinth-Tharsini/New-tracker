@@ -6,9 +6,9 @@
   <title>Life Tracker</title>
 
   <!-- Home screen icon + full-screen app behavior -->
-  <link rel="manifest" href="/manifest.json" />
-  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <meta name="theme-color" content="#F5F5F7" />
 
   <!-- iOS: run as a standalone app with no browser chrome when added to Home Screen -->
@@ -28,7 +28,6 @@
     }
   }
   </script>
-  <!-- Google Sheets sync happens via a plain fetch to your Apps Script Web App URL below, no extra script needed -->
 </head>
 <body style="margin:0; background:#F5F5F7;">
   <div id="root"></div>
@@ -37,219 +36,41 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-// ================================================================
-// DATA STORAGE: Offline Mode (this device only) or Online Mode (synced to a
-// Google Sheet via a small Apps Script Web App you link once, no Google
-// login screen involved). Managed from the "Data Link" page in the app.
-// ================================================================
-const CONFIG_KEY = "life-tracker:config";
-const DATA_KEY = "life-tracker:store";
-
-function loadConfig() {
+// ---- storage polyfill: saves data in this browser using localStorage ----
+const PREFIX = "life-tracker:";
+function readAll() {
   try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    return raw ? JSON.parse(raw) : { mode: "offline", webAppUrl: "" };
-  } catch (e) { return { mode: "offline", webAppUrl: "" }; }
-}
-function saveConfig(cfg) { localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); }
-
-function loadLocalStore() {
-  try {
-    const raw = localStorage.getItem(DATA_KEY);
+    const raw = localStorage.getItem(PREFIX + "__store__");
     return raw ? JSON.parse(raw) : {};
   } catch (e) { return {}; }
 }
-function saveLocalStore(store) { localStorage.setItem(DATA_KEY, JSON.stringify(store)); }
-
-// ---- runtime state ----
-let memoryStore = loadLocalStore();
-let config = loadConfig();
-
-// ---- tiny pub/sub so the Data Link page can show live status ----
-const dataLinkListeners = new Set();
-const dataLinkState = {
-  mode: config.mode,                 // "offline" | "online"
-  webAppUrl: config.webAppUrl,
-  status: "idle",                    // idle | syncing | synced | error | never
-  lastSyncedAt: null,
-  error: null,
-};
-function notifyDataLink() { dataLinkListeners.forEach((fn) => fn({ ...dataLinkState })); }
-function subscribeDataLink(fn) { dataLinkListeners.add(fn); fn({ ...dataLinkState }); return () => dataLinkListeners.delete(fn); }
-
-let pushTimer = null;
-let retryTimer = null;
-let retryAttempts = 0;
-
-// Apps Script Web Apps don't handle CORS preflight requests, so POST bodies
-// are sent as text/plain (a "simple request") instead of application/json —
-// the script itself still parses the body as JSON on the other end.
-async function pullFromSheet(url) {
-  const r = await fetch(url, { method: "GET" });
-  if (!r.ok) throw new Error("Could not reach that Web App URL");
-  const payload = await r.json();
-  const raw = payload && payload.data;
-  return raw ? JSON.parse(raw) : {};
-}
-
-async function pushToSheet(url, store) {
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(store),
-  });
-  if (!r.ok) throw new Error("Save to sheet failed");
-}
-
-function scheduleAutoSync() {
-  if (dataLinkState.mode !== "online" || !dataLinkState.webAppUrl) return;
-  clearTimeout(pushTimer);
-  pushTimer = setTimeout(() => syncPush(), 1200);
-}
-
-async function syncPush() {
-  if (dataLinkState.mode !== "online" || !dataLinkState.webAppUrl) return;
-  dataLinkState.status = "syncing"; notifyDataLink();
-  try {
-    await pushToSheet(dataLinkState.webAppUrl, memoryStore);
-    dataLinkState.status = "synced";
-    dataLinkState.lastSyncedAt = Date.now();
-    dataLinkState.error = null;
-    retryAttempts = 0;
-  } catch (e) {
-    dataLinkState.status = "error";
-    dataLinkState.error = e.message || "Sync failed";
-    // Auto-retry a few times with backoff in case it's a brief connectivity blip.
-    // If auto-sync keeps failing, the Data Link page's "Sync now" button lets the
-    // person retry manually at any time.
-    retryAttempts += 1;
-    if (retryAttempts <= 5) {
-      clearTimeout(retryTimer);
-      retryTimer = setTimeout(syncPush, Math.min(30000, 3000 * retryAttempts));
-    }
-  }
-  notifyDataLink();
-}
-
-// Used once, right after the person links a Web App URL: reconciles this
-// device's existing data with whatever (if anything) is already in that
-// sheet, so switching devices doesn't silently wipe either copy.
-async function connectOnline(url) {
-  dataLinkState.status = "syncing"; dataLinkState.error = null; notifyDataLink();
-  try {
-    const remote = await pullFromSheet(url);
-    if (remote && Object.keys(remote).length > 0) {
-      memoryStore = remote;
-      saveLocalStore(memoryStore);
-    } else {
-      await pushToSheet(url, memoryStore);
-    }
-    config = { mode: "online", webAppUrl: url };
-    saveConfig(config);
-    dataLinkState.mode = "online";
-    dataLinkState.webAppUrl = url;
-    dataLinkState.status = "synced";
-    dataLinkState.lastSyncedAt = Date.now();
-    retryAttempts = 0;
-  } catch (e) {
-    dataLinkState.status = "error";
-    dataLinkState.error = e.message || "Could not connect to that Web App URL";
-  }
-  notifyDataLink();
-  return dataLinkState.status === "synced";
-}
-
-function disconnectOnline() {
-  clearTimeout(pushTimer); clearTimeout(retryTimer);
-  config = { mode: "offline", webAppUrl: "" };
-  saveConfig(config);
-  dataLinkState.mode = "offline";
-  dataLinkState.webAppUrl = "";
-  dataLinkState.status = "idle";
-  dataLinkState.error = null;
-  notifyDataLink();
-}
-
-function setOfflineMode() {
-  clearTimeout(pushTimer); clearTimeout(retryTimer);
-  config = { ...config, mode: "offline" };
-  saveConfig(config);
-  dataLinkState.mode = "offline";
-  dataLinkState.status = "idle";
-  notifyDataLink();
-}
-
-function exportDataFile() {
-  const blob = new Blob([JSON.stringify(memoryStore, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const stamp = new Date().toISOString().slice(0, 10);
-  a.href = url; a.download = `life-tracker-backup-${stamp}.json`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function importDataFile(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(reader.result);
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("That file doesn't look like a Life Tracker backup");
-        memoryStore = parsed;
-        saveLocalStore(memoryStore);
-        if (dataLinkState.mode === "online" && dataLinkState.webAppUrl) scheduleAutoSync();
-        resolve();
-      } catch (e) { reject(e); }
-    };
-    reader.onerror = () => reject(new Error("Could not read that file"));
-    reader.readAsText(file);
-  });
-}
-
+function writeAll(store) { localStorage.setItem(PREFIX + "__store__", JSON.stringify(store)); }
 window.storage = {
   async get(key, shared = false) {
-    if (!(key in memoryStore)) return null;
-    return { key, value: memoryStore[key], shared };
+    const store = readAll();
+    if (!(key in store)) return null;
+    return { key, value: store[key], shared };
   },
   async set(key, value, shared = false) {
-    memoryStore[key] = value;
-    saveLocalStore(memoryStore);
-    scheduleAutoSync();
+    const store = readAll();
+    store[key] = value;
+    writeAll(store);
     return { key, value, shared };
   },
   async delete(key, shared = false) {
-    const existed = key in memoryStore;
-    delete memoryStore[key];
-    saveLocalStore(memoryStore);
-    scheduleAutoSync();
+    const store = readAll();
+    const existed = key in store;
+    delete store[key];
+    writeAll(store);
     return existed ? { key, deleted: true, shared } : null;
   },
   async list(prefix = "", shared = false) {
-    const keys = Object.keys(memoryStore).filter((k) => k.startsWith(prefix));
+    const store = readAll();
+    const keys = Object.keys(store).filter((k) => k.startsWith(prefix));
     return { keys, prefix, shared };
   },
 };
-
-// If the app starts already configured for Online Mode, kick off a background
-// sync so this device converges with the sheet without blocking the UI at all
-// (the app renders instantly from the local cache either way).
-if (config.mode === "online" && config.webAppUrl) {
-  pullFromSheet(config.webAppUrl).then((remote) => {
-    if (remote && Object.keys(remote).length > 0) {
-      memoryStore = remote;
-      saveLocalStore(memoryStore);
-    }
-    dataLinkState.status = "synced";
-    dataLinkState.lastSyncedAt = Date.now();
-    notifyDataLink();
-  }).catch((e) => {
-    dataLinkState.status = "error";
-    dataLinkState.error = e.message || "Could not reach your linked sheet";
-    notifyDataLink();
-  });
-}
-// ---- end data storage ----
+// ---- end storage polyfill ----
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
@@ -258,7 +79,6 @@ import {
   Target, Clock, Pencil, ChevronUp, ChevronDown, Bell, BellOff, Flame, Download, FileJson,
   Plane, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
-  Link2, Cloud, HardDrive, RefreshCw, FileDown, FileUp,
 } from "lucide-react";
 
 const INK = "#1D1D1F";
@@ -488,112 +308,6 @@ function ChipButton({ onClick, label, active }) {
 }
 
 const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalHours: 2, amount: 250, unit: "ml", groups: {} });
-
-function DataLinkPage() {
-  const [state, setState] = useState({ mode: "offline", webAppUrl: "", status: "idle", lastSyncedAt: null, error: null });
-  const [urlInput, setUrlInput] = useState("");
-  const [connecting, setConnecting] = useState(false);
-  const [importBusy, setImportBusy] = useState(false);
-  const [importMsg, setImportMsg] = useState("");
-  const fileInputRef = useRef(null);
-
-  useEffect(() => subscribeDataLink(setState), []);
-  useEffect(() => { if (state.webAppUrl) setUrlInput(state.webAppUrl); }, [state.webAppUrl]);
-
-  const handleConnect = async () => {
-    const url = urlInput.trim();
-    if (!url) return;
-    setConnecting(true);
-    await connectOnline(url);
-    setConnecting(false);
-  };
-
-  const handleSyncNow = () => { syncPush(); };
-  const handleExport = () => { exportDataFile(); };
-  const handleImportClick = () => { fileInputRef.current && fileInputRef.current.click(); };
-  const handleImportFile = async (e) => {
-    const file = e.target.files && e.target.files[0];
-    e.target.value = "";
-    if (!file) return;
-    setImportBusy(true); setImportMsg("");
-    try {
-      await importDataFile(file);
-      setImportMsg("Restored. Reloading\u2026");
-      setTimeout(() => window.location.reload(), 700);
-    } catch (err) {
-      setImportMsg(err.message || "Could not import that file");
-      setImportBusy(false);
-    }
-  };
-
-  const lastSyncedLabel = state.lastSyncedAt ? new Date(state.lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
-
-  return (
-    <div style={{ padding: "0 20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={() => { if (state.mode !== "offline") setOfflineMode(); }} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "14px 10px", borderRadius: 14, border: `1.5px solid ${state.mode === "offline" ? BRASS : LINE}`, background: state.mode === "offline" ? "rgba(200,155,60,0.10)" : PANEL, cursor: "pointer" }}>
-          <HardDrive size={20} color={state.mode === "offline" ? BRASS : INK_DIM} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: state.mode === "offline" ? BRASS : INK }}>Offline Mode</span>
-          <span style={{ fontSize: 10, color: INK_FAINT, textAlign: "center" }}>Saved on this device only</span>
-        </button>
-        <button onClick={() => setState((s) => ({ ...s, mode: "online" }))} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "14px 10px", borderRadius: 14, border: `1.5px solid ${state.mode === "online" ? BRASS : LINE}`, background: state.mode === "online" ? "rgba(200,155,60,0.10)" : PANEL, cursor: "pointer" }}>
-          <Cloud size={20} color={state.mode === "online" ? BRASS : INK_DIM} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: state.mode === "online" ? BRASS : INK }}>Online Mode</span>
-          <span style={{ fontSize: 10, color: INK_FAINT, textAlign: "center" }}>Synced to a Google Sheet</span>
-        </button>
-      </div>
-
-      {state.mode === "offline" && (
-        <Card>
-          <SectionLabel>Backup &amp; restore</SectionLabel>
-          <div style={{ fontSize: 12, color: INK_DIM, lineHeight: 1.5, marginBottom: 14 }}>
-            Your data is saved only on this device. Export a backup file anytime, and import it later to restore your data — on this device, or a new one.
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <ActionButton onClick={handleExport} label="Export data" icon={FileDown} tone={TEAL} />
-            <ActionButton onClick={handleImportClick} label={importBusy ? "Importing\u2026" : "Import data"} icon={FileUp} tone={BRASS} />
-          </div>
-          <input ref={fileInputRef} type="file" accept="application/json,.json" onChange={handleImportFile} style={{ display: "none" }} />
-          {importMsg && <div style={{ fontSize: 12, color: importMsg.indexOf("Restored") === 0 ? TEAL : CORAL, marginTop: 10 }}>{importMsg}</div>}
-        </Card>
-      )}
-
-      {state.mode === "online" && (
-        <>
-          <Card>
-            <SectionLabel>Connect a Google Sheet</SectionLabel>
-            <div style={{ fontSize: 12, color: INK_DIM, lineHeight: 1.5, marginBottom: 12 }}>
-              Paste the Web App URL from your linked Google Sheet (see README.md for the one-time, 2-minute setup — no Google login screen needed). Your data will auto-save and sync there from now on.
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <TextField placeholder="https://script.google.com/macros/s/.../exec" value={urlInput} onChange={(e) => setUrlInput(e.target.value)} style={{ flex: 1, fontSize: 13 }} />
-              <ActionButton onClick={handleConnect} label={connecting ? "Connecting\u2026" : (state.webAppUrl ? "Update" : "Connect")} icon={Link2} tone={BRASS} />
-            </div>
-            {state.error && <div style={{ fontSize: 12, color: CORAL, marginTop: 10 }}>{state.error}</div>}
-          </Card>
-
-          {state.webAppUrl && (
-            <Card>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <SectionLabel>Sync status</SectionLabel>
-                <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 20, fontWeight: 600, background: state.status === "error" ? "#FFEBEA" : state.status === "syncing" ? "#FFF6E3" : "#E9F9EE", color: state.status === "error" ? CORAL : state.status === "syncing" ? BRASS : TEAL }}>
-                  {state.status === "syncing" ? "Syncing\u2026" : state.status === "error" ? "Sync error" : "Synced"}
-                </span>
-              </div>
-              <div style={{ fontSize: 12, color: INK_FAINT, marginBottom: 14 }}>
-                {lastSyncedLabel ? `Last synced ${lastSyncedLabel}` : "Not synced yet"}. Changes save automatically — use the button below if a sync ever gets stuck.
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <ActionButton onClick={handleSyncNow} label="Sync now" icon={RefreshCw} tone={TEAL} />
-                <ActionButton onClick={disconnectOnline} label="Disconnect" icon={HardDrive} tone={CORAL} />
-              </div>
-            </Card>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
 
 function LifeTracker() {
   const [page, setPage] = useState("daily");
@@ -1169,7 +883,7 @@ function LifeTracker() {
 
       <div style={{ padding: "calc(22px + env(safe-area-inset-top)) 20px 10px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
-          {page === "daily" ? "Daily" : page === "categories" ? "Categories" : page === "analysis" ? "Analysis" : "Data Link"}
+          {page === "daily" ? "Daily" : page === "categories" ? "Categories" : "Analysis"}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={toggleReminders} title={remindersEnabled ? "Reminders on" : "Reminders off"} style={{ background: "transparent", border: "none", color: remindersEnabled ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}>
@@ -1899,7 +1613,7 @@ function LifeTracker() {
                               <TextField type="number" min="0" max="7" value={goalForm.daysPerWeek} onChange={(e) => setGoalForm({ ...goalForm, daysPerWeek: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                             </div>
                             <div>
-                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Specific days (optional — overrides count above)</div>
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Specific days (optional \u2014 overrides count above)</div>
                               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                                 {WEEKDAYS.map((day) => {
                                   const sel = goalForm.specificDays.includes(day);
@@ -2124,10 +1838,8 @@ function LifeTracker() {
         </div>
       )}
 
-      {page === "datalink" && <DataLinkPage />}
-
       <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px)", position: "sticky", bottom: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {[{ id: "daily", label: "Daily", icon: CalendarDays }, { id: "categories", label: "Categories", icon: LayoutGrid }, { id: "analysis", label: "Analysis", icon: TrendingUp }, { id: "datalink", label: "Data Link", icon: Link2 }].map((p) => {
+        {[{ id: "daily", label: "Daily", icon: CalendarDays }, { id: "categories", label: "Categories", icon: LayoutGrid }, { id: "analysis", label: "Analysis", icon: TrendingUp }].map((p) => {
           const Icon = p.icon; const active = page === p.id;
           return <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0 10px", background: "transparent", border: "none", cursor: "pointer", color: active ? BRASS : INK_FAINT }}><Icon size={22} strokeWidth={active ? 2.2 : 1.8} /><span style={{ fontSize: 10, fontWeight: active ? 600 : 500, fontFamily: disp }}>{p.label}</span></button>;
         })}
