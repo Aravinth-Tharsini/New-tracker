@@ -79,6 +79,7 @@ import {
   Target, Clock, Pencil, ChevronUp, ChevronDown, Bell, BellOff, Flame, Download, FileJson,
   Plane, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
+  Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive,
 } from "lucide-react";
 
 const INK = "#1D1D1F";
@@ -321,6 +322,16 @@ function LifeTracker() {
   const [travelPlans, setTravelPlans] = useState([]);
   const [financeMonthly, setFinanceMonthly] = useState({});
   const [remindersEnabled, setRemindersEnabled] = useState(false);
+  const [dataMode, setDataMode] = useState("offline");
+  const [sheetUrl, setSheetUrl] = useState("");
+  const [sheetUrlDraft, setSheetUrlDraft] = useState("");
+  const [syncStatus, setSyncStatus] = useState("idle");
+  const [lastSyncedAt, setLastSyncedAt] = useState("");
+  const [importMessage, setImportMessage] = useState("");
+  const fileInputRef = useRef(null);
+  const syncTimerRef = useRef(null);
+  const didInitialPull = useRef(false);
+  const pullSettledRef = useRef(false);
   const [loaded, setLoaded] = useState(false);
   const [now, setNow] = useState(new Date());
   const notifiedRef = useRef({});
@@ -333,8 +344,8 @@ function LifeTracker() {
 
   useEffect(() => {
     (async () => {
-      const keys = ["dailyItems", "dailyLogs", "goals", "repayments", "travelPlans", "financeMonthly", "remindersEnabled"];
-      const setters = [setDailyItems, setDailyLogs, setGoals, setRepayments, setTravelPlans, setFinanceMonthly, setRemindersEnabled];
+      const keys = ["dailyItems", "dailyLogs", "goals", "repayments", "travelPlans", "financeMonthly", "remindersEnabled", "dataMode", "sheetUrl", "lastSyncedAt"];
+      const setters = [setDailyItems, setDailyLogs, setGoals, setRepayments, setTravelPlans, setFinanceMonthly, setRemindersEnabled, setDataMode, setSheetUrl, setLastSyncedAt];
       for (let i = 0; i < keys.length; i++) {
         try { const r = await window.storage.get(keys[i], false); if (r && r.value) setters[i](JSON.parse(r.value)); } catch (e) {}
       }
@@ -348,6 +359,88 @@ function LifeTracker() {
   useEffect(() => { if (loaded) window.storage.set("travelPlans", JSON.stringify(travelPlans), false).catch(() => {}); }, [travelPlans, loaded]);
   useEffect(() => { if (loaded) window.storage.set("financeMonthly", JSON.stringify(financeMonthly), false).catch(() => {}); }, [financeMonthly, loaded]);
   useEffect(() => { if (loaded) window.storage.set("remindersEnabled", JSON.stringify(remindersEnabled), false).catch(() => {}); }, [remindersEnabled, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("dataMode", JSON.stringify(dataMode), false).catch(() => {}); }, [dataMode, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("sheetUrl", JSON.stringify(sheetUrl), false).catch(() => {}); }, [sheetUrl, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("lastSyncedAt", JSON.stringify(lastSyncedAt), false).catch(() => {}); }, [lastSyncedAt, loaded]);
+
+  // ---- Data Link: export / import (offline backup) ----
+  const exportData = () => {
+    const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, remindersEnabled, exportedAt: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `life-tracker-backup-${dateKey()}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setImportMessage("Backup file downloaded.");
+  };
+  const applyImportedData = (data) => {
+    if (!data || typeof data !== "object") return false;
+    if (data.dailyItems) setDailyItems(data.dailyItems);
+    if (data.dailyLogs) setDailyLogs(data.dailyLogs);
+    if (data.goals) setGoals(data.goals);
+    if (data.repayments) setRepayments(data.repayments);
+    if (data.travelPlans) setTravelPlans(data.travelPlans);
+    if (data.financeMonthly) setFinanceMonthly(data.financeMonthly);
+    if (data.remindersEnabled !== undefined) setRemindersEnabled(data.remindersEnabled);
+    return true;
+  };
+  const importDataFile = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const parsed = JSON.parse(e.target.result);
+        applyImportedData(parsed);
+        setImportMessage("Data imported successfully.");
+      } catch (err) {
+        setImportMessage("Import failed \u2014 that doesn't look like a valid backup file.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // ---- Data Link: online sync (Google Sheet via Apps Script Web App URL) ----
+  const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, remindersEnabled, syncedAt: new Date().toISOString() });
+  const pushToSheet = async () => {
+    if (!sheetUrl) return;
+    setSyncStatus("syncing");
+    try {
+      await fetch(sheetUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: buildSyncPayload() });
+      setSyncStatus("success");
+      setLastSyncedAt(new Date().toISOString());
+    } catch (e) {
+      setSyncStatus("error");
+    }
+  };
+  const pullFromSheet = async () => {
+    if (!sheetUrl) return;
+    setSyncStatus("syncing");
+    try {
+      const sep = sheetUrl.includes("?") ? "&" : "?";
+      const res = await fetch(sheetUrl + sep + "t=" + Date.now());
+      const data = await res.json();
+      applyImportedData(data);
+      setSyncStatus("success");
+      setLastSyncedAt(new Date().toISOString());
+    } catch (e) {
+      setSyncStatus("error");
+    } finally {
+      pullSettledRef.current = true;
+    }
+  };
+  useEffect(() => {
+    if (!loaded || dataMode !== "online" || !sheetUrl || didInitialPull.current) return;
+    didInitialPull.current = true;
+    pullFromSheet();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, dataMode, sheetUrl]);
+  useEffect(() => {
+    if (!loaded || dataMode !== "online" || !sheetUrl || !pullSettledRef.current) return;
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => { pushToSheet(); }, 2500);
+    return () => clearTimeout(syncTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, remindersEnabled]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -1838,8 +1931,99 @@ function LifeTracker() {
         </div>
       )}
 
+      {page === "datalink" && (
+        <div style={{ padding: "8px 20px 20px", flex: 1, minHeight: 0, width: "100%" }}>
+          <SectionLabel>Storage mode</SectionLabel>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            <button onClick={() => setDataMode("offline")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "14px 10px", borderRadius: 12, background: dataMode === "offline" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "offline" ? BRASS : LINE}`, cursor: "pointer" }}>
+              <HardDrive size={20} color={dataMode === "offline" ? BRASS : INK_FAINT} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: dataMode === "offline" ? BRASS : INK_DIM }}>Offline mode</span>
+            </button>
+            <button onClick={() => setDataMode("online")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "14px 10px", borderRadius: 12, background: dataMode === "online" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "online" ? BRASS : LINE}`, cursor: "pointer" }}>
+              <Cloud size={20} color={dataMode === "online" ? BRASS : INK_FAINT} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: dataMode === "online" ? BRASS : INK_DIM }}>Online mode</span>
+            </button>
+          </div>
+
+          {dataMode === "offline" && (
+            <Card style={{ marginBottom: 12 }}>
+              <SectionLabel>Backup &amp; restore</SectionLabel>
+              <div style={{ fontSize: 12, color: INK_FAINT, marginBottom: 12 }}>Your data is saved only on this device. Export a backup file regularly, and import it to restore your data on a new device or browser.</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <ActionButton onClick={exportData} label="Export backup" icon={Download} tone={BRASS} />
+                <button onClick={() => fileInputRef.current && fileInputRef.current.click()} style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: `1.5px solid ${BRASS}`, color: BRASS, borderRadius: 10, padding: "8px 16px", fontSize: 13, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>
+                  <Upload size={14} /> Import backup
+                </button>
+                <input ref={fileInputRef} type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) importDataFile(f); e.target.value = ""; }} />
+              </div>
+              {importMessage && <div style={{ fontSize: 12, color: TEAL, marginTop: 10 }}>{importMessage}</div>}
+            </Card>
+          )}
+
+          {dataMode === "online" && (
+            <>
+              <Card style={{ marginBottom: 12 }}>
+                <SectionLabel>Google Sheet sync</SectionLabel>
+                <div style={{ fontSize: 12, color: INK_FAINT, marginBottom: 10 }}>Paste your Google Apps Script Web App URL below (see setup guide). Your data auto-saves to it a couple seconds after any change, and auto-loads from it once when you switch on Online mode.</div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                  <TextField value={sheetUrlDraft || sheetUrl} onChange={(e) => setSheetUrlDraft(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec" style={{ flex: 1, fontSize: 12 }} />
+                  <IconBtn onClick={() => { setSheetUrl(sheetUrlDraft.trim()); didInitialPull.current = false; pullSettledRef.current = false; }}><Check size={14} /></IconBtn>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                  <ActionButton onClick={pushToSheet} label="Sync now" icon={RefreshCw} tone={BRASS} />
+                  <button onClick={pullFromSheet} style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 10, padding: "8px 16px", fontSize: 13, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>
+                    <Cloud size={14} /> Load from sheet
+                  </button>
+                </div>
+                <div style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, color: syncStatus === "error" ? CORAL : syncStatus === "syncing" ? BRASS : TEAL }}>
+                  {syncStatus === "error" ? <CloudOff size={13} /> : <Cloud size={13} />}
+                  {syncStatus === "syncing" && "Syncing\u2026"}
+                  {syncStatus === "success" && lastSyncedAt && `Last synced ${fmtTime(lastSyncedAt)}`}
+                  {syncStatus === "error" && "Sync failed \u2014 check the URL and your connection, or tap Sync now to retry."}
+                  {syncStatus === "idle" && !lastSyncedAt && "Not synced yet."}
+                </div>
+              </Card>
+
+              <Card>
+                <SectionLabel>One-time setup (in your Google account, not this app)</SectionLabel>
+                <div style={{ fontSize: 12, color: INK_DIM, lineHeight: 1.6 }}>
+                  1. Open your Google Sheet.<br />
+                  2. Extensions &rarr; Apps Script.<br />
+                  3. Delete the placeholder code and paste this:
+                </div>
+                <pre style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 8, padding: 10, fontSize: 10, overflowX: "auto", color: INK_DIM, marginTop: 8, marginBottom: 8 }}>
+{`function doGet(e) {
+  var sh = SpreadsheetApp.getActive()
+    .getSheetByName("LifeTrackerData")
+    || SpreadsheetApp.getActive().insertSheet("LifeTrackerData");
+  var data = sh.getRange(1,1).getValue();
+  return ContentService.createTextOutput(data || "{}")
+    .setMimeType(ContentService.MimeType.JSON);
+}
+function doPost(e) {
+  var sh = SpreadsheetApp.getActive()
+    .getSheetByName("LifeTrackerData")
+    || SpreadsheetApp.getActive().insertSheet("LifeTrackerData");
+  sh.getRange(1,1).setValue(e.postData.contents);
+  return ContentService.createTextOutput('{"status":"ok"}')
+    .setMimeType(ContentService.MimeType.JSON);
+}`}
+                </pre>
+                <div style={{ fontSize: 12, color: INK_DIM, lineHeight: 1.6 }}>
+                  4. Deploy &rarr; New deployment &rarr; type: Web app.<br />
+                  5. Execute as: <b>Me</b>. Who has access: <b>Anyone</b>.<br />
+                  6. Deploy, then copy the Web App URL it gives you.<br />
+                  7. Paste that URL above and tap the checkmark.
+                </div>
+                <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 10 }}>This only happens once, inside Google's own site \u2014 there's no login step inside this app. Your data is stored as one JSON block in a "LifeTrackerData" tab, not as separate spreadsheet columns.</div>
+              </Card>
+            </>
+          )}
+        </div>
+      )}
+
       <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px)", position: "sticky", bottom: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {[{ id: "daily", label: "Daily", icon: CalendarDays }, { id: "categories", label: "Categories", icon: LayoutGrid }, { id: "analysis", label: "Analysis", icon: TrendingUp }].map((p) => {
+        {[{ id: "daily", label: "Daily", icon: CalendarDays }, { id: "categories", label: "Categories", icon: LayoutGrid }, { id: "analysis", label: "Analysis", icon: TrendingUp }, { id: "datalink", label: "Data Link", icon: Link2 }].map((p) => {
           const Icon = p.icon; const active = page === p.id;
           return <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0 10px", background: "transparent", border: "none", cursor: "pointer", color: active ? BRASS : INK_FAINT }}><Icon size={22} strokeWidth={active ? 2.2 : 1.8} /><span style={{ fontSize: 10, fontWeight: active ? 600 : 500, fontFamily: disp }}>{p.label}</span></button>;
         })}
