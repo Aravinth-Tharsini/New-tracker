@@ -2108,7 +2108,7 @@ function LifeTracker() {
           {monthExpenses.length > 0 && (
             <>
               <SectionLabel>Expenses this month &middot; {monthLabel(curMonth)}</SectionLabel>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 10, marginBottom: 16 }}>
                 {monthExpenses.map((e) => e.group).filter((v, i, a) => a.indexOf(v) === i).map((g) => (
                   <Card key={g}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>{g}</div><div style={{ fontFamily: mono, fontSize: 17, fontWeight: 600, marginTop: 4 }}>{inr(sumBy((e) => e.group === g))}</div></Card>
                 ))}
@@ -2127,7 +2127,7 @@ function LifeTracker() {
           {(instantDurationItems.length > 0 || intervalItems.length > 0) && (
             <>
               <SectionLabel>Lifestyle</SectionLabel>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 10, marginBottom: 16 }}>
                 {instantDurationItems.filter((i) => i.type === "duration").map((i) => {
                   const v = avg(doneRecordsFor(i.id).map((r) => r.durationMin).filter((x) => x != null));
                   return <Card key={i.id}><div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Avg {i.name.toLowerCase()}</div><div style={{ fontFamily: mono, fontSize: 16, fontWeight: 600, marginTop: 4 }}>{v != null ? fmtDuration(v) : "-"}</div></Card>;
@@ -2148,7 +2148,7 @@ function LifeTracker() {
           )}
 
           <SectionLabel>Improvement</SectionLabel>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 10, marginBottom: 16 }}>
             <Card>
               <div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT }}>Monthly improvement</div>
               {monthlyImprovementPct !== null ? (
