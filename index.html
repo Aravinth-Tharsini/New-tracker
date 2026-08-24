@@ -1322,7 +1322,44 @@ function LifeTracker() {
         </div>
       </div>
 
-      {showSearch && <div style={{ padding: "0 16px 8px" }}><TextField value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search expenses, goals, repayments..." autoFocus /><div style={{ fontSize: 12, color: INK_FAINT, marginTop: 5 }}>{searchQuery ? `Search is ready. Results are available in Daily, Categories and Analysis as you browse.` : "Type a keyword to quickly find your records."}</div></div>}
+      {showSearch && (() => {
+        const q = searchQuery.trim().toLowerCase();
+        const matchedExpenses = q ? Object.entries(dailyLogs).flatMap(([d, log]) => (log.expenses || [])
+          .filter((e) => [e.group, e.subcategory, e.vendor, e.remarks].some((f) => f && String(f).toLowerCase().includes(q)))
+          .map((e) => ({ ...e, date: d }))) : [];
+        const matchedGoals = q ? goals.filter((g) => (g.title || "").toLowerCase().includes(q)) : [];
+        const matchedRepayments = q ? repayments.filter((r) => [r.name, r.purpose, r.remarks, r.category].some((f) => f && String(f).toLowerCase().includes(q))) : [];
+        const totalMatches = matchedExpenses.length + matchedGoals.length + matchedRepayments.length;
+        return (
+          <div style={{ padding: "0 16px 8px" }}>
+            <TextField value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search expenses, goals, repayments..." autoFocus />
+            {!q && <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 5 }}>Type a keyword to quickly find your records.</div>}
+            {q && (
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}>
+                {totalMatches === 0 && <div style={{ fontSize: 13, color: INK_FAINT }}>No matches for &ldquo;{searchQuery}&rdquo;.</div>}
+                {matchedExpenses.slice(0, 10).map((e, i) => (
+                  <div key={"se" + (e.id || i)} style={{ fontSize: 13, color: INK_DIM, display: "flex", justifyContent: "space-between", gap: 8, background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 8, padding: "7px 10px" }}>
+                    <span>{e.group}{e.subcategory ? ` \u203a ${e.subcategory}` : ""}{e.vendor ? ` \u2014 ${e.vendor}` : ""}</span>
+                    <span style={{ fontFamily: mono, color: INK, whiteSpace: "nowrap" }}>{inr(e.amount)} &middot; {e.date}</span>
+                  </div>
+                ))}
+                {matchedGoals.slice(0, 10).map((g) => (
+                  <div key={g.id} style={{ fontSize: 13, color: INK_DIM, display: "flex", justifyContent: "space-between", gap: 8, background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 8, padding: "7px 10px" }}>
+                    <span>Goal &middot; {g.title}</span>
+                    <span style={{ color: g.done ? TEAL : INK_FAINT, whiteSpace: "nowrap" }}>{g.done ? "Done" : "In progress"}</span>
+                  </div>
+                ))}
+                {matchedRepayments.slice(0, 10).map((r) => (
+                  <div key={r.id} style={{ fontSize: 13, color: INK_DIM, display: "flex", justifyContent: "space-between", gap: 8, background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 8, padding: "7px 10px" }}>
+                    <span>{r.category} &middot; {r.name}</span>
+                    <span style={{ fontFamily: mono, color: INK, whiteSpace: "nowrap" }}>{r.amount ? inr(r.amount) : ""}{r.dueDate ? ` \u00b7 ${r.dueDate}` : ""}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {page === "dashboard" && (() => {
         const pendingActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status !== "done").length;
