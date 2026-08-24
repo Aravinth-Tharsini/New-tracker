@@ -32,14 +32,9 @@
 <body style="margin:0; background:#F5F5F7;">
   
 <style>
-#globalTodayBar{position:sticky;top:0;z-index:9999;background:#fff;border-bottom:1px solid rgba(0,0,0,.08);box-shadow:0 2px 10px rgba(0,0,0,.04)}
-</style>
-
-
-<style>
 .notificationStickyBar{
   position:sticky !important;
-  top:48px !important;
+  top:calc(48px + env(safe-area-inset-top)) !important;
   z-index:9998 !important;
   background:#F5F5F7;
 }
@@ -56,20 +51,6 @@ body{padding-bottom:calc(76px + env(safe-area-inset-bottom));}
   <script type="text/babel" data-type="module" data-presets="react">
 import React from "react";
 import ReactDOM from "react-dom/client";
-
-// ---- Common date helpers: Day -> Month -> Year across the whole app ----
-function appDate(value, style = "long") {
-  if (!value) return "—";
-  const raw = String(value);
-  const d = /^\d{4}-\d{2}-\d{2}$/.test(raw)
-    ? new Date(raw + "T12:00:00")
-    : new Date(raw);
-  if (Number.isNaN(d.getTime())) return raw;
-  return style === "short"
-    ? new Intl.DateTimeFormat("en-GB", { day:"2-digit", month:"2-digit", year:"numeric" }).format(d)
-    : new Intl.DateTimeFormat("en-GB", { day:"numeric", month:"long", year:"numeric" }).format(d);
-}
-
 
 // ---- storage polyfill: saves data in this browser using localStorage ----
 const PREFIX = "life-tracker:";
@@ -487,6 +468,7 @@ function LifeTracker() {
   const [syncStatus, setSyncStatus] = useState("idle");
   const [lastSyncedAt, setLastSyncedAt] = useState("");
   const [importMessage, setImportMessage] = useState("");
+  const [pendingImportData, setPendingImportData] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
@@ -563,15 +545,20 @@ function LifeTracker() {
     reader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target.result);
-        if (!window.confirm("Importing will replace current app data. Continue?")) return;
-        applyImportedData(parsed);
-        setImportMessage("Data imported successfully.");
+        setPendingImportData(parsed);
       } catch (err) {
         setImportMessage("Import failed \u2014 that doesn't look like a valid backup file.");
       }
     };
     reader.readAsText(file);
   };
+  const confirmImport = () => {
+    if (!pendingImportData) return;
+    applyImportedData(pendingImportData);
+    setImportMessage("Data imported successfully.");
+    setPendingImportData(null);
+  };
+  const cancelImport = () => setPendingImportData(null);
 
   // ---- Data Link: online sync (Google Sheet via Apps Script Web App URL) ----
   const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, syncedAt: new Date().toISOString() });
@@ -605,7 +592,13 @@ function LifeTracker() {
   useEffect(() => {
     if (!loaded || dataMode !== "online" || !sheetUrl || didInitialPull.current) return;
     didInitialPull.current = true;
-    pullFromSheet();
+    const hasLocalData = dailyItems.length || Object.keys(dailyLogs).length || goals.length || repayments.length || travelPlans.length || Object.keys(financeMonthly).length || shoppingLists.length;
+    if (hasLocalData) {
+      pullSettledRef.current = true;
+      pushToSheet();
+    } else {
+      pullFromSheet();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, dataMode, sheetUrl]);
   useEffect(() => {
@@ -614,7 +607,7 @@ function LifeTracker() {
     syncTimerRef.current = setTimeout(() => { pushToSheet(); }, 2500);
     return () => clearTimeout(syncTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, remindersEnabled]);
+  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -802,10 +795,6 @@ function LifeTracker() {
     setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, expenses: log.expenses.filter((e) => e.id !== id) } }; });
     showUndo("Expense deleted", () => setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, expenses: [...log.expenses, removed] } }; }));
   };
-  const deleteExpenseOld = (id) => {
-    setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, expenses: log.expenses.filter((e) => e.id !== id) } }; });
-  };
-
   // ---- Smart Shopping List ----
   const blankShoppingItem = () => ({ id: "si" + Date.now() + Math.random().toString(36).slice(2, 7), name: "", category: savedShoppingCategories[0] || "", unit: "each", price: "", discountPct: "", qty: "1" });
   const blankShoppingForm = () => ({ id: null, shopName: "", location: "", shoppingDate: "", items: [blankShoppingItem()] });
@@ -905,9 +894,9 @@ function LifeTracker() {
       unit: goalForm.trackingType === "interval" ? (goalForm.intervalUnit || "") : undefined,
     } : {};
     if (editingGoalId) {
-      setGoals((prev) => prev.map((g) => g.id !== editingGoalId ? g : { ...g, title: fullTitle, sequence: parseInt(goalForm.sequence) || 0, targetAmount: catTab === "finance" ? parseFloat(goalForm.targetAmount) || 0 : undefined, ...routineFields }));
+      setGoals((prev) => prev.map((g) => g.id !== editingGoalId ? g : { ...g, title: fullTitle, sequence: parseInt(goalForm.sequence) || 0, targetAmount: catTab === "finance" ? parseFloat(goalForm.targetAmount) || 0 : undefined, savedAmount: catTab === "finance" ? Math.min(Number(g.savedAmount) || 0, parseFloat(goalForm.targetAmount) || 0) : undefined, ...routineFields }));
     } else {
-      setGoals((prev) => [...prev, { id: "g" + Date.now(), category: catTab, title: fullTitle, sequence: parseInt(goalForm.sequence) || 0, targetAmount: catTab === "finance" ? parseFloat(goalForm.targetAmount) || 0 : undefined, done: false, ...routineFields }]);
+      setGoals((prev) => [...prev, { id: "g" + Date.now(), category: catTab, title: fullTitle, sequence: parseInt(goalForm.sequence) || 0, targetAmount: catTab === "finance" ? parseFloat(goalForm.targetAmount) || 0 : undefined, savedAmount: catTab === "finance" ? 0 : undefined, done: false, ...routineFields }]);
     }
     setGoalForm(blankGoalForm());
     setEditingGoalId(null);
@@ -915,7 +904,18 @@ function LifeTracker() {
   };
   const cancelGoalForm = () => { setShowAddGoal(false); setEditingGoalId(null); setGoalForm(blankGoalForm()); };
   const deleteGoal = (id) => setGoals((prev) => prev.filter((g) => g.id !== id));
-  const toggleGoalDone = (id) => setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, done: !g.done } : g)));
+  const toggleGoalDone = (id) => setGoals((prev) => prev.map((g) => {
+    if (g.id !== id) return g;
+    if (g.category === "finance" && Number(g.targetAmount) > 0) {
+      const target = Number(g.targetAmount) || 0;
+      const currentSaved = Number(g.savedAmount) || 0;
+      if (!g.done) {
+        return { ...g, savedAmount: target, done: true, completedDate: dateKey() };
+      }
+      return { ...g, done: false, completedDate: "" };
+    }
+    return { ...g, done: !g.done };
+  }));
   const categoryGoals = goals.filter((g) => g.category === catTab).sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
   const totalSavingsPool = useMemo(() => {
     return Object.keys(financeMonthly).filter((mk) => financeMonthly[mk]?.income !== undefined && financeMonthly[mk]?.income !== "").reduce((sum, mk) => sum + (parseFloat(financeMonthly[mk].income) || 0) - expensesForMonth(mk), 0);
@@ -925,14 +925,18 @@ function LifeTracker() {
   const financeBalanceAvailable = totalSavingsPool - committedTotal;
   const financeAllocations = useMemo(() => {
     if (catTab !== "finance") return {};
-    let remaining = financeBalanceAvailable;
     const map = {};
-    categoryGoals.forEach((g) => {
-      if (g.done) { map[g.id] = g.targetAmount || 0; return; }
-      const target = g.targetAmount || 0;
-      const alloc = Math.min(target, Math.max(0, remaining));
-      map[g.id] = alloc;
-      remaining -= alloc;
+    let remaining = Math.max(0, financeBalanceAvailable);
+    const ordered = [...categoryGoals].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    const savedTotal = ordered.filter((g) => !g.done).reduce((sum, g) => sum + Math.min(Number(g.savedAmount) || 0, Number(g.targetAmount) || 0), 0);
+    remaining = Math.max(0, remaining - savedTotal);
+    ordered.forEach((g) => {
+      const target = Number(g.targetAmount) || 0;
+      const saved = Math.min(Number(g.savedAmount) || 0, target);
+      if (g.done) { map[g.id] = target; return; }
+      const extra = Math.min(Math.max(0, target - saved), remaining);
+      map[g.id] = saved + extra;
+      remaining -= extra;
     });
     return map;
   }, [catTab, categoryGoals, financeBalanceAvailable]);
@@ -1124,15 +1128,19 @@ function LifeTracker() {
   const completeTravelPlan = (id) => setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true } : t)));
   const toggleTravelNoteDone = (planId, noteId) => setTravelPlans((prev) => prev.map((t) => (t.id !== planId ? t : { ...t, notes: (t.notes || []).map((n) => (n.id !== noteId ? n : { ...n, done: !n.done })) })));
   const logTravelExpense = (plan) => {
+    if (!plan || Number(plan.amount) <= 0) return;
+    const alreadyLogged = Object.values(dailyLogs).some((log) => (log.expenses || []).some((e) => e.linkedTravelId === plan.id));
+    if (alreadyLogged) return;
     const group = "Travel";
     const sub = ["Car", "Train", "Bus", "Flight", "Other"].includes(plan.mode) ? plan.mode : "Other";
     setDailyLogs((prev) => {
       const log = prev[today] || defaultLog();
-      const entry = { id: "e" + Date.now(), itemId: "expense", amount: plan.amount || 0, group, subcategory: sub, vendor: `${plan.fromLocation} \u2192 ${plan.toLocation}`, remarks: plan.bookingDetails || "", time: new Date().toISOString(), linkedTravelId: plan.id };
+      if ((log.expenses || []).some((e) => e.linkedTravelId === plan.id)) return prev;
+      const entry = { id: "e" + Date.now(), itemId: "expense", amount: Number(plan.amount) || 0, group, subcategory: sub, vendor: `${plan.fromLocation} \u2192 ${plan.toLocation}`, remarks: plan.bookingDetails || "", time: new Date().toISOString(), linkedTravelId: plan.id };
       return { ...prev, [today]: { ...log, expenses: [...log.expenses, entry] } };
     });
+    setTravelPlans((prev) => prev.map((t) => t.id === plan.id ? { ...t, paymentStatus: "Already Paid", expenseLogged: true } : t));
   };
-
 
   const [itemForm, setItemForm] = useState(null);
   const [addingGroup, setAddingGroup] = useState(false);
@@ -1352,7 +1360,7 @@ function LifeTracker() {
                 const todaysExpenseCount = todayLog.expenses.length;
                 const todaysExpenseTotal = todayLog.expenses.reduce((s, e) => s + e.amount, 0);
                 const visibleTrips = sortedTravelPlans.filter((t) => !t.dismissed && !t.completed);
-                const shoppingDueCount = shoppingLists.filter((l) => l.status === "done").length;
+                const shoppingDueCount = shoppingLists.filter((l) => l.status === "planning" && (!l.shoppingDate || l.shoppingDate <= today)).length;
                 const expenseDueCount = todaysRepaymentReminders.length + shoppingDueCount;
                 const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
                 const doneCount = cat.id === "trip" || cat.id === "expense" ? 0 : itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
@@ -1442,7 +1450,7 @@ function LifeTracker() {
 
                                   {today === t.travelDate ? (
                                     <div style={{ display: "flex", gap: 6, width: "100%" }}>
-                                      {t.amount > 0 && t.paymentStatus !== "Already Paid" && <button onClick={() => logTravelExpense(t)} style={{ flex: 1, minWidth: 0, background: TEAL, border: "none", borderRadius: 8, padding: "7px 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Log expense</button>}
+                                      {t.amount > 0 && t.paymentStatus !== "Already Paid" && !t.expenseLogged && <button onClick={() => logTravelExpense(t)} style={{ flex: 1, minWidth: 0, background: TEAL, border: "none", borderRadius: 8, padding: "7px 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Log expense</button>}
                                       <button onClick={() => completeTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: BRASS, border: "none", borderRadius: 8, padding: "7px 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Done</button>
                                       <button onClick={() => dismissTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: "rgba(255,59,48,0.12)", border: `1px solid ${CORAL}`, borderRadius: 8, padding: "7px 5px", color: CORAL, cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Dismiss</button>
                                     </div>
@@ -2797,6 +2805,19 @@ function doPost(e) {
       )}
 
       {undoAction && <div style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: 74, zIndex: 20, width: "calc(100% - 32px)", maxWidth: 448, background: INK, color: "#fff", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: CARD_SHADOW }}><span style={{ flex: 1, fontSize: 14 }}>{undoAction.message}</span><button onClick={() => { undoAction.undo(); setUndoAction(null); }} style={{ background: "transparent", border: "none", color: BRASS_DIM, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Undo2 size={14} /> Undo</button></div>}
+
+      {pendingImportData && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 10001, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ background: PANEL, borderRadius: 14, padding: 18, width: "100%", maxWidth: 360, boxShadow: CARD_SHADOW }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: INK, marginBottom: 6 }}>Replace current data?</div>
+            <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.5, marginBottom: 16 }}>Importing this backup will replace all data currently in the app on this device. This can't be undone.</div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={cancelImport} style={{ background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "8px 14px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>Cancel</button>
+              <button onClick={confirmImport} style={{ background: CORAL, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "8px 14px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>Replace data</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px)", position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 10000, paddingBottom: "env(safe-area-inset-bottom)" }}>
         {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: LayoutGrid }, { id: "analysis", label: "Insights", icon: TrendingUp }, { id: "datalink", label: "Data Link", icon: Link2 }].map((p) => {
