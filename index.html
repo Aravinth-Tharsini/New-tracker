@@ -1854,54 +1854,76 @@ function LifeTracker() {
               ) : (
                 <Card>
                   <SectionLabel>{shoppingForm.id ? "Edit shopping list" : "New shopping list"}</SectionLabel>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                       <div style={{ flex: "1 1 160px" }}>
                         <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Shop name</div>
-                        <TextField list="shop-name-suggestions" placeholder="e.g. Big Bazaar" value={shoppingForm.shopName} onChange={(e) => setShoppingForm((f) => ({ ...f, shopName: e.target.value }))} />
+                        <TextField list="shop-name-suggestions" placeholder="e.g. Big Bazaar" value={shoppingForm.shopName} onChange={(e) => setShoppingForm((f) => ({ ...f, shopName: e.target.value }))} style={{ width: "100%", boxSizing: "border-box" }} />
                         <datalist id="shop-name-suggestions">{savedShopNames.map((s) => <option key={s} value={s} />)}</datalist>
                       </div>
                       <div style={{ flex: "1 1 160px" }}>
                         <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Location</div>
-                        <TextField placeholder="e.g. MG Road" value={shoppingForm.location} onChange={(e) => setShoppingForm((f) => ({ ...f, location: e.target.value }))} />
+                        <TextField placeholder="e.g. MG Road" value={shoppingForm.location} onChange={(e) => setShoppingForm((f) => ({ ...f, location: e.target.value }))} style={{ width: "100%", boxSizing: "border-box" }} />
                       </div>
                     </div>
 
-                    <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
-                      <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 8 }}>Items</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {shoppingForm.items.map((it) => {
+                    <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 14 }}>
+                      <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Items</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                        {shoppingForm.items.map((it, idx) => {
                           const finalAmt = shoppingItemFinalAmount(it);
                           return (
-                            <div key={it.id} style={{ background: PANEL_2, borderRadius: 10, padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                              <div style={{ display: "flex", gap: 6 }}>
-                                <TextField placeholder="Item name" value={it.name} onChange={(e) => updateShoppingItem(it.id, { name: e.target.value })} style={{ flex: 1 }} />
-                                <button onClick={() => removeShoppingItem(it.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer", flexShrink: 0 }}><Trash2 size={14} /></button>
+                            <div key={it.id} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 12, boxSizing: "border-box" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: INK_FAINT, textTransform: "uppercase", letterSpacing: "0.05em" }}>Item {idx + 1}</span>
+                                <button onClick={() => removeShoppingItem(it.id)} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer", borderRadius: 8 }}><Trash2 size={15} /></button>
                               </div>
-                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                <div style={{ flex: "1 1 120px" }}>
-                                  <TextField list="shopping-category-suggestions" placeholder="Category" value={it.category} onChange={(e) => updateShoppingItem(it.id, { category: e.target.value })} />
+
+                              <div>
+                                <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Item name</div>
+                                <TextField placeholder="e.g. Tomatoes" value={it.name} onChange={(e) => updateShoppingItem(it.id, { name: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }} />
+                              </div>
+
+                              <div>
+                                <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Category</div>
+                                <TextField list="shopping-category-suggestions" placeholder="e.g. Vegetables" value={it.category} onChange={(e) => updateShoppingItem(it.id, { category: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }} />
+                              </div>
+
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                                <div>
+                                  <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Unit</div>
+                                  <Select value={it.unit} onChange={(e) => updateShoppingItem(it.id, { unit: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }}>
+                                    <option value="each">Each</option>
+                                    <option value="kg">Kg</option>
+                                  </Select>
                                 </div>
-                                <Select value={it.unit} onChange={(e) => updateShoppingItem(it.id, { unit: e.target.value })} style={{ flex: "0 1 90px" }}>
-                                  <option value="each">each</option>
-                                  <option value="kg">kg</option>
-                                </Select>
+                                <div>
+                                  <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Quantity</div>
+                                  <TextField type="number" inputMode="decimal" placeholder="1" value={it.qty} onChange={(e) => updateShoppingItem(it.id, { qty: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                                </div>
                               </div>
-                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                <TextField type="number" placeholder="MRP / Price" value={it.price} onChange={(e) => updateShoppingItem(it.id, { price: e.target.value })} style={{ flex: "1 1 90px", fontFamily: mono }} />
-                                <TextField type="number" placeholder="Discount %" value={it.discountPct} onChange={(e) => updateShoppingItem(it.id, { discountPct: e.target.value })} style={{ flex: "1 1 90px", fontFamily: mono }} />
-                                <TextField type="number" placeholder="Qty" value={it.qty} onChange={(e) => updateShoppingItem(it.id, { qty: e.target.value })} style={{ flex: "1 1 70px", fontFamily: mono }} />
+
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                                <div>
+                                  <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>MRP / Price</div>
+                                  <TextField type="number" inputMode="decimal" placeholder="0" value={it.price} onChange={(e) => updateShoppingItem(it.id, { price: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Discount %</div>
+                                  <TextField type="number" inputMode="decimal" placeholder="0" value={it.discountPct} onChange={(e) => updateShoppingItem(it.id, { discountPct: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                                </div>
                               </div>
-                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: INK_DIM, paddingTop: 2 }}>
+
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: INK_DIM, borderTop: `1px solid ${LINE}`, paddingTop: 10, marginTop: 2 }}>
                                 <span>Final amount</span>
-                                <span style={{ fontFamily: mono, fontWeight: 600, color: BRASS }}>{inr(finalAmt)}</span>
+                                <span style={{ fontFamily: mono, fontWeight: 700, fontSize: 15, color: BRASS }}>{inr(finalAmt)}</span>
                               </div>
                             </div>
                           );
                         })}
                         <datalist id="shopping-category-suggestions">{savedShoppingCategories.map((c) => <option key={c} value={c} />)}</datalist>
                       </div>
-                      <button onClick={addShoppingItem} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px dashed ${LINE}`, color: BRASS, borderRadius: 8, padding: "8px 12px", fontSize: 12, cursor: "pointer", marginTop: 8, width: "100%", justifyContent: "center" }}><Plus size={13} /> Add item</button>
+                      <button onClick={addShoppingItem} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px dashed ${LINE}`, color: BRASS, borderRadius: 8, padding: "10px 12px", fontSize: 13, cursor: "pointer", marginTop: 12, width: "100%", justifyContent: "center", boxSizing: "border-box" }}><Plus size={14} /> Add item</button>
                     </div>
 
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
