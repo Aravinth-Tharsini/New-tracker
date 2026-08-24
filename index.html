@@ -331,6 +331,21 @@ function computeRoutineTotals(g) {
   }
   return { dailyMin: round(session), weeklyMin: round(session * 7), monthlyMin: round(session * 30), yearlyMin: round(session * 365) };
 }
+function computeGoalPlanTotalMinutes(g) {
+  const span = g && g.startDate && g.expectedYear ? planSpan(g.startDate, g.expectedYear) : null;
+  if (!span || span.totalDays < 0) return null;
+  const session = Number(g.sessionMinutes) || 0;
+  if (!session) return 0;
+  if (g.frequency === "Weekly") {
+    const days = span.totalDays + 1;
+    const occurrences = (g.specificDays && g.specificDays.length) ? g.specificDays.length : (Number(g.daysPerWeek) || 0);
+    return round((days / 7) * occurrences * session);
+  }
+  if (g.frequency === "Monthly") {
+    return round((span.totalDays + 1) / 30 * session);
+  }
+  return round((span.totalDays + 1) * session);
+}
 // Actual minutes logged for one goal's Daily-tab item, from real saved activity
 // (Start/Stop Timer or Log Time Spent) — not the schedule estimate above.
 function computeLoggedTimeTotals(itemId, dailyLogs, todayStr) {
@@ -859,8 +874,9 @@ function LifeTracker() {
 
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState(null);
+  const [selectedGoalId, setSelectedGoalId] = useState(null);
   const goalMonthOptionsRef = () => { const arr = []; const nowD = new Date(); for (let i = -3; i <= 12; i++) arr.push(monthKey(new Date(nowD.getFullYear(), nowD.getMonth() + i, 1))); return arr; };
-  const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalHours: "2", intervalAmount: "1", intervalUnit: "session" });
+  const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", goalType: "Skill Learning", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalHours: "2", intervalAmount: "1", intervalUnit: "session", reminderEnabled: false, reminderMinutes: "15", notes: "" });
   const [goalForm, setGoalForm] = useState(blankGoalForm());
   const isRoutineCategory = ROUTINE_CATEGORIES.includes(catTab);
   const toggleSpecificDay = (day) => setGoalForm((f) => ({ ...f, specificDays: f.specificDays.includes(day) ? f.specificDays.filter((d) => d !== day) : [...f.specificDays, day] }));
@@ -871,11 +887,12 @@ function LifeTracker() {
     const matchMonth = goalMonthOptionsRef().find((mk) => monthLabel(mk) === suffix) || curMonth;
     setGoalForm({
       title: rawTitle, month: matchMonth, sequence: String(g.sequence || ""), targetAmount: g.targetAmount != null ? String(g.targetAmount) : "",
-      startDate: g.startDate || "", expectedYear: g.expectedYear || "", frequency: g.frequency || "Daily",
+      goalType: g.goalType || "Skill Learning", startDate: g.startDate || "", expectedYear: g.expectedYear || "", frequency: g.frequency || "Daily",
       daysPerWeek: g.daysPerWeek != null ? String(g.daysPerWeek) : "3", specificDays: g.specificDays || [],
       startTime: g.startTime || "", sessionMinutes: g.sessionMinutes != null ? String(g.sessionMinutes) : "30",
       trackingType: g.trackingType || "instant", intervalHours: g.intervalHours != null ? String(g.intervalHours) : "2",
       intervalAmount: g.amount != null ? String(g.amount) : "1", intervalUnit: g.unit || "session",
+      reminderEnabled: !!g.reminderEnabled, reminderMinutes: g.reminderMinutes != null ? String(g.reminderMinutes) : "15", notes: g.notes || "",
     });
     setEditingGoalId(g.id);
     setShowAddGoal(true);
@@ -884,7 +901,7 @@ function LifeTracker() {
     if (!goalForm.title.trim()) return;
     const fullTitle = isRoutineCategory ? goalForm.title.trim() : `${goalForm.title.trim()} \u2014 ${monthLabel(goalForm.month)}`;
     const routineFields = isRoutineCategory ? {
-      startDate: goalForm.startDate || "", expectedYear: goalForm.expectedYear || "", frequency: goalForm.frequency,
+      goalType: goalForm.goalType || "Skill Learning", startDate: goalForm.startDate || "", expectedYear: goalForm.expectedYear || "", frequency: goalForm.frequency,
       daysPerWeek: goalForm.frequency === "Weekly" ? (parseInt(goalForm.daysPerWeek) || 0) : undefined,
       specificDays: goalForm.frequency === "Weekly" ? goalForm.specificDays : [],
       startTime: goalForm.startTime || "", sessionMinutes: parseInt(goalForm.sessionMinutes) || 0,
@@ -892,18 +909,22 @@ function LifeTracker() {
       intervalHours: goalForm.trackingType === "interval" ? (parseFloat(goalForm.intervalHours) || 0) : undefined,
       amount: goalForm.trackingType === "interval" ? (parseFloat(goalForm.intervalAmount) || 0) : undefined,
       unit: goalForm.trackingType === "interval" ? (goalForm.intervalUnit || "") : undefined,
+      reminderEnabled: !!goalForm.reminderEnabled, reminderMinutes: parseInt(goalForm.reminderMinutes) || 15, notes: goalForm.notes || "",
     } : {};
+    const newGoalId = editingGoalId || ("g" + Date.now());
     if (editingGoalId) {
       setGoals((prev) => prev.map((g) => g.id !== editingGoalId ? g : { ...g, title: fullTitle, sequence: parseInt(goalForm.sequence) || 0, targetAmount: catTab === "finance" ? parseFloat(goalForm.targetAmount) || 0 : undefined, savedAmount: catTab === "finance" ? Math.min(Number(g.savedAmount) || 0, parseFloat(goalForm.targetAmount) || 0) : undefined, ...routineFields }));
     } else {
-      setGoals((prev) => [...prev, { id: "g" + Date.now(), category: catTab, title: fullTitle, sequence: parseInt(goalForm.sequence) || 0, targetAmount: catTab === "finance" ? parseFloat(goalForm.targetAmount) || 0 : undefined, savedAmount: catTab === "finance" ? 0 : undefined, done: false, ...routineFields }]);
+      setGoals((prev) => [...prev, { id: newGoalId, category: catTab, title: fullTitle, sequence: parseInt(goalForm.sequence) || 0, targetAmount: catTab === "finance" ? parseFloat(goalForm.targetAmount) || 0 : undefined, savedAmount: catTab === "finance" ? 0 : undefined, done: false, ...routineFields }]);
     }
+    const savedId = newGoalId;
+    setSelectedGoalId(savedId);
     setGoalForm(blankGoalForm());
     setEditingGoalId(null);
     setShowAddGoal(false);
   };
   const cancelGoalForm = () => { setShowAddGoal(false); setEditingGoalId(null); setGoalForm(blankGoalForm()); };
-  const deleteGoal = (id) => setGoals((prev) => prev.filter((g) => g.id !== id));
+  const deleteGoal = (id) => { setGoals((prev) => prev.filter((g) => g.id !== id)); setSelectedGoalId((prev) => prev === id ? null : prev); };
   const toggleGoalDone = (id) => setGoals((prev) => prev.map((g) => {
     if (g.id !== id) return g;
     if (g.category === "finance" && Number(g.targetAmount) > 0) {
@@ -2408,7 +2429,7 @@ function LifeTracker() {
                 <SectionLabel>Goals</SectionLabel>
                 <button onClick={() => (showAddGoal ? cancelGoalForm() : setShowAddGoal(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add goal</button>
               </div>
-              {isRoutineCategory && categoryGoals.some((g) => !g.done && g.sessionMinutes) && (
+              {isRoutineCategory && !selectedGoalId && categoryGoals.some((g) => !g.done && g.sessionMinutes) && (
                 <Card style={{ marginBottom: 9 }}>
                   <SectionLabel>Planned time (from schedule)</SectionLabel>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 8px" }}>
@@ -2448,6 +2469,14 @@ function LifeTracker() {
                   <SectionLabel>{editingGoalId ? "Edit goal" : "New goal"}</SectionLabel>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <TextField placeholder="Goal title" value={goalForm.title} onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })} />
+                    {isRoutineCategory && (
+                      <div>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Goal type</div>
+                        <Select value={goalForm.goalType} onChange={(e) => setGoalForm({ ...goalForm, goalType: e.target.value })} style={{ width: "100%" }}>
+                          <option>Skill Learning</option><option>Certification</option><option>Project</option><option>Job Preparation</option><option>Course</option><option>Reading</option><option>Other</option>
+                        </Select>
+                      </div>
+                    )}
                     {!isRoutineCategory && (
                       <div>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Month</div>
@@ -2534,6 +2563,20 @@ function LifeTracker() {
                             </div>
                           </div>
                         )}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "7px 0" }}>
+                          <div style={{ fontSize: 13, color: INK_FAINT }}>Reminder before session</div>
+                          <button type="button" onClick={() => setGoalForm({ ...goalForm, reminderEnabled: !goalForm.reminderEnabled })} style={{ background: goalForm.reminderEnabled ? "rgba(0,113,227,0.12)" : PANEL_2, border: `1px solid ${goalForm.reminderEnabled ? BRASS : LINE}`, borderRadius: 7, padding: "5px 8px", color: goalForm.reminderEnabled ? BRASS : INK_DIM, cursor: "pointer", fontSize: 13 }}>{goalForm.reminderEnabled ? "On" : "Off"}</button>
+                        </div>
+                        {goalForm.reminderEnabled && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <TextField type="number" min="1" value={goalForm.reminderMinutes} onChange={(e) => setGoalForm({ ...goalForm, reminderMinutes: e.target.value })} style={{ width: 90, fontFamily: mono }} />
+                            <span style={{ fontSize: 13, color: INK_FAINT }}>minutes before</span>
+                          </div>
+                        )}
+                        <div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Notes / target outcome</div>
+                          <TextField placeholder="Example: Complete basic English conversation" value={goalForm.notes} onChange={(e) => setGoalForm({ ...goalForm, notes: e.target.value })} />
+                        </div>
                       </>
                     )}
                     <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
@@ -2553,13 +2596,14 @@ function LifeTracker() {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 11, color: INK_FAINT, border: `1px solid ${LINE}`, borderRadius: 4, padding: "1px 5px", fontFamily: mono }}>#{g.sequence || 0}</span>
-                            <span style={{ fontSize: 16, fontWeight: 600, textDecoration: g.done ? "line-through" : "none", color: g.done ? INK_FAINT : INK }}>{g.title}</span>
+                            <button onClick={() => setSelectedGoalId((prev) => prev === g.id ? null : g.id)} style={{ border: "none", background: "transparent", padding: 0, margin: 0, fontSize: 16, fontWeight: 600, textDecoration: g.done ? "line-through" : "none", color: g.done ? INK_FAINT : INK, cursor: "pointer", textAlign: "left" }}>{g.title}</button>
                           </div>
                           {ROUTINE_CATEGORIES.includes(g.category) && g.trackingType && (
                             <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 3 }}>
                               {g.done ? "Not on Daily tab \u2014 goal closed" : g.trackingType === "instant" ? "Daily tab \u00b7 OK / Done" : g.trackingType === "duration" ? "Daily tab \u00b7 Start / Stop Timer" : `Daily tab \u00b7 Interval Reminder (${g.amount || 0} ${g.unit || ""} / ${g.intervalHours || 0}h)`}
                             </div>
                           )}
+                          {selectedGoalId === g.id && <div style={{ fontSize: 11, color: BRASS, marginTop: 4 }}>Selected · summary shown below</div>}
                         </div>
                         <div style={{ display: "flex", gap: 3, alignItems: "center", flexShrink: 0 }}>
                           {catTab === "finance" && g.targetAmount > 0 ? (
@@ -2583,7 +2627,7 @@ function LifeTracker() {
                           </div>
                         </div>
                       )}
-                      {ROUTINE_CATEGORIES.includes(g.category) && (() => {
+                      {ROUTINE_CATEGORIES.includes(g.category) && selectedGoalId === g.id && (() => {
                         const span = g.startDate && g.expectedYear ? planSpan(g.startDate, g.expectedYear) : null;
                         const spentToday = g.trackingType ? computeLoggedTimeTotals(`goal-${g.id}`, dailyLogs, today) : null;
                         const planned = g.sessionMinutes ? computeRoutineTotals(g) : null;
@@ -2597,6 +2641,13 @@ function LifeTracker() {
                               <div style={{ fontSize: 13, color: INK_DIM, marginBottom: 5 }}>
                                 Plan: {g.startDate} &rarr; {g.expectedYear} &middot; <span style={{ color: BRASS, fontWeight: 600 }}>{span.label}</span> ({span.totalDays} days)
                               </div>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 7 }}>
+                                {g.goalType && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.goalType}</span>}
+                                <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.frequency || "Daily"}</span>
+                                {g.startTime && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.startTime}</span>}
+                                {g.reminderEnabled && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>Reminder {g.reminderMinutes || 15}m</span>}
+                              </div>
+                              {g.notes && <div style={{ fontSize: 13, color: INK_DIM, marginBottom: 7 }}>Target: {g.notes}</div>}
                             )}
                             {elapsedDays != null && (
                               <div style={{ marginBottom: spentToday ? 8 : 0 }}>
@@ -2607,6 +2658,10 @@ function LifeTracker() {
                                 </div>
                               </div>
                             )}
+                            {planned && (() => {
+                              const planTotal = computeGoalPlanTotalMinutes(g);
+                              return planTotal != null ? <div style={{ fontSize: 13, color: INK_DIM, marginBottom: 8 }}>Planned total for this goal: <span style={{ color: BRASS, fontWeight: 600, fontFamily: mono }}>{fmtDuration(planTotal)}</span></div> : null;
+                            })()}
                             {spentToday && (
                               <div>
                                 <div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT, marginBottom: 5 }}>{planned ? "Time spent (auto-updates when you log)" : "Time spent"}</div>
