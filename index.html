@@ -992,19 +992,25 @@ function LifeTracker() {
     else { d.setMonth(d.getMonth() + 1); if (dueDayStart) d.setDate(Number(dueDayStart)); }
     return dateKey(d);
   };
-  const toggleRepaymentPaid = (id) => setRepayments((prev) => prev.map((r) => {
-    if (r.id !== id) return r;
+  // Marking a recurring bill (simple w/ frequency, or recharge) as paid keeps the paid record in place as
+  // history and spins off a new pending record for the next cycle, carrying forward name/category/settings
+  // and only refreshing the due date (and, for recharge, the renewal date/avg cost).
+  const toggleRepaymentPaid = (id) => setRepayments((prev) => {
+    const r = prev.find((x) => x.id === id);
+    if (!r) return prev;
     const cls = repaymentCategoryClass(r.category);
     if (cls === "simple" && r.frequency && !r.paid) {
-      return { ...r, dueDate: advanceDueDate(r.dueDate, r.frequency, r.dueDayStart), paid: false };
+      const nextRecord = { ...r, id: "r" + Date.now() + Math.random().toString(36).slice(2, 6), dueDate: advanceDueDate(r.dueDate, r.frequency, r.dueDayStart), paid: false };
+      return prev.map((x) => (x.id === id ? { ...x, paid: true } : x)).concat(nextRecord);
     }
     if (cls === "recharge" && !r.paid) {
       const newStart = r.dueDate || r.startDate;
       const { avgDailyCost, nextDate } = computeRechargePlan(r.planAmount, r.durationValue, r.durationUnit, newStart);
-      return { ...r, startDate: newStart, dueDate: nextDate, avgDailyCost, paid: false };
+      const nextRecord = { ...r, id: "r" + Date.now() + Math.random().toString(36).slice(2, 6), startDate: newStart, dueDate: nextDate, avgDailyCost, paid: false };
+      return prev.map((x) => (x.id === id ? { ...x, paid: true } : x)).concat(nextRecord);
     }
-    return { ...r, paid: !r.paid };
-  }));
+    return prev.map((x) => (x.id === id ? { ...x, paid: !x.paid } : x));
+  });
   const advanceMonth = (dateStr) => { if (!dateStr) return ""; const d = new Date(dateStr); d.setMonth(d.getMonth() + 1); return dateKey(d); };
   const payNextEmi = (id) => {
     setRepayments((prev) => prev.map((r) => {
