@@ -1302,7 +1302,7 @@ function LifeTracker() {
           )}
           {availableDailyCategories.length === 0 ? (
             <div style={{ padding: "32px 16px", textAlign: "center", color: INK_FAINT, fontSize: 15 }}>
-              Nothing to track yet. Go to <span style={{ color: BRASS }}>Categories</span> to add a Trip, or set up Daily Routine, Career growth, or Healthcare goals.
+              Nothing to track yet. Go to <span style={{ color: BRASS }}>Planner</span> to add a Trip, or set up Daily Routine, Career growth, or Healthcare goals.
             </div>
           ) : (
             <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2254,7 +2254,7 @@ function LifeTracker() {
                             <div>
                               <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Payment frequency</div>
                               <Select value={repaymentForm.frequency} onChange={(e) => setRepaymentForm({ ...repaymentForm, frequency: e.target.value })} style={{ width: "100%" }}>
-                                <option value="Daily">Daily</option>
+                                <option value="Daily">Today</option>
                                 <option value="Weekly">Weekly</option>
                                 <option value="Monthly">Monthly</option>
                                 <option value="Yearly">Yearly</option>
@@ -2431,7 +2431,7 @@ function LifeTracker() {
                         <div>
                           <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Frequency</div>
                           <Select value={goalForm.frequency} onChange={(e) => setGoalForm({ ...goalForm, frequency: e.target.value })} style={{ width: "100%" }}>
-                            <option value="Daily">Daily</option>
+                            <option value="Daily">Today</option>
                             <option value="Weekly">Weekly</option>
                             <option value="Monthly">Monthly</option>
                           </Select>
@@ -2816,7 +2816,7 @@ function doPost(e) {
       {undoAction && <div style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: 74, zIndex: 20, width: "calc(100% - 32px)", maxWidth: 448, background: INK, color: "#fff", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: CARD_SHADOW }}><span style={{ flex: 1, fontSize: 14 }}>{undoAction.message}</span><button onClick={() => { undoAction.undo(); setUndoAction(null); }} style={{ background: "transparent", border: "none", color: BRASS_DIM, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Undo2 size={14} /> Undo</button></div>}
 
       <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px)", position: "sticky", bottom: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Daily", icon: CalendarDays }, { id: "categories", label: "Categories", icon: LayoutGrid }, { id: "analysis", label: "Analysis", icon: TrendingUp }, { id: "datalink", label: "Data Link", icon: Link2 }].map((p) => {
+        {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: LayoutGrid }, { id: "analysis", label: "Insights", icon: TrendingUp }, { id: "datalink", label: "Data Link", icon: Link2 }].map((p) => {
           const Icon = p.icon; const active = page === p.id;
           return <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 0 8px", background: "transparent", border: "none", cursor: "pointer", color: active ? BRASS : INK_FAINT }}><Icon size={18} strokeWidth={active ? 2.2 : 1.8} /><span style={{ fontSize: 11, fontWeight: active ? 600 : 500, fontFamily: disp }}>{p.label}</span></button>;
         })}
