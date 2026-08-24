@@ -999,7 +999,7 @@ function LifeTracker() {
   const [showAddTravel, setShowAddTravel] = useState(false);
   const [editingTravelId, setEditingTravelId] = useState(null);
   const [travelTimeInputMode, setTravelTimeInputMode] = useState("24h");
-  const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", amount: "", bookingDetails: "", reminderOffsets: ["1d"] });
+  const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", amount: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid" });
   const [travelForm, setTravelForm] = useState(blankTravelForm());
   const toggleTravelReminder = (offset) => setTravelForm((f) => ({ ...f, reminderOffsets: f.reminderOffsets.includes(offset) ? f.reminderOffsets.filter((o) => o !== offset) : [...f.reminderOffsets, offset] }));
   const openEditTravel = (t) => {
@@ -1007,6 +1007,7 @@ function LifeTracker() {
       mode: t.mode || "Train", fromLocation: t.fromLocation || "", toLocation: t.toLocation || "",
       travelDate: t.travelDate || "", travelTime: t.travelTime || "", amount: t.amount != null ? String(t.amount) : "",
       bookingDetails: t.bookingDetails || "", reminderOffsets: t.reminderOffsets || (t.reminderOffset ? [t.reminderOffset] : ["1d"]),
+      paymentStatus: t.paymentStatus || "Not Paid",
     });
     setEditingTravelId(t.id);
     setShowAddTravel(true);
@@ -1017,7 +1018,7 @@ function LifeTracker() {
     const base = {
       mode: travelForm.mode, fromLocation: travelForm.fromLocation.trim(), toLocation: travelForm.toLocation.trim(),
       travelDate: travelForm.travelDate, travelTime: travelForm.travelTime, amount: parseFloat(travelForm.amount) || 0,
-      bookingDetails: travelForm.bookingDetails.trim(), reminderOffsets: travelForm.reminderOffsets,
+      bookingDetails: travelForm.bookingDetails.trim(), reminderOffsets: travelForm.reminderOffsets, paymentStatus: travelForm.paymentStatus,
     };
     if (editingTravelId) {
       setTravelPlans((prev) => prev.map((t) => (t.id !== editingTravelId ? t : { ...t, ...base })));
@@ -1266,6 +1267,11 @@ function LifeTracker() {
                                       <span style={{ fontSize: 11, fontWeight: 700, color: TEAL, background: "rgba(52,199,89,0.12)", borderRadius: 980, padding: "3px 10px" }}>{fmtTimeString12(t.travelTime)} &middot; {timeOfDayLabel(t.travelTime)}</span>
                                     )}
                                     {t.amount > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: INK_DIM, background: PANEL, borderRadius: 980, padding: "3px 10px" }}>{inr(t.amount)}</span>}
+                                    {t.amount > 0 && (
+                                      <span style={{ fontSize: 11, fontWeight: 700, color: t.paymentStatus === "Already Paid" ? TEAL : CORAL, background: t.paymentStatus === "Already Paid" ? "rgba(52,199,89,0.12)" : "rgba(255,59,48,0.10)", borderRadius: 980, padding: "3px 10px" }}>
+                                        {t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}
+                                      </span>
+                                    )}
                                     {due && <span style={{ fontSize: 11, fontWeight: 600, color: BRASS }}>Reminder active</span>}
                                   </div>
 
@@ -1280,7 +1286,7 @@ function LifeTracker() {
                                   )}
 
                                   <div style={{ display: "flex", gap: 8, width: "100%" }}>
-                                    {t.amount > 0 && <button onClick={() => logTravelExpense(t)} style={{ flex: 1, minWidth: 0, background: TEAL, border: "none", borderRadius: 10, padding: "9px 6px", color: "#FFFFFF", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Log expense</button>}
+                                    {t.amount > 0 && t.paymentStatus !== "Already Paid" && <button onClick={() => logTravelExpense(t)} style={{ flex: 1, minWidth: 0, background: TEAL, border: "none", borderRadius: 10, padding: "9px 6px", color: "#FFFFFF", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Log expense</button>}
                                     <button onClick={() => completeTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: BRASS, border: "none", borderRadius: 10, padding: "9px 6px", color: "#FFFFFF", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Done</button>
                                     <button onClick={() => dismissTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: "rgba(255,59,48,0.12)", border: `1px solid ${CORAL}`, borderRadius: 10, padding: "9px 6px", color: CORAL, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Dismiss</button>
                                   </div>
@@ -1650,6 +1656,13 @@ function LifeTracker() {
                           })()}
                         </div>
                         <TextField type="number" placeholder="Amount" value={travelForm.amount} onChange={(e) => setTravelForm({ ...travelForm, amount: e.target.value })} style={{ fontFamily: mono }} />
+                        <div>
+                          <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Payment status</div>
+                          <Select value={travelForm.paymentStatus} onChange={(e) => setTravelForm({ ...travelForm, paymentStatus: e.target.value })} style={{ width: "100%" }}>
+                            <option value="Not Paid">Not Paid</option>
+                            <option value="Already Paid">Already Paid</option>
+                          </Select>
+                        </div>
                         <TextField placeholder="Ticket / booking details" value={travelForm.bookingDetails} onChange={(e) => setTravelForm({ ...travelForm, bookingDetails: e.target.value })} />
                         <div>
                           <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 6 }}>Remind me before travel date (pick as many as you like)</div>
@@ -1681,6 +1694,7 @@ function LifeTracker() {
                             <span>{t.travelDate}</span>
                             {t.travelTime && <><span>&middot;</span><span style={{ fontWeight: 700, color: INK_DIM }}>{fmtTimeString12(t.travelTime)}</span><span>({timeOfDayLabel(t.travelTime)})</span></>}
                             {t.amount ? <span>&middot; {inr(t.amount)}</span> : null}
+                            {t.amount > 0 && <span style={{ fontWeight: 700, color: t.paymentStatus === "Already Paid" ? TEAL : CORAL }}>&middot; {t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}</span>}
                             {t.completed ? <span style={{ color: TEAL, fontWeight: 700 }}>&middot; completed</span> : t.dismissed ? <span>&middot; dismissed</span> : null}
                           </div>
                           <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>Reminders: {(t.reminderOffsets && t.reminderOffsets.length ? t.reminderOffsets : (t.reminderOffset ? [t.reminderOffset] : [])).map((v) => (REMINDER_OPTIONS.find((o) => o.value === v) || {}).label).filter(Boolean).join(", ") || "none"}</div>
