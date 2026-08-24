@@ -1158,24 +1158,35 @@ function LifeTracker() {
                               const due = isTravelRelevantToday(t, today);
                               const dayLabel = dayLabelFor(t.travelDate, today);
                               return (
-                                <div key={t.id} style={{ background: PANEL_2, border: `1px solid ${due ? BRASS_DIM : LINE}`, borderRadius: 10, padding: "8px 12px" }}>
-                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                                    <div>
-                                      <div style={{ fontSize: 13, color: INK_DIM }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
-                                      <div style={{ fontSize: 11, color: due ? BRASS : INK_FAINT, marginTop: 2, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
-                                        {dayLabel && <span style={{ fontWeight: 700, color: BRASS }}>{dayLabel}</span>}
-                                        <span>{t.travelDate}</span>
-                                        {t.travelTime && <><span>&middot;</span><span style={{ fontWeight: 700 }}>{fmtTimeString12(t.travelTime)}</span><span style={{ color: INK_FAINT }}>({timeOfDayLabel(t.travelTime)})</span></>}
-                                        {t.amount ? <span>&middot; {inr(t.amount)}</span> : null}
-                                        {due ? <span>&middot; reminder active</span> : null}
+                                <div key={t.id} style={{ background: PANEL_2, border: `1px solid ${due ? BRASS_DIM : LINE}`, borderRadius: 12, padding: "12px 14px" }}>
+                                  <div style={{ fontSize: 14, color: INK, fontWeight: 700, marginBottom: 8 }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
+
+                                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                                    {dayLabel && (
+                                      <span style={{ fontSize: 11, fontWeight: 700, color: "#FFFFFF", background: BRASS, borderRadius: 980, padding: "3px 10px" }}>{dayLabel}</span>
+                                    )}
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: BRASS, background: "rgba(0,113,227,0.10)", borderRadius: 980, padding: "3px 10px" }}>{t.travelDate}</span>
+                                    {t.travelTime && (
+                                      <span style={{ fontSize: 11, fontWeight: 700, color: TEAL, background: "rgba(52,199,89,0.12)", borderRadius: 980, padding: "3px 10px" }}>{fmtTimeString12(t.travelTime)} &middot; {timeOfDayLabel(t.travelTime)}</span>
+                                    )}
+                                    {t.amount > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: INK_DIM, background: PANEL, borderRadius: 980, padding: "3px 10px" }}>{inr(t.amount)}</span>}
+                                    {due && <span style={{ fontSize: 11, fontWeight: 600, color: BRASS }}>Reminder active</span>}
+                                  </div>
+
+                                  {t.bookingDetails && (
+                                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 10, padding: "8px 10px", marginBottom: 10 }}>
+                                      <FileJson size={14} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 1 }} />
+                                      <div>
+                                        <div style={{ fontSize: 10, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>Booking details</div>
+                                        <div style={{ fontSize: 12, color: INK_DIM, lineHeight: 1.5, wordBreak: "break-word" }}>{t.bookingDetails}</div>
                                       </div>
-                                      {t.bookingDetails && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>{t.bookingDetails}</div>}
                                     </div>
-                                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                                      {t.amount > 0 && <button onClick={() => logTravelExpense(t)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "6px 9px", color: "#FFFFFF", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Log expense</button>}
-                                      <button onClick={() => completeTravelPlan(t.id)} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "6px 9px", color: "#FFFFFF", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Done</button>
-                                      <button onClick={() => dismissTravelPlan(t.id)} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 9px", color: INK_FAINT, cursor: "pointer", fontSize: 11 }}>Dismiss</button>
-                                    </div>
+                                  )}
+
+                                  <div style={{ display: "flex", gap: 8, width: "100%" }}>
+                                    {t.amount > 0 && <button onClick={() => logTravelExpense(t)} style={{ flex: 1, minWidth: 0, background: TEAL, border: "none", borderRadius: 10, padding: "9px 6px", color: "#FFFFFF", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Log expense</button>}
+                                    <button onClick={() => completeTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: BRASS, border: "none", borderRadius: 10, padding: "9px 6px", color: "#FFFFFF", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Done</button>
+                                    <button onClick={() => dismissTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: "rgba(255,59,48,0.12)", border: `1px solid ${CORAL}`, borderRadius: 10, padding: "9px 6px", color: CORAL, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Dismiss</button>
                                   </div>
                                 </div>
                               );
