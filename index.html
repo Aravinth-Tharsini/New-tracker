@@ -319,16 +319,31 @@ function computeRoutineTotals(g) {
 function computeLoggedTimeTotals(itemId, dailyLogs, todayStr) {
   const curMonth = todayStr.slice(0, 7);
   const curYear = todayStr.slice(0, 4);
-  let dayMin = 0, monthMin = 0, yearMin = 0;
+  const todayDate = new Date(todayStr);
+  const weekStart = new Date(todayDate); weekStart.setDate(todayDate.getDate() - ((todayDate.getDay() + 6) % 7));
+  const weekStartStr = dateKey(weekStart);
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+  const weekEndStr = dateKey(weekEnd);
+  let dayMin = 0, weekMin = 0, monthMin = 0, yearMin = 0;
+  let dayCount = 0, weekCount = 0, monthCount = 0, yearCount = 0;
   for (const d in dailyLogs) {
     const rec = dailyLogs[d] && dailyLogs[d][itemId];
-    const min = rec && Number(rec.durationMin) > 0 ? Number(rec.durationMin) : 0;
-    if (!min) continue;
-    if (d === todayStr) dayMin += min;
-    if (d.slice(0, 7) === curMonth) monthMin += min;
-    if (d.slice(0, 4) === curYear) yearMin += min;
+    if (!rec || rec.status !== "done") continue;
+    const min = Number(rec.durationMin) > 0 ? Number(rec.durationMin) : 0;
+    if (d === todayStr) { dayMin += min; dayCount += 1; }
+    if (d >= weekStartStr && d <= weekEndStr) { weekMin += min; weekCount += 1; }
+    if (d.slice(0, 7) === curMonth) { monthMin += min; monthCount += 1; }
+    if (d.slice(0, 4) === curYear) { yearMin += min; yearCount += 1; }
   }
-  return { dayMin, monthMin, yearMin };
+  return { dayMin, weekMin, monthMin, yearMin, dayCount, weekCount, monthCount, yearCount };
+}
+function fmtMinutesOnly(min) { return `${Math.round(min || 0)} min`; }
+function fmtHoursOnly(min) { return `${Math.round(((min || 0) / 60) * 10) / 10}h`; }
+function fmtQty(minutes, periodDays) {
+  const q = (minutes || 0) / (periodDays * 1440);
+  if (q === 0) return "0";
+  const rounded = Math.round(q * 1000) / 1000;
+  return String(rounded);
 }
 function daysToYMD(totalDaysIn) {
   const absDays = Math.abs(totalDaysIn);
@@ -2090,21 +2105,50 @@ function LifeTracker() {
                         const span = g.startDate && g.expectedYear ? planSpan(g.startDate, g.expectedYear) : null;
                         const spentToday = g.trackingType ? computeLoggedTimeTotals(`goal-${g.id}`, dailyLogs, today) : null;
                         const planned = g.sessionMinutes ? computeRoutineTotals(g) : null;
+                        const elapsedDays = span && g.startDate <= today ? Math.min(span.totalDays, Math.round((new Date(today) - new Date(g.startDate)) / 86400000) + 1) : null;
+                        const elapsedWeeks = elapsedDays != null ? Math.ceil(elapsedDays / 7) : null;
+                        const totalWeeks = span ? Math.ceil(span.totalDays / 7) : null;
                         if (!span && !spentToday) return null;
                         return (
                           <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${LINE}` }}>
                             {span && (
-                              <div style={{ fontSize: 11, color: INK_DIM, marginBottom: spentToday ? 8 : 0 }}>
+                              <div style={{ fontSize: 11, color: INK_DIM, marginBottom: 6 }}>
                                 Plan: {g.startDate} &rarr; {g.expectedYear} &middot; <span style={{ color: BRASS, fontWeight: 600 }}>{span.label}</span> ({span.totalDays} days)
+                              </div>
+                            )}
+                            {elapsedDays != null && (
+                              <div style={{ marginBottom: spentToday ? 8 : 0 }}>
+                                <ProgressBar pct={(elapsedDays / span.totalDays) * 100} color={BRASS} />
+                                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 11, color: INK_DIM, fontFamily: mono }}>
+                                  <span>Day {elapsedDays} of {span.totalDays}</span>
+                                  <span>Week {elapsedWeeks} of {totalWeeks}</span>
+                                </div>
                               </div>
                             )}
                             {spentToday && (
                               <div>
                                 <div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT, marginBottom: 4 }}>{planned ? "Time spent (auto-updates when you log)" : "Time spent"}</div>
-                                <div style={{ display: "flex", gap: 10 }}>
-                                  <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Day</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(spentToday.dayMin)}</div></div>
-                                  <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Month</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(spentToday.monthMin)}</div></div>
-                                  <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Year</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(spentToday.yearMin)}</div></div>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                  <div style={{ flex: "1 1 70px", textAlign: "center" }}>
+                                    <div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Day</div>
+                                    <div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtMinutesOnly(spentToday.dayMin)}</div>
+                                    <div style={{ fontSize: 9, color: INK_FAINT, marginTop: 1, fontFamily: mono }}>{fmtQty(spentToday.dayMin, 1)} d</div>
+                                  </div>
+                                  <div style={{ flex: "1 1 70px", textAlign: "center" }}>
+                                    <div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Week</div>
+                                    <div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtHoursOnly(spentToday.weekMin)}</div>
+                                    <div style={{ fontSize: 9, color: INK_FAINT, marginTop: 1, fontFamily: mono }}>{fmtQty(spentToday.weekMin, 7)} wk</div>
+                                  </div>
+                                  <div style={{ flex: "1 1 70px", textAlign: "center" }}>
+                                    <div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Month</div>
+                                    <div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtHoursOnly(spentToday.monthMin)}</div>
+                                    <div style={{ fontSize: 9, color: INK_FAINT, marginTop: 1, fontFamily: mono }}>{fmtQty(spentToday.monthMin, 30)} mo</div>
+                                  </div>
+                                  <div style={{ flex: "1 1 70px", textAlign: "center" }}>
+                                    <div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Year</div>
+                                    <div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtHoursOnly(spentToday.yearMin)}</div>
+                                    <div style={{ fontSize: 9, color: INK_FAINT, marginTop: 1, fontFamily: mono }}>{fmtQty(spentToday.yearMin, 365)} yr</div>
+                                  </div>
                                 </div>
                               </div>
                             )}
