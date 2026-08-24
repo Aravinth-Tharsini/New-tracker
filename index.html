@@ -429,6 +429,10 @@ const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Targe
 
 function LifeTracker() {
   const [page, setPage] = useState("dashboard");
+  const [insightPeriod, setInsightPeriod] = useState("month");
+  const [insightDate, setInsightDate] = useState(dateKey());
+  const [insightMonth, setInsightMonth] = useState(monthKey());
+  const [insightYear, setInsightYear] = useState(String(new Date().getFullYear()));
   const [activeTab, setActiveTab] = useState(null);
   const [expandedDailyCategory, setExpandedDailyCategory] = useState(null);
   const [catTab, setCatTab] = useState("finance");
@@ -1243,7 +1247,7 @@ function LifeTracker() {
 
       <div style={{ padding: "calc(16px + env(safe-area-inset-top)) 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
-          {page === "dashboard" ? "Dashboard" : page === "daily" ? "Daily" : page === "categories" ? "Categories" : page === "datalink" ? "Data Link" : "Analysis"}
+          {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "Data Link" : "Insights"}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button onClick={() => setShowSearch((v) => !v)} title="Search" style={{ background: "transparent", border: "none", color: showSearch ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}><Search size={16} /></button>
@@ -2602,125 +2606,67 @@ function LifeTracker() {
         </div>
       )}
 
-      {page === "analysis" && (
+      {page === "analysis" && (() => {
+        const selectedKey = insightPeriod === "day" ? insightDate : insightPeriod === "month" ? insightMonth : insightYear;
+        const expenseEntries = Object.entries(dailyLogs).flatMap(([d, log]) => (log.expenses || []).map((e) => ({ ...e, date: d })));
+        const matchesPeriod = (d) => insightPeriod === "day" ? d === insightDate : insightPeriod === "month" ? d.slice(0,7) === insightMonth : d.slice(0,4) === insightYear;
+        const periodExpenses = expenseEntries.filter((e) => matchesPeriod(e.date));
+        const periodExpense = periodExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+        const periodIncome = insightPeriod === "day" ? 0 : insightPeriod === "month" ? (Number(financeMonthly[insightMonth]?.income) || 0) : Object.entries(financeMonthly).filter(([mk]) => mk.slice(0,4) === insightYear).reduce((sum, [,v]) => sum + (Number(v?.income) || 0), 0);
+        const periodSavings = periodIncome - periodExpense;
+        const periodDays = Object.entries(dailyLogs).filter(([d]) => matchesPeriod(d));
+        const doneCount = periodDays.reduce((sum, [,log]) => sum + Object.values(log || {}).filter((r) => r && r.status === "done").length, 0);
+        const totalTracked = dailyItems.filter((i) => i.type !== "expense").length * (insightPeriod === "day" ? 1 : Math.max(1, periodDays.length));
+        const completionPct = totalTracked ? Math.round(doneCount / totalTracked * 100) : 0;
+        const previousYear = String(Number(insightYear) - 1);
+        const yearStats = (yr) => {
+          const income = Object.entries(financeMonthly).filter(([mk]) => mk.slice(0,4) === yr).reduce((sum,[,v]) => sum + (Number(v?.income)||0),0);
+          const expense = expenseEntries.filter((e)=>e.date.slice(0,4)===yr).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+          const logs = Object.entries(dailyLogs).filter(([d])=>d.slice(0,4)===yr);
+          const done = logs.reduce((sum,[,log])=>sum+Object.values(log||{}).filter((r)=>r&&r.status==="done").length,0);
+          return { income, expense, savings: income-expense, done };
+        };
+        const thisYearStats = yearStats(insightYear), prevYearStats = yearStats(previousYear);
+        const growth = (a,b) => b ? Math.round(((a-b)/Math.abs(b))*100) : null;
+        const savingsGrowth = growth(thisYearStats.savings, prevYearStats.savings);
+        const incomeGrowth = growth(thisYearStats.income, prevYearStats.income);
+        const activityGrowth = growth(thisYearStats.done, prevYearStats.done);
+        const byGroup = [...new Set(periodExpenses.map((e)=>e.group||"Other"))].map((g)=>({g, amount:periodExpenses.filter((e)=>(e.group||"Other")===g).reduce((sum,e)=>sum+(Number(e.amount)||0),0)})).sort((a,b)=>b.amount-a.amount);
+        const fmtPeriod = insightPeriod === "day" ? new Date(insightDate).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : insightPeriod === "month" ? monthLabel(insightMonth) : insightYear;
+        return (
         <div style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
-          <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-            <IconBtn onClick={exportExpensesCSV}><Download size={14} /> Export CSV</IconBtn>
-            <IconBtn onClick={exportBackupJSON}><FileJson size={14} /> Backup JSON</IconBtn>
-          </div>
-
-          {instantDurationItems.length > 0 && (
-            <>
-              <SectionLabel>Streaks</SectionLabel>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-                {instantDurationItems.map((i) => {
-                  const Icon = ICON_MAP[i.icon] || Target;
-                  const s = streaks[i.id] || 0;
-                  return (
-                    <Card key={i.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <Icon size={15} color={INK_DIM} />
-                      <span style={{ flex: 1, fontSize: 15, color: INK_DIM }}>{i.name}</span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 3, fontFamily: mono, fontSize: 16, fontWeight: 600, color: s > 0 ? BRASS : INK_FAINT }}>
-                        <Flame size={14} /> {s} {s === 1 ? "day" : "days"}
-                      </span>
-                    </Card>
-                  );
-                })}
-              </div>
-            </>
-          )}
-
-          {monthExpenses.length > 0 && (
-            <>
-              <SectionLabel>Expenses this month &middot; {monthLabel(curMonth)}</SectionLabel>
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8, marginBottom: 12 }}>
-                {monthExpenses.map((e) => e.group).filter((v, i, a) => a.indexOf(v) === i).map((g) => (
-                  <Card key={g}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>{g}</div><div style={{ fontFamily: mono, fontSize: 19, fontWeight: 600, marginTop: 3 }}>{inr(sumBy((e) => e.group === g))}</div></Card>
-                ))}
-                <Card><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Total logged</div><div style={{ fontFamily: mono, fontSize: 19, fontWeight: 600, marginTop: 3 }}>{inr(totalExpenseLogged)}</div></Card>
-                <Card><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Daily average</div><div style={{ fontFamily: mono, fontSize: 19, fontWeight: 600, marginTop: 3 }}>{inr(dailyAvgExpense)}</div></Card>
-              </div>
-            </>
-          )}
-
-          <SectionLabel>Savings</SectionLabel>
-          <Card style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 14, color: INK_FAINT }}>Monthly savings (income minus set expenses)</span>
-            <span style={{ fontFamily: mono, fontSize: 20, fontWeight: 600, color: savingsNum >= 0 ? TEAL : CORAL }}>{inr(savingsNum)}</span>
+          <Card style={{ marginBottom: 12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}><div><div style={{fontSize:18,fontWeight:700}}>Your Insights</div><div style={{fontSize:12,color:INK_FAINT}}>Track your growth by day, month and year</div></div><TrendingUp size={22} color={BRASS}/></div>
+            <div style={{display:"flex",gap:6,marginBottom:10}}>{["day","month","year"].map((x)=><ChipButton key={x} active={insightPeriod===x} onClick={()=>setInsightPeriod(x)} label={x[0].toUpperCase()+x.slice(1)}/>)}</div>
+            {insightPeriod === "day" && <TextField type="date" value={insightDate} onChange={(e)=>setInsightDate(e.target.value)} />}
+            {insightPeriod === "month" && <TextField type="month" value={insightMonth} onChange={(e)=>setInsightMonth(e.target.value)} />}
+            {insightPeriod === "year" && <TextField type="number" value={insightYear} onChange={(e)=>setInsightYear(e.target.value.slice(0,4))} placeholder="2026" />}
           </Card>
 
-          {(instantDurationItems.length > 0 || intervalItems.length > 0) && (
-            <>
-              <SectionLabel>Lifestyle</SectionLabel>
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8, marginBottom: 12 }}>
-                {instantDurationItems.filter((i) => i.type === "duration").map((i) => {
-                  const v = avg(doneRecordsFor(i.id).map((r) => r.durationMin).filter((x) => x != null));
-                  return <Card key={i.id}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Avg {i.name.toLowerCase()}</div><div style={{ fontFamily: mono, fontSize: 18, fontWeight: 600, marginTop: 3 }}>{v != null ? fmtDuration(v) : "-"}</div></Card>;
-                })}
-                {instantDurationItems.filter((i) => i.type === "instant").map((i) => {
-                  const v = avg(doneRecordsFor(i.id).map((r) => minutesSinceMidnight(r.time)));
-                  return <Card key={i.id}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Avg {i.name.toLowerCase()}</div><div style={{ fontFamily: mono, fontSize: 18, fontWeight: 600, marginTop: 3 }}>{v != null ? fmtClockFromMinutes(v) : "-"}</div></Card>;
-                })}
-                {intervalItems.map((i) => {
-                  const logs = monthDayLogs.flatMap(([, log]) => getIntervalLogs(log, i.id));
-                  const total = logs.reduce((s, w) => s + w.amount, 0);
-                  const avgPerDay = monthDayLogs.length ? round(total / monthDayLogs.length) : 0;
-                  return <Card key={i.id}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Avg {i.name.toLowerCase()} / day</div><div style={{ fontFamily: mono, fontSize: 18, fontWeight: 600, marginTop: 3 }}>{avgPerDay} {i.unit}</div></Card>;
-                })}
-                {instantDurationItems.length > 0 && <Card><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Habit completion</div><div style={{ fontFamily: mono, fontSize: 18, fontWeight: 600, marginTop: 3, color: BRASS }}>{habitCompletionPct}%</div></Card>}
-              </div>
-            </>
-          )}
-
-          <SectionLabel>Improvement</SectionLabel>
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8, marginBottom: 12 }}>
-            <Card>
-              <div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Monthly improvement</div>
-              {monthlyImprovementPct !== null ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 3, color: monthlyImprovementPct >= 0 ? TEAL : CORAL }}>{monthlyImprovementPct >= 0 ? <ArrowUp size={15} /> : <ArrowDown size={15} />}<span style={{ fontFamily: mono, fontSize: 18, fontWeight: 600 }}>{Math.abs(monthlyImprovementPct)}%</span></div>
-              ) : <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 5 }}>Add last month's data to compare</div>}
-            </Card>
-            <Card>
-              <div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Yearly improvement</div>
-              {yearlyImprovementPct !== null ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 3, color: yearlyImprovementPct >= 0 ? TEAL : CORAL }}>{yearlyImprovementPct >= 0 ? <ArrowUp size={15} /> : <ArrowDown size={15} />}<span style={{ fontFamily: mono, fontSize: 18, fontWeight: 600 }}>{Math.abs(yearlyImprovementPct)}%</span></div>
-              ) : <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 5 }}>Need a year of data to compare</div>}
-            </Card>
+          <SectionLabel>{fmtPeriod} overview</SectionLabel>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Income</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4}}>{inr(periodIncome)}</div></Card>
+            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Expense</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:CORAL}}>{inr(periodExpense)}</div></Card>
+            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Savings</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:periodSavings>=0?TEAL:CORAL}}>{inr(periodSavings)}</div></Card>
+            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Completion</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:BRASS}}>{completionPct}%</div></Card>
           </div>
 
-          <SectionLabel>Goal achievement by category</SectionLabel>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-            {goalAchievementByCat.map((c) => {
-              const Icon = c.icon; const pct = c.total ? round((c.done / c.total) * 100) : 0;
-              return (
-                <Card key={c.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Icon size={16} color={BRASS} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: INK_DIM, marginBottom: 4 }}><span>{c.label}</span><span style={{ fontFamily: mono }}>{c.done}/{c.total}</span></div>
-                    <ProgressBar pct={pct} color={TEAL} />
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+          <SectionLabel>Expense breakdown</SectionLabel>
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>{byGroup.length ? byGroup.map(({g,amount})=><Card key={g} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:14}}>{g}</span><span style={{fontFamily:mono,fontWeight:700}}>{inr(amount)}</span></Card>) : <Card><span style={{color:INK_FAINT,fontSize:14}}>No expense data for this period.</span></Card>}</div>
 
-          <SectionLabel>Savings trend &middot; last 6 months</SectionLabel>
-          <Card>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 110 }}>
-              {last6Months.map((m) => {
-                const h = Math.round((Math.abs(m.savings) / maxAbs) * 80) || 2;
-                return (
-                  <div key={m.mk} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                    <div style={{ fontSize: 11, color: INK_FAINT, fontFamily: mono }}>{m.savings !== 0 ? inr(m.savings) : "-"}</div>
-                    <div style={{ width: "70%", height: h, background: m.savings >= 0 ? TEAL : CORAL, borderRadius: 3 }} />
-                    <div style={{ fontSize: 11, color: INK_FAINT, fontFamily: mono }}>{monthLabel(m.mk).split(" ")[0]}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
+          {insightPeriod === "year" && <>
+            <SectionLabel>Yearly growth comparison</SectionLabel>
+            <Card style={{marginBottom:8}}><div style={{fontSize:13,color:INK_FAINT,marginBottom:8}}>{insightYear} compared with {previousYear}</div>
+              {[['Income growth',incomeGrowth],['Savings growth',savingsGrowth],['Activity growth',activityGrowth]].map(([label,val])=><div key={label} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:`1px solid ${LINE}`}}><span>{label}</span><span style={{fontFamily:mono,fontWeight:700,color:val===null?INK_FAINT:val>=0?TEAL:CORAL}}>{val===null?'No comparison data':`${val>=0?'↑':'↓'} ${Math.abs(val)}%`}</span></div>)}
+            </Card>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[[previousYear,prevYearStats],[insightYear,thisYearStats]].map(([yr,st])=><Card key={yr}><div style={{fontWeight:700,marginBottom:6}}>{yr}</div><div style={{fontSize:12,color:INK_DIM}}>Income {inr(st.income)}</div><div style={{fontSize:12,color:INK_DIM,marginTop:4}}>Expense {inr(st.expense)}</div><div style={{fontSize:12,color:TEAL,marginTop:4}}>Savings {inr(st.savings)}</div><div style={{fontSize:12,color:BRASS,marginTop:4}}>Activities {st.done}</div></Card>)}</div>
+          </>}
+
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}><IconBtn onClick={exportExpensesCSV}><Download size={14}/> Export CSV</IconBtn><IconBtn onClick={exportData}><FileJson size={14}/> Full Backup</IconBtn></div>
         </div>
-      )}
+        );
+      })()}
+
 
       {page === "datalink" && (
         <div style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
