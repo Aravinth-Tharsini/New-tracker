@@ -399,6 +399,24 @@ function SectionLabel({ children }) { return <div style={{ fontSize: 15, textTra
 function TextField(props) { return <input {...props} style={{ background: PANEL_2, border: "none", borderRadius: 12, padding: "13px 14px", color: INK, fontSize: 19, outline: "none", minWidth: 0, boxSizing: "border-box", width: "100%", ...props.style }} />; }
 function Select(props) { return <select {...props} style={{ background: PANEL_2, border: "none", borderRadius: 12, color: INK, fontSize: 19, padding: "13px 10px", outline: "none", minWidth: 0, boxSizing: "border-box", width: "100%", ...props.style }}>{props.children}</select>; }
 function IconBtn({ onClick, children }) { return <button onClick={onClick} style={{ background: PANEL_2, border: "none", borderRadius: 12, padding: "0 14px", height: 44, color: BRASS, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{children}</button>; }
+function IconAction({ onClick, children, disabled, tone, style }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: 34, height: 34, minWidth: 34, borderRadius: 10, padding: 0,
+        background: "transparent", border: "none",
+        color: disabled ? "#3A4048" : (tone || INK_FAINT),
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: disabled ? "default" : "pointer", flexShrink: 0,
+        ...style,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 function ProgressBar({ pct, color = BRASS }) { return <div style={{ height: 8, background: PANEL_2, borderRadius: 999, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.min(100, Math.max(0, pct))}%`, background: color, borderRadius: 999 }} /></div>; }
 function ActionButton({ onClick, label, icon: Icon, tone = BRASS, big }) {
   return <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, background: tone, border: "none", color: "#FFFFFF", borderRadius: 980, padding: big ? "17px 30px" : "13px 22px", fontSize: big ? 19 : 17, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}><Icon size={big ? 21 : 18} /> {label}</button>;
@@ -1296,11 +1314,41 @@ function LifeTracker() {
                                     </div>
                                   )}
 
-                                  <div style={{ display: "flex", gap: 8, width: "100%" }}>
-                                    {t.amount > 0 && t.paymentStatus !== "Already Paid" && <button onClick={() => logTravelExpense(t)} style={{ flex: 1, minWidth: 0, background: TEAL, border: "none", borderRadius: 10, padding: "9px 6px", color: "#FFFFFF", cursor: "pointer", fontSize: 16, fontWeight: 700 }}>Log expense</button>}
-                                    <button onClick={() => completeTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: BRASS, border: "none", borderRadius: 10, padding: "9px 6px", color: "#FFFFFF", cursor: "pointer", fontSize: 16, fontWeight: 700 }}>Done</button>
-                                    <button onClick={() => dismissTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: "rgba(255,59,48,0.12)", border: `1px solid ${CORAL}`, borderRadius: 10, padding: "9px 6px", color: CORAL, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>Dismiss</button>
-                                  </div>
+                                  {(t.notes && t.notes.length > 0) && (() => {
+                                    const scheduledDay = today === t.travelDate;
+                                    return (
+                                      <div style={{ marginBottom: 10 }}>
+                                        <div style={{ fontSize: 13, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 5 }}>Plan &amp; notes &middot; {t.notes.filter((n) => n.done).length}/{t.notes.length} done</div>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                          {t.notes.map((n) => (
+                                            <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 8, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 10, padding: "8px 10px" }}>
+                                              <button
+                                                onClick={() => scheduledDay && toggleTravelNoteDone(t.id, n.id)}
+                                                disabled={!scheduledDay}
+                                                style={{ width: 22, height: 22, borderRadius: 6, border: `1.5px solid ${n.done ? TEAL : INK_FAINT}`, background: n.done ? TEAL : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: scheduledDay ? "pointer" : "default", opacity: scheduledDay ? 1 : 0.55, flexShrink: 0 }}
+                                              >
+                                                {n.done && <Check size={14} strokeWidth={3} color="#FFFFFF" />}
+                                              </button>
+                                              <span style={{ flex: 1, fontSize: 16, color: n.done ? INK_FAINT : INK, textDecoration: n.done ? "line-through" : "none", wordBreak: "break-word" }}>{n.text}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        {!scheduledDay && <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 5 }}>Marking done is available on {t.travelDate}</div>}
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {today === t.travelDate ? (
+                                    <div style={{ display: "flex", gap: 8, width: "100%" }}>
+                                      {t.amount > 0 && t.paymentStatus !== "Already Paid" && <button onClick={() => logTravelExpense(t)} style={{ flex: 1, minWidth: 0, background: TEAL, border: "none", borderRadius: 10, padding: "9px 6px", color: "#FFFFFF", cursor: "pointer", fontSize: 16, fontWeight: 700 }}>Log expense</button>}
+                                      <button onClick={() => completeTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: BRASS, border: "none", borderRadius: 10, padding: "9px 6px", color: "#FFFFFF", cursor: "pointer", fontSize: 16, fontWeight: 700 }}>Done</button>
+                                      <button onClick={() => dismissTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: "rgba(255,59,48,0.12)", border: `1px solid ${CORAL}`, borderRadius: 10, padding: "9px 6px", color: CORAL, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>Dismiss</button>
+                                    </div>
+                                  ) : (
+                                    <div style={{ fontSize: 14, color: INK_FAINT, textAlign: "center", padding: "6px 0" }}>
+                                      {today < t.travelDate ? `Done / Dismiss available on ${t.travelDate}` : "Travel date has passed \u2014 edit or delete from Categories"}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -1580,7 +1628,7 @@ function LifeTracker() {
           <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
             {CATEGORY_DEFS.map((c) => {
               const Icon = c.icon; const active = catTab === c.id;
-              return <button key={c.id} onClick={() => { setCatTab(c.id); closeItemForm(); }} style={{ display: "flex", alignItems: "center", gap: 5, background: active ? "rgba(0,113,227,0.12)" : "transparent", border: `1px solid ${active ? BRASS_DIM : LINE}`, borderRadius: 8, padding: "6px 10px", color: active ? BRASS : INK_DIM, fontSize: 16, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}><Icon size={16} /> {c.label}</button>;
+              return <button key={c.id} onClick={() => { setCatTab(c.id); closeItemForm(); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, height: 34, background: active ? "rgba(0,113,227,0.12)" : "transparent", border: `1px solid ${active ? BRASS_DIM : LINE}`, borderRadius: 8, padding: "0 12px", color: active ? BRASS : INK_DIM, fontSize: 16, fontWeight: active ? 600 : 500, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, boxSizing: "border-box" }}><Icon size={16} /> {c.label}</button>;
             })}
           </div>
 
@@ -1589,13 +1637,13 @@ function LifeTracker() {
               <SectionLabel>Monthly money</SectionLabel>
               <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                 <div style={{ flex: "1 1 120px" }}>
-                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Month</div>
+                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Month</div>
                   <Select value={financeMonth} onChange={(e) => setFinanceMonth(e.target.value)} style={{ width: "100%" }}>
                     {last12Months.map((m) => <option key={m.mk} value={m.mk}>{monthLabel(m.mk)}</option>)}
                   </Select>
                 </div>
                 <div style={{ flex: "1 1 140px" }}>
-                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>How much money I have</div>
+                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>How much money I have</div>
                   <TextField type="number" value={financeMonthly[financeMonth]?.income ?? ""} onChange={(e) => setFinanceField(financeMonth, "income", e.target.value)} placeholder="30000" style={{ width: "100%", fontFamily: mono }} />
                 </div>
               </div>
@@ -1637,7 +1685,7 @@ function LifeTracker() {
                         </div>
                         <div style={{ display: "flex", gap: 8 }}>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Travel date</div>
+                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Travel date</div>
                             <TextField type="date" value={travelForm.travelDate} onChange={(e) => setTravelForm({ ...travelForm, travelDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                           </div>
                         </div>
@@ -1668,7 +1716,7 @@ function LifeTracker() {
                         </div>
                         <TextField type="number" placeholder="Amount" value={travelForm.amount} onChange={(e) => setTravelForm({ ...travelForm, amount: e.target.value })} style={{ fontFamily: mono }} />
                         <div>
-                          <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Payment status</div>
+                          <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Payment status</div>
                           <Select value={travelForm.paymentStatus} onChange={(e) => setTravelForm({ ...travelForm, paymentStatus: e.target.value })} style={{ width: "100%" }}>
                             <option value="Not Paid">Not Paid</option>
                             <option value="Already Paid">Already Paid</option>
@@ -1686,6 +1734,23 @@ function LifeTracker() {
                             })}
                           </div>
                         </div>
+                        <div>
+                          <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Trip plan &amp; notes (Shopping, Take wallet, Pack clothes\u2026)</div>
+                          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                            <TextField placeholder="Add a task or note" value={newTravelNoteText} onChange={(e) => setNewTravelNoteText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addNoteToTravelForm(); } }} style={{ flex: 1 }} />
+                            <IconBtn onClick={addNoteToTravelForm}><Plus size={17} /></IconBtn>
+                          </div>
+                          {(travelForm.notes || []).length > 0 && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {travelForm.notes.map((n) => (
+                                <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 8, background: PANEL_2, borderRadius: 8, padding: "8px 10px" }}>
+                                  <span style={{ flex: 1, fontSize: 16, color: n.done ? INK_FAINT : INK, textDecoration: n.done ? "line-through" : "none", wordBreak: "break-word" }}>{n.text}</span>
+                                  <button onClick={() => removeNoteFromTravelForm(n.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer", flexShrink: 0 }}><Trash2 size={15} /></button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                         <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                           <button onClick={addTravelPlan} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: "#FFFFFF", cursor: "pointer", fontSize: 17 }}>{editingTravelId ? "Save changes" : "Save trip"}</button>
                           <button onClick={cancelTravelForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 17 }}>Cancel</button>
@@ -1697,10 +1762,10 @@ function LifeTracker() {
                     {sortedTravelPlans.map((t) => {
                       const dayLabel = dayLabelFor(t.travelDate, today);
                       return (
-                      <Card key={t.id} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 17 }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
-                          <div style={{ fontSize: 15, color: INK_FAINT, marginTop: 2, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                      <Card key={t.id} style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 17, fontWeight: 600, color: INK }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
+                          <div style={{ fontSize: 15, color: INK_FAINT, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
                             {dayLabel && <span style={{ fontWeight: 700, color: BRASS }}>{dayLabel}</span>}
                             <span>{t.travelDate}</span>
                             {t.travelTime && <><span>&middot;</span><span style={{ fontWeight: 700, color: INK_DIM }}>{fmtTimeString12(t.travelTime)}</span><span>({timeOfDayLabel(t.travelTime)})</span></>}
@@ -1708,14 +1773,29 @@ function LifeTracker() {
                             {t.amount > 0 && <span style={{ fontWeight: 700, color: t.paymentStatus === "Already Paid" ? TEAL : CORAL }}>&middot; {t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}</span>}
                             {t.completed ? <span style={{ color: TEAL, fontWeight: 700 }}>&middot; completed</span> : t.dismissed ? <span>&middot; dismissed</span> : null}
                           </div>
-                          <div style={{ fontSize: 15, color: INK_FAINT, marginTop: 2 }}>Reminders: {(t.reminderOffsets && t.reminderOffsets.length ? t.reminderOffsets : (t.reminderOffset ? [t.reminderOffset] : [])).map((v) => (REMINDER_OPTIONS.find((o) => o.value === v) || {}).label).filter(Boolean).join(", ") || "none"}</div>
+                          <div style={{ fontSize: 15, color: INK_FAINT, marginTop: 4 }}>Reminders: {(t.reminderOffsets && t.reminderOffsets.length ? t.reminderOffsets : (t.reminderOffset ? [t.reminderOffset] : [])).map((v) => (REMINDER_OPTIONS.find((o) => o.value === v) || {}).label).filter(Boolean).join(", ") || "none"}</div>
+                          {(t.notes && t.notes.length > 0) && (
+                            <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                              <div style={{ fontSize: 13, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>Plan &amp; notes &middot; {t.notes.filter((n) => n.done).length}/{t.notes.length} done</div>
+                              {t.notes.map((n) => (
+                                <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <button onClick={() => toggleTravelNoteDone(t.id, n.id)} style={{ width: 20, height: 20, minWidth: 20, borderRadius: 6, border: `1.5px solid ${n.done ? TEAL : INK_FAINT}`, background: n.done ? TEAL : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, padding: 0 }}>
+                                    {n.done && <Check size={13} strokeWidth={3} color="#FFFFFF" />}
+                                  </button>
+                                  <span style={{ fontSize: 15, color: n.done ? INK_FAINT : INK_DIM, textDecoration: n.done ? "line-through" : "none" }}>{n.text}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <button onClick={() => openEditTravel(t)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={17} /></button>
-                        <button onClick={() => deleteTravelPlan(t.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Trash2 size={17} /></button>
+                        <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                          <IconAction onClick={() => openEditTravel(t)}><Pencil size={17} /></IconAction>
+                          <IconAction onClick={() => deleteTravelPlan(t.id)}><Trash2 size={17} /></IconAction>
+                        </div>
                       </Card>
                       );
                     })}
-                    {sortedTravelPlans.length === 0 && <div style={{ color: INK_FAINT, fontSize: 17, textAlign: "center", padding: "16px 0" }}>No trips added yet.</div>}
+                    {sortedTravelPlans.length === 0 && <div style={{ color: INK_FAINT, fontSize: 17, textAlign: "center", padding: "24px 0" }}>No trips added yet.</div>}
                   </div>
                 </>
               )}
@@ -1731,9 +1811,9 @@ function LifeTracker() {
                       const Icon = ICON_MAP[item.icon] || Target;
                       const valid = isItemValid(item);
                       return (
-                        <Card key={item.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <Icon size={19} color={valid ? BRASS : INK_FAINT} />
-                          <div style={{ flex: 1 }}>
+                        <Card key={item.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <Icon size={19} color={valid ? BRASS : INK_FAINT} style={{ flexShrink: 0, marginRight: 4 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 17 }}>{item.name || <span style={{ color: INK_FAINT }}>(unnamed)</span>}</div>
                             <div style={{ fontSize: 15, color: valid ? TEAL : CORAL, marginTop: 2 }}>{item.type} &middot; {valid ? "on Daily tab" : "incomplete \u2014 hidden"}</div>
                             {(item.scheduledTime || (item.days && item.days.length > 0)) && (
@@ -1742,16 +1822,18 @@ function LifeTracker() {
                               </div>
                             )}
                           </div>
-                          <div style={{ display: "flex", flexDirection: "column" }}>
-                            <button onClick={() => moveItem(item.id, -1)} disabled={idx === 0} style={{ background: "transparent", border: "none", color: idx === 0 ? "#3A4048" : INK_FAINT, cursor: idx === 0 ? "default" : "pointer", padding: 0 }}><ChevronUp size={16} /></button>
-                            <button onClick={() => moveItem(item.id, 1)} disabled={idx === dailyItems.length - 1} style={{ background: "transparent", border: "none", color: idx === dailyItems.length - 1 ? "#3A4048" : INK_FAINT, cursor: idx === dailyItems.length - 1 ? "default" : "pointer", padding: 0 }}><ChevronDown size={16} /></button>
+                          <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
+                            <IconAction onClick={() => moveItem(item.id, -1)} disabled={idx === 0} style={{ width: 28, height: 17 }}><ChevronUp size={16} /></IconAction>
+                            <IconAction onClick={() => moveItem(item.id, 1)} disabled={idx === dailyItems.length - 1} style={{ width: 28, height: 17 }}><ChevronDown size={16} /></IconAction>
                           </div>
-                          <button onClick={() => openEditItemForm(item)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={17} /></button>
-                          <button onClick={() => deleteItem(item.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Trash2 size={17} /></button>
+                          <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                            <IconAction onClick={() => openEditItemForm(item)}><Pencil size={17} /></IconAction>
+                            <IconAction onClick={() => deleteItem(item.id)}><Trash2 size={17} /></IconAction>
+                          </div>
                         </Card>
                       );
                     })}
-                    {dailyItems.length === 0 && <div style={{ color: INK_FAINT, fontSize: 17, textAlign: "center", padding: "16px 0" }}>No routines yet.</div>}
+                    {dailyItems.length === 0 && <div style={{ color: INK_FAINT, fontSize: 17, textAlign: "center", padding: "24px 0" }}>No routines yet.</div>}
                   </div>
                 </>
               ) : (
@@ -1780,15 +1862,15 @@ function LifeTracker() {
 
                     {itemForm.type === "interval" && (
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <div style={{ flex: "1 1 90px" }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Interval (hrs)</div><TextField type="number" value={itemForm.intervalHours} onChange={(e) => setItemForm((f) => ({ ...f, intervalHours: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} /></div>
-                        <div style={{ flex: "1 1 90px" }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Amount</div><TextField type="number" value={itemForm.amount} onChange={(e) => setItemForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} /></div>
-                        <div style={{ flex: "0 1 70px" }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Unit</div><TextField value={itemForm.unit} onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value }))} style={{ width: "100%" }} /></div>
+                        <div style={{ flex: "1 1 90px" }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Interval (hrs)</div><TextField type="number" value={itemForm.intervalHours} onChange={(e) => setItemForm((f) => ({ ...f, intervalHours: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} /></div>
+                        <div style={{ flex: "1 1 90px" }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Amount</div><TextField type="number" value={itemForm.amount} onChange={(e) => setItemForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} /></div>
+                        <div style={{ flex: "0 1 70px" }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Unit</div><TextField value={itemForm.unit} onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value }))} style={{ width: "100%" }} /></div>
                       </div>
                     )}
 
                     {(itemForm.type === "instant" || itemForm.type === "duration") && (
                       <div>
-                        <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Scheduled time (optional — used for reminders)</div>
+                        <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Scheduled time (optional — used for reminders)</div>
                         <TextField type="time" value={itemForm.scheduledTime} onChange={(e) => setItemForm((f) => ({ ...f, scheduledTime: e.target.value }))} style={{ width: "100%", fontFamily: mono }} />
                       </div>
                     )}
@@ -1852,7 +1934,7 @@ function LifeTracker() {
                                 <button onClick={() => markShoppingPlanning(list.id)} style={{ background: "transparent", border: `1px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 16, cursor: "pointer" }}>Reopen</button>
                               </>
                             )}
-                            <button onClick={() => deleteShoppingList(list.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer", marginLeft: "auto" }}><Trash2 size={17} /></button>
+                            <IconAction onClick={() => deleteShoppingList(list.id)} style={{ marginLeft: "auto" }}><Trash2 size={17} /></IconAction>
                           </div>
                           {previewing && (
                             <div style={{ marginTop: 12, borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
@@ -1878,7 +1960,7 @@ function LifeTracker() {
                         </Card>
                       );
                     })}
-                    {shoppingLists.length === 0 && <div style={{ color: INK_FAINT, fontSize: 17, textAlign: "center", padding: "16px 0" }}>No shopping lists yet.</div>}
+                    {shoppingLists.length === 0 && <div style={{ color: INK_FAINT, fontSize: 17, textAlign: "center", padding: "24px 0" }}>No shopping lists yet.</div>}
                   </div>
                 </>
               ) : (
@@ -1887,16 +1969,16 @@ function LifeTracker() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                       <div style={{ flex: "1 1 160px" }}>
-                        <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Shop name</div>
+                        <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Shop name</div>
                         <TextField list="shop-name-suggestions" placeholder="e.g. Big Bazaar" value={shoppingForm.shopName} onChange={(e) => setShoppingForm((f) => ({ ...f, shopName: e.target.value }))} style={{ width: "100%", boxSizing: "border-box" }} />
                         <datalist id="shop-name-suggestions">{savedShopNames.map((s) => <option key={s} value={s} />)}</datalist>
                       </div>
                       <div style={{ flex: "1 1 160px" }}>
-                        <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Location</div>
+                        <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Location</div>
                         <TextField placeholder="e.g. MG Road" value={shoppingForm.location} onChange={(e) => setShoppingForm((f) => ({ ...f, location: e.target.value }))} style={{ width: "100%", boxSizing: "border-box" }} />
                       </div>
                       <div style={{ flex: "1 1 160px" }}>
-                        <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Planned shopping date</div>
+                        <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Planned shopping date</div>
                         <TextField type="date" value={shoppingForm.shoppingDate} onChange={(e) => setShoppingForm((f) => ({ ...f, shoppingDate: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
                       </div>
                     </div>
@@ -1910,40 +1992,40 @@ function LifeTracker() {
                             <div key={it.id} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 12, boxSizing: "border-box" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <span style={{ fontSize: 15, fontWeight: 700, color: INK_FAINT, textTransform: "uppercase", letterSpacing: "0.05em" }}>Item {idx + 1}</span>
-                                <button onClick={() => removeShoppingItem(it.id)} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer", borderRadius: 8 }}><Trash2 size={18} /></button>
+                                <IconAction onClick={() => removeShoppingItem(it.id)} style={{ width: 28, height: 28, minWidth: 28, borderRadius: 8 }}><Trash2 size={18} /></IconAction>
                               </div>
 
                               <div>
-                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Item name</div>
+                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Item name</div>
                                 <TextField placeholder="e.g. Tomatoes" value={it.name} onChange={(e) => updateShoppingItem(it.id, { name: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }} />
                               </div>
 
                               <div>
-                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Category</div>
+                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Category</div>
                                 <TextField list="shopping-category-suggestions" placeholder="e.g. Vegetables" value={it.category} onChange={(e) => updateShoppingItem(it.id, { category: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }} />
                               </div>
 
                               <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 10 }}>
                                 <div>
-                                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Unit</div>
+                                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Unit</div>
                                   <Select value={it.unit} onChange={(e) => updateShoppingItem(it.id, { unit: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }}>
                                     <option value="each">Each</option>
                                     <option value="kg">Kg</option>
                                   </Select>
                                 </div>
                                 <div>
-                                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Quantity</div>
+                                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Quantity</div>
                                   <TextField type="number" inputMode="decimal" placeholder="1" value={it.qty} onChange={(e) => updateShoppingItem(it.id, { qty: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
                                 </div>
                               </div>
 
                               <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 10 }}>
                                 <div>
-                                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>MRP / Price</div>
+                                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>MRP / Price</div>
                                   <TextField type="number" inputMode="decimal" placeholder="0" value={it.price} onChange={(e) => updateShoppingItem(it.id, { price: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
                                 </div>
                                 <div>
-                                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Discount %</div>
+                                  <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Discount %</div>
                                   <TextField type="number" inputMode="decimal" placeholder="0" value={it.discountPct} onChange={(e) => updateShoppingItem(it.id, { discountPct: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
                                 </div>
                               </div>
@@ -2003,9 +2085,9 @@ function LifeTracker() {
                         {(repaymentCategoryClass(repaymentForm.category) === "gold" || repaymentCategoryClass(repaymentForm.category) === "loan") ? (
                           <>
                             <div style={{ display: "flex", gap: 8 }}>
-                              <div style={{ flex: 1 }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Loan amount</div><TextField type="number" value={repaymentForm.loanAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, loanAmount: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
+                              <div style={{ flex: 1 }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Loan amount</div><TextField type="number" value={repaymentForm.loanAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, loanAmount: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
                               <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Interest rate %</div>
+                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Interest rate %</div>
                                 <div style={{ display: "flex", gap: 4 }}>
                                   <TextField type="number" value={repaymentForm.interestRate} onChange={(e) => setRepaymentForm({ ...repaymentForm, interestRate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                                   <Select value={repaymentForm.interestRateUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, interestRateUnit: e.target.value })} style={{ width: 92 }}>
@@ -2022,9 +2104,9 @@ function LifeTracker() {
                               </div>
                             )}
                             <div style={{ display: "flex", gap: 8 }}>
-                              <div style={{ flex: 1 }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Duration</div><TextField type="number" value={repaymentForm.durationValue} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
+                              <div style={{ flex: 1 }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Duration</div><TextField type="number" value={repaymentForm.durationValue} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
                               <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Unit</div>
+                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Unit</div>
                                 <Select value={repaymentForm.durationUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationUnit: e.target.value })} style={{ width: "100%" }}>
                                   <option value="Weeks">Weeks</option>
                                   <option value="Months">Months</option>
@@ -2037,11 +2119,11 @@ function LifeTracker() {
                             )}
                             <div style={{ display: "flex", gap: 8 }}>
                               <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Received date</div>
+                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Received date</div>
                                 <TextField type="date" value={repaymentForm.receivedDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, receivedDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                               </div>
                               <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Due date</div>
+                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Due date</div>
                                 <TextField type="date" value={repaymentForm.dueDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                               </div>
                             </div>
@@ -2055,9 +2137,9 @@ function LifeTracker() {
                           <>
                             <TextField type="number" placeholder="Plan amount" value={repaymentForm.planAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, planAmount: e.target.value })} style={{ fontFamily: mono }} />
                             <div style={{ display: "flex", gap: 8 }}>
-                              <div style={{ flex: 1 }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Plan duration</div><TextField type="number" value={repaymentForm.durationValue} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
+                              <div style={{ flex: 1 }}><div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Plan duration</div><TextField type="number" value={repaymentForm.durationValue} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
                               <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Unit</div>
+                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Unit</div>
                                 <Select value={repaymentForm.durationUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationUnit: e.target.value })} style={{ width: "100%" }}>
                                   <option value="Days">Days</option>
                                   <option value="Weeks">Weeks</option>
@@ -2067,7 +2149,7 @@ function LifeTracker() {
                               </div>
                             </div>
                             <div>
-                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Start date</div>
+                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Start date</div>
                               <TextField type="date" value={repaymentForm.startDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, startDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                             </div>
                             {repaymentForm.planAmount && repaymentForm.startDate && (
@@ -2083,11 +2165,11 @@ function LifeTracker() {
                         {repaymentCategoryClass(repaymentForm.category) === "simple" && (
                           <>
                             <div>
-                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Next due date</div>
+                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Next due date</div>
                               <TextField type="date" value={repaymentForm.dueDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                             </div>
                             <div>
-                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Payment frequency</div>
+                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Payment frequency</div>
                               <Select value={repaymentForm.frequency} onChange={(e) => setRepaymentForm({ ...repaymentForm, frequency: e.target.value })} style={{ width: "100%" }}>
                                 <option value="Daily">Daily</option>
                                 <option value="Weekly">Weekly</option>
@@ -2097,7 +2179,7 @@ function LifeTracker() {
                             </div>
                             {(repaymentForm.frequency === "Monthly" || repaymentForm.frequency === "Yearly") && (
                               <div>
-                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Due window (day of month, e.g. 1 to 10)</div>
+                                <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Due window (day of month, e.g. 1 to 10)</div>
                                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                                   <TextField type="number" min="1" max="31" placeholder="From" value={repaymentForm.dueDayStart} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDayStart: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
                                   <span style={{ color: INK_FAINT, fontSize: 16 }}>to</span>
@@ -2108,7 +2190,7 @@ function LifeTracker() {
                           </>
                         )}
                         <div>
-                          <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Remind me before due date</div>
+                          <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Remind me before due date</div>
                           <Select value={repaymentForm.reminderOffset} onChange={(e) => setRepaymentForm({ ...repaymentForm, reminderOffset: e.target.value })} style={{ width: "100%" }}>
                             {REMINDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                           </Select>
@@ -2127,8 +2209,8 @@ function LifeTracker() {
                       const overdue = !r.paid && r.dueDate && r.dueDate < today;
                       return (
                         <Card key={r.id}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 19, fontWeight: 600, textDecoration: r.paid ? "line-through" : "none", color: r.paid ? INK_FAINT : INK }}>{r.name || r.category}{r.purpose ? ` \u00b7 ${r.purpose}` : ""}</div>
                               <div style={{ fontSize: 15, color: INK_FAINT, marginTop: 4, fontFamily: mono, display: "flex", flexDirection: "column", gap: 2 }}>
                                 <span>{r.category}{cls === "gold" ? ` \u00b7 ${r.goldWeight || "?"}g${r.location ? ` \u00b7 ${r.location}` : ""}` : ""}{cls === "simple" && r.frequency ? ` \u00b7 ${r.frequency}${r.dueDayStart ? ` (day ${r.dueDayStart}${r.dueDayEnd ? `\u2013${r.dueDayEnd}` : ""})` : ""}` : ""}</span>
@@ -2143,7 +2225,7 @@ function LifeTracker() {
                                 )}
                               </div>
                             </div>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
                               <span style={{ fontFamily: mono, fontSize: 19, color: CORAL }}>{inr(r.amount)}</span>
                               {cls === "loan" ? (
                                 r.paid ? (
@@ -2152,10 +2234,10 @@ function LifeTracker() {
                                   <button onClick={() => payNextEmi(r.id)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "5px 10px", color: "#FFFFFF", cursor: "pointer", fontSize: 15, fontWeight: 600 }}>Pay EMI</button>
                                 )
                               ) : (
-                                <button onClick={() => toggleRepaymentPaid(r.id)} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${r.paid ? BRASS : INK_FAINT}`, background: r.paid ? BRASS : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{r.paid && <Check size={18} strokeWidth={3} color={BG} />}</button>
+                                <button onClick={() => toggleRepaymentPaid(r.id)} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${r.paid ? BRASS : INK_FAINT}`, background: r.paid ? BRASS : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>{r.paid && <Check size={18} strokeWidth={3} color={BG} />}</button>
                               )}
-                              <button onClick={() => openEditRepayment(r)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={17} /></button>
-                              <button onClick={() => deleteRepayment(r.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Trash2 size={17} /></button>
+                              <IconAction onClick={() => openEditRepayment(r)}><Pencil size={17} /></IconAction>
+                              <IconAction onClick={() => deleteRepayment(r.id)}><Trash2 size={17} /></IconAction>
                             </div>
                           </div>
                           {(cls === "gold" || cls === "loan") && (
@@ -2187,7 +2269,7 @@ function LifeTracker() {
                         </Card>
                       );
                     })}
-                    {sortedRepayments.length === 0 && <div style={{ color: INK_FAINT, fontSize: 17, textAlign: "center", padding: "16px 0" }}>No repayments added yet.</div>}
+                    {sortedRepayments.length === 0 && <div style={{ color: INK_FAINT, fontSize: 17, textAlign: "center", padding: "24px 0" }}>No repayments added yet.</div>}
                   </div>
                 </>
               ) : (
@@ -2235,14 +2317,14 @@ function LifeTracker() {
                     <TextField placeholder="Goal title" value={goalForm.title} onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })} />
                     {!isRoutineCategory && (
                       <div>
-                        <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Month</div>
+                        <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Month</div>
                         <Select value={goalForm.month} onChange={(e) => setGoalForm({ ...goalForm, month: e.target.value })} style={{ width: "100%" }}>
                           {goalMonthOptions.map((mk) => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
                         </Select>
                       </div>
                     )}
                     <div>
-                      <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Sequence number</div>
+                      <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Sequence number</div>
                       <TextField type="number" placeholder="1" value={goalForm.sequence} onChange={(e) => setGoalForm({ ...goalForm, sequence: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                     </div>
                     {catTab === "finance" && (
@@ -2252,16 +2334,16 @@ function LifeTracker() {
                       <>
                         <div style={{ display: "flex", gap: 8 }}>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Start date</div>
+                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Start date</div>
                             <TextField type="date" value={goalForm.startDate} onChange={(e) => setGoalForm({ ...goalForm, startDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                           </div>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Expected year</div>
+                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Expected year</div>
                             <TextField type="date" value={goalForm.expectedYear} onChange={(e) => setGoalForm({ ...goalForm, expectedYear: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                           </div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Frequency</div>
+                          <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Frequency</div>
                           <Select value={goalForm.frequency} onChange={(e) => setGoalForm({ ...goalForm, frequency: e.target.value })} style={{ width: "100%" }}>
                             <option value="Daily">Daily</option>
                             <option value="Weekly">Weekly</option>
@@ -2271,11 +2353,11 @@ function LifeTracker() {
                         {goalForm.frequency === "Weekly" && (
                           <>
                             <div>
-                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Days per week</div>
+                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Days per week</div>
                               <TextField type="number" min="0" max="7" value={goalForm.daysPerWeek} onChange={(e) => setGoalForm({ ...goalForm, daysPerWeek: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                             </div>
                             <div>
-                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Specific days (optional — overrides count above)</div>
+                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Specific days (optional — overrides count above)</div>
                               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                                 {WEEKDAYS.map((day) => {
                                   const sel = goalForm.specificDays.includes(day);
@@ -2287,16 +2369,16 @@ function LifeTracker() {
                         )}
                         <div style={{ display: "flex", gap: 8 }}>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Start time</div>
+                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Start time</div>
                             <TextField type="time" value={goalForm.startTime} onChange={(e) => setGoalForm({ ...goalForm, startTime: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                           </div>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Time per session (min)</div>
+                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Time per session (min)</div>
                             <TextField type="number" value={goalForm.sessionMinutes} onChange={(e) => setGoalForm({ ...goalForm, sessionMinutes: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                           </div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Track activity on Daily tab as</div>
+                          <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Track activity on Daily tab as</div>
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             <ChipButton label="OK / Done" active={goalForm.trackingType === "instant"} onClick={() => setGoalForm({ ...goalForm, trackingType: "instant" })} />
                             <ChipButton label="Start / Stop Timer" active={goalForm.trackingType === "duration"} onClick={() => setGoalForm({ ...goalForm, trackingType: "duration" })} />
@@ -2306,15 +2388,15 @@ function LifeTracker() {
                         {goalForm.trackingType === "interval" && (
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                             <div style={{ flex: "1 1 90px" }}>
-                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Interval (hrs)</div>
+                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Interval (hrs)</div>
                               <TextField type="number" value={goalForm.intervalHours} onChange={(e) => setGoalForm({ ...goalForm, intervalHours: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                             </div>
                             <div style={{ flex: "1 1 90px" }}>
-                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Amount</div>
+                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Amount</div>
                               <TextField type="number" value={goalForm.intervalAmount} onChange={(e) => setGoalForm({ ...goalForm, intervalAmount: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                             </div>
                             <div style={{ flex: "0 1 70px" }}>
-                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 4 }}>Unit</div>
+                              <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 6 }}>Unit</div>
                               <TextField value={goalForm.intervalUnit} onChange={(e) => setGoalForm({ ...goalForm, intervalUnit: e.target.value })} style={{ width: "100%" }} />
                             </div>
                           </div>
@@ -2334,9 +2416,9 @@ function LifeTracker() {
                   const pct = catTab === "finance" && g.targetAmount ? round((allocated / g.targetAmount) * 100) : null;
                   return (
                     <Card key={g.id}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 13, color: INK_FAINT, border: `1px solid ${LINE}`, borderRadius: 5, padding: "1px 6px", fontFamily: mono }}>#{g.sequence || 0}</span>
                             <span style={{ fontSize: 19, fontWeight: 600, textDecoration: g.done ? "line-through" : "none", color: g.done ? INK_FAINT : INK }}>{g.title}</span>
                           </div>
@@ -2346,7 +2428,7 @@ function LifeTracker() {
                             </div>
                           )}
                         </div>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
                           {catTab === "finance" && g.targetAmount > 0 ? (
                             g.done ? (
                               <button onClick={() => toggleGoalDone(g.id)} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "5px 10px", color: "#FFFFFF", cursor: "pointer", fontSize: 15, fontWeight: 600 }}>Closed</button>
@@ -2354,10 +2436,10 @@ function LifeTracker() {
                               <button onClick={() => pct >= 100 && toggleGoalDone(g.id)} disabled={pct < 100} style={{ background: pct >= 100 ? TEAL : "transparent", border: `1px solid ${pct >= 100 ? TEAL : LINE}`, borderRadius: 8, padding: "5px 10px", color: pct >= 100 ? BG : INK_FAINT, cursor: pct >= 100 ? "pointer" : "default", fontSize: 15, fontWeight: 600 }}>Close goal</button>
                             )
                           ) : (
-                            <button onClick={() => toggleGoalDone(g.id)} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${g.done ? BRASS : INK_FAINT}`, background: g.done ? BRASS : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{g.done && <Check size={18} strokeWidth={3} color={BG} />}</button>
+                            <button onClick={() => toggleGoalDone(g.id)} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${g.done ? BRASS : INK_FAINT}`, background: g.done ? BRASS : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>{g.done && <Check size={18} strokeWidth={3} color={BG} />}</button>
                           )}
-                          <button onClick={() => openEditGoal(g)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={17} /></button>
-                          <button onClick={() => deleteGoal(g.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Trash2 size={17} /></button>
+                          <IconAction onClick={() => openEditGoal(g)}><Pencil size={17} /></IconAction>
+                          <IconAction onClick={() => deleteGoal(g.id)}><Trash2 size={17} /></IconAction>
                         </div>
                       </div>
                       {catTab === "finance" && g.targetAmount > 0 && (
@@ -2394,7 +2476,7 @@ function LifeTracker() {
                             )}
                             {spentToday && (
                               <div>
-                                <div style={{ fontSize: 13, textTransform: "uppercase", color: INK_FAINT, marginBottom: 4 }}>{planned ? "Time spent (auto-updates when you log)" : "Time spent"}</div>
+                                <div style={{ fontSize: 13, textTransform: "uppercase", color: INK_FAINT, marginBottom: 6 }}>{planned ? "Time spent (auto-updates when you log)" : "Time spent"}</div>
                                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                                   <div style={{ flex: "1 1 70px", textAlign: "center" }}>
                                     <div style={{ fontSize: 12, textTransform: "uppercase", color: INK_FAINT }}>Day</div>
@@ -2425,7 +2507,7 @@ function LifeTracker() {
                     </Card>
                   );
                 })}
-                {categoryGoals.length === 0 && <div style={{ color: INK_FAINT, fontSize: 17, textAlign: "center", padding: "16px 0" }}>No goals yet in this category.</div>}
+                {categoryGoals.length === 0 && <div style={{ color: INK_FAINT, fontSize: 17, textAlign: "center", padding: "24px 0" }}>No goals yet in this category.</div>}
               </div>
                 </>
               )}
