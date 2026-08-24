@@ -330,6 +330,24 @@ function computeLoggedTimeTotals(itemId, dailyLogs, todayStr) {
   }
   return { dayMin, monthMin, yearMin };
 }
+function daysToYMD(totalDaysIn) {
+  const absDays = Math.abs(totalDaysIn);
+  const years = Math.floor(absDays / 365.25);
+  const months = Math.floor((absDays % 365.25) / 30.4375);
+  const days = Math.round(absDays - years * 365.25 - months * 30.4375);
+  const parts = [];
+  if (years > 0) parts.push(`${years} ${years === 1 ? "year" : "years"}`);
+  if (months > 0) parts.push(`${months} ${months === 1 ? "month" : "months"}`);
+  if (days > 0 || parts.length === 0) parts.push(`${days} ${days === 1 ? "day" : "days"}`);
+  return { years, months, days, label: parts.join(", ") };
+}
+function planSpan(startDate, endDate) {
+  if (!startDate || !endDate) return null;
+  const d1 = new Date(startDate), d2 = new Date(endDate);
+  if (isNaN(d1) || isNaN(d2)) return null;
+  const totalDays = Math.round((d2 - d1) / 86400000);
+  return { totalDays, reversed: totalDays < 0, ...daysToYMD(totalDays) };
+}
 const CATEGORY_DEFS = [
   { id: "finance", label: "Finance", icon: Wallet },
   { id: "career", label: "Career growth", icon: Briefcase },
@@ -1915,25 +1933,17 @@ function LifeTracker() {
                       );
                     })()}
                   </div>
-                </Card>
-              )}
-              {isRoutineCategory && categoryGoals.some((g) => !g.done && g.trackingType) && (
-                <Card style={{ marginBottom: 12 }}>
-                  <SectionLabel>Goal Summary — time spent</SectionLabel>
-                  <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 10 }}>Actual time logged from the Daily tab, updated automatically every time you save an activity.</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {categoryGoals.filter((g) => !g.done && g.trackingType).map((g) => {
-                      const t = computeLoggedTimeTotals(`goal-${g.id}`, dailyLogs, today);
-                      return (
-                        <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
-                          <div style={{ flex: "1 1 40%", fontSize: 12, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.title}</div>
-                          <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Day</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(t.dayMin)}</div></div>
-                          <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Month</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(t.monthMin)}</div></div>
-                          <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Year</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(t.yearMin)}</div></div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {(() => {
+                    const spans = categoryGoals.filter((g) => !g.done && g.startDate && g.expectedYear).map((g) => planSpan(g.startDate, g.expectedYear)).filter(Boolean);
+                    if (spans.length === 0) return null;
+                    const totalDays = spans.reduce((s, sp) => s + Math.abs(sp.totalDays), 0);
+                    const combined = daysToYMD(totalDays);
+                    return (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${LINE}`, fontSize: 11, color: INK_DIM }}>
+                        Covers <span style={{ color: BRASS, fontWeight: 600 }}>{totalDays} {totalDays === 1 ? "day" : "days"}</span> total across {spans.length} active {spans.length === 1 ? "goal" : "goals"} &mdash; {combined.label}
+                      </div>
+                    );
+                  })()}
                 </Card>
               )}
               {showAddGoal && (
@@ -2076,6 +2086,31 @@ function LifeTracker() {
                           </div>
                         </div>
                       )}
+                      {ROUTINE_CATEGORIES.includes(g.category) && (() => {
+                        const span = g.startDate && g.expectedYear ? planSpan(g.startDate, g.expectedYear) : null;
+                        const spentToday = g.trackingType ? computeLoggedTimeTotals(`goal-${g.id}`, dailyLogs, today) : null;
+                        const planned = g.sessionMinutes ? computeRoutineTotals(g) : null;
+                        if (!span && !spentToday) return null;
+                        return (
+                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${LINE}` }}>
+                            {span && (
+                              <div style={{ fontSize: 11, color: INK_DIM, marginBottom: spentToday ? 8 : 0 }}>
+                                Plan: {g.startDate} &rarr; {g.expectedYear} &middot; <span style={{ color: BRASS, fontWeight: 600 }}>{span.label}</span> ({span.totalDays} days)
+                              </div>
+                            )}
+                            {spentToday && (
+                              <div>
+                                <div style={{ fontSize: 10, textTransform: "uppercase", color: INK_FAINT, marginBottom: 4 }}>{planned ? "Time spent (auto-updates when you log)" : "Time spent"}</div>
+                                <div style={{ display: "flex", gap: 10 }}>
+                                  <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Day</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(spentToday.dayMin)}</div></div>
+                                  <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Month</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(spentToday.monthMin)}</div></div>
+                                  <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 9, textTransform: "uppercase", color: INK_FAINT }}>Year</div><div style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: TEAL }}>{fmtDuration(spentToday.yearMin)}</div></div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </Card>
                   );
                 })}
