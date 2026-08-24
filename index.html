@@ -79,7 +79,7 @@ import {
   Target, Clock, Pencil, ChevronUp, ChevronDown, Bell, BellOff, Flame, Download, FileJson,
   Plane, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
-  Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye,
+  Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Search, Undo2, Home as HomeIcon,
 } from "lucide-react";
 
 const INK = "#1D1D1F";
@@ -428,7 +428,7 @@ function ChipButton({ onClick, label, active }) {
 const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalHours: 2, amount: 250, unit: "ml", groups: {}, days: [], scheduledTime: "" });
 
 function LifeTracker() {
-  const [page, setPage] = useState("daily");
+  const [page, setPage] = useState("dashboard");
   const [activeTab, setActiveTab] = useState(null);
   const [expandedDailyCategory, setExpandedDailyCategory] = useState(null);
   const [catTab, setCatTab] = useState("finance");
@@ -448,6 +448,10 @@ function LifeTracker() {
   const [syncStatus, setSyncStatus] = useState("idle");
   const [lastSyncedAt, setLastSyncedAt] = useState("");
   const [importMessage, setImportMessage] = useState("");
+  const [undoAction, setUndoAction] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const undoTimerRef = useRef(null);
   const fileInputRef = useRef(null);
   const syncTimerRef = useRef(null);
   const didInitialPull = useRef(false);
@@ -520,6 +524,7 @@ function LifeTracker() {
     reader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target.result);
+        if (!window.confirm("Importing will replace current app data. Continue?")) return;
         applyImportedData(parsed);
         setImportMessage("Data imported successfully.");
       } catch (err) {
@@ -747,7 +752,18 @@ function LifeTracker() {
       payRepayment(r);
     }
   };
+  const showUndo = (message, undo) => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoAction({ message, undo });
+    undoTimerRef.current = setTimeout(() => setUndoAction(null), 6000);
+  };
   const deleteExpense = (id) => {
+    const removed = todayLog.expenses.find((e) => e.id === id);
+    if (!removed) return;
+    setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, expenses: log.expenses.filter((e) => e.id !== id) } }; });
+    showUndo("Expense deleted", () => setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, expenses: [...log.expenses, removed] } }; }));
+  };
+  const deleteExpenseOld = (id) => {
     setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, expenses: log.expenses.filter((e) => e.id !== id) } }; });
   };
 
@@ -1227,15 +1243,53 @@ function LifeTracker() {
 
       <div style={{ padding: "calc(16px + env(safe-area-inset-top)) 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
-          {page === "daily" ? "Daily" : page === "categories" ? "Categories" : "Analysis"}
+          {page === "dashboard" ? "Dashboard" : page === "daily" ? "Daily" : page === "categories" ? "Categories" : page === "datalink" ? "Data Link" : "Analysis"}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={() => setShowSearch((v) => !v)} title="Search" style={{ background: "transparent", border: "none", color: showSearch ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}><Search size={16} /></button>
           <button onClick={toggleReminders} title={remindersEnabled ? "Reminders on" : "Reminders off"} style={{ background: "transparent", border: "none", color: remindersEnabled ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}>
             {remindersEnabled ? <Bell size={16} /> : <BellOff size={16} />}
           </button>
           <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 14, color: INK_FAINT, fontFamily: mono }}><CalendarDays size={13} /> {formatDateLong(new Date())}</span>
         </div>
       </div>
+
+      {showSearch && <div style={{ padding: "0 16px 8px" }}><TextField value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search expenses, goals, repayments..." autoFocus /><div style={{ fontSize: 12, color: INK_FAINT, marginTop: 5 }}>{searchQuery ? `Search is ready. Results are available in Daily, Categories and Analysis as you browse.` : "Type a keyword to quickly find your records."}</div></div>}
+
+      {page === "dashboard" && (() => {
+        const pendingActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status !== "done").length;
+        const dueRepayments = todaysRepaymentReminders.length;
+        const completedActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
+        const totalActivities = validItems.filter((i) => i.type !== "interval").length;
+        const todayExpenses = todayLog.expenses.reduce((sum, e) => sum + e.amount, 0);
+        return <div style={{ padding: "6px 16px 16px", flex: 1, width: "100%" }}>
+          <Card style={{ marginBottom: 10, background: "linear-gradient(135deg, #FFFFFF, #F2F7FF)" }}>
+            <div style={{ fontSize: 13, color: INK_FAINT }}>TODAY'S OVERVIEW</div>
+            <div style={{ fontSize: 25, fontWeight: 700, marginTop: 4 }}>Good day! Keep going.</div>
+            <div style={{ fontSize: 14, color: INK_DIM, marginTop: 4 }}>{formatDateLong(new Date())}</div>
+          </Card>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+            <Card><div style={{ fontSize: 12, color: INK_FAINT }}>ACTIVITIES</div><div style={{ fontSize: 22, fontFamily: mono, fontWeight: 700 }}>{completedActivities}/{totalActivities}</div><div style={{ fontSize: 12, color: INK_DIM }}>completed</div></Card>
+            <Card><div style={{ fontSize: 12, color: INK_FAINT }}>EXPENSES</div><div style={{ fontSize: 22, fontFamily: mono, fontWeight: 700 }}>{inr(todayExpenses)}</div><div style={{ fontSize: 12, color: INK_DIM }}>today</div></Card>
+            <Card><div style={{ fontSize: 12, color: INK_FAINT }}>DUE</div><div style={{ fontSize: 22, fontFamily: mono, fontWeight: 700, color: dueRepayments ? CORAL : INK }}>{dueRepayments}</div><div style={{ fontSize: 12, color: INK_DIM }}>repayments</div></Card>
+            <Card><div style={{ fontSize: 12, color: INK_FAINT }}>PENDING</div><div style={{ fontSize: 22, fontFamily: mono, fontWeight: 700 }}>{pendingActivities}</div><div style={{ fontSize: 12, color: INK_DIM }}>activities</div></Card>
+          </div>
+          <SectionLabel>Quick actions</SectionLabel>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }}>
+            <ActionButton onClick={() => setPage("daily")} label="Open Daily" icon={CalendarDays} tone={BRASS} />
+            <IconBtn onClick={() => setPage("categories")}><Plus size={15} /> Add</IconBtn>
+            <IconBtn onClick={() => setPage("analysis")}><TrendingUp size={15} /> Reports</IconBtn>
+          </div>
+          <SectionLabel>Upcoming attention</SectionLabel>
+          <Card>
+            {dueRepayments === 0 && todaysTravelPlans.length === 0 && pendingActivities === 0 ? <div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {dueRepayments > 0 && <div style={{ fontSize: 14 }}>🔔 {dueRepayments} repayment{dueRepayments > 1 ? "s" : ""} need attention</div>}
+              {todaysTravelPlans.length > 0 && <div style={{ fontSize: 14 }}>✈️ {todaysTravelPlans.length} trip reminder{todaysTravelPlans.length > 1 ? "s" : ""}</div>}
+              {pendingActivities > 0 && <div style={{ fontSize: 14 }}>✓ {pendingActivities} activity{pendingActivities > 1 ? "ies" : ""} still pending</div>}
+            </div>}
+          </Card>
+        </div>;
+      })()}
 
       {page === "daily" && (
         <div style={{ padding: "6px 0 12px", flex: 1, minHeight: 0, width: "100%" }}>
@@ -2759,8 +2813,10 @@ function doPost(e) {
         </div>
       )}
 
+      {undoAction && <div style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: 74, zIndex: 20, width: "calc(100% - 32px)", maxWidth: 448, background: INK, color: "#fff", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: CARD_SHADOW }}><span style={{ flex: 1, fontSize: 14 }}>{undoAction.message}</span><button onClick={() => { undoAction.undo(); setUndoAction(null); }} style={{ background: "transparent", border: "none", color: BRASS_DIM, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Undo2 size={14} /> Undo</button></div>}
+
       <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px)", position: "sticky", bottom: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {[{ id: "daily", label: "Daily", icon: CalendarDays }, { id: "categories", label: "Categories", icon: LayoutGrid }, { id: "analysis", label: "Analysis", icon: TrendingUp }, { id: "datalink", label: "Data Link", icon: Link2 }].map((p) => {
+        {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Daily", icon: CalendarDays }, { id: "categories", label: "Categories", icon: LayoutGrid }, { id: "analysis", label: "Analysis", icon: TrendingUp }, { id: "datalink", label: "Data Link", icon: Link2 }].map((p) => {
           const Icon = p.icon; const active = page === p.id;
           return <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 0 8px", background: "transparent", border: "none", cursor: "pointer", color: active ? BRASS : INK_FAINT }}><Icon size={18} strokeWidth={active ? 2.2 : 1.8} /><span style={{ fontSize: 11, fontWeight: active ? 600 : 500, fontFamily: disp }}>{p.label}</span></button>;
         })}
