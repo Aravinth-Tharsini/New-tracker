@@ -48,45 +48,118 @@ body{padding-bottom:calc(76px + env(safe-area-inset-bottom));}
 
 <div id="root"></div>
   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script type="text/babel" data-type="module" data-presets="react">
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-// ---- storage polyfill: saves data in this browser using localStorage ----
+// ---- durable local storage: IndexedDB first, localStorage migration/fallback ----
+const STORAGE_DB = "LifeTrackerDB";
+const STORAGE_STORE = "kv";
 const PREFIX = "life-tracker:";
-function readAll() {
+let storageDbPromise = null;
+function openStorageDB() {
+  if (storageDbPromise) return storageDbPromise;
+  storageDbPromise = new Promise((resolve, reject) => {
+    if (!window.indexedDB) return reject(new Error("IndexedDB unavailable"));
+    const req = indexedDB.open(STORAGE_DB, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORAGE_STORE)) db.createObjectStore(STORAGE_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error("IndexedDB open failed"));
+  });
+  return storageDbPromise;
+}
+async function idbGet(key) {
+  const db = await openStorageDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(STORAGE_STORE, "readonly").objectStore(STORAGE_STORE).get(key);
+    req.onsuccess = () => resolve(req.result ?? null);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbSet(key, value) {
+  const db = await openStorageDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(STORAGE_STORE, "readwrite").objectStore(STORAGE_STORE).put(value, key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbDelete(key) {
+  const db = await openStorageDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(STORAGE_STORE, "readwrite").objectStore(STORAGE_STORE).delete(key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbKeys() {
+  const db = await openStorageDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(STORAGE_STORE, "readonly").objectStore(STORAGE_STORE).getAllKeys();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+function legacyReadAll() {
   try {
     const raw = localStorage.getItem(PREFIX + "__store__");
     return raw ? JSON.parse(raw) : {};
   } catch (e) { return {}; }
 }
-function writeAll(store) { localStorage.setItem(PREFIX + "__store__", JSON.stringify(store)); }
+let storageMigrated = false;
+async function migrateLegacyStorageOnce() {
+  if (storageMigrated) return;
+  storageMigrated = true;
+  try {
+    const legacy = legacyReadAll();
+    const keys = await idbKeys();
+    if (!keys.length && legacy && typeof legacy === "object") {
+      for (const [k, v] of Object.entries(legacy)) await idbSet(k, v);
+    }
+  } catch (e) {}
+}
 window.storage = {
   async get(key, shared = false) {
-    const store = readAll();
-    if (!(key in store)) return null;
-    return { key, value: store[key], shared };
+    try {
+      await migrateLegacyStorageOnce();
+      const value = await idbGet(key);
+      if (value === null) return null;
+      return { key, value, shared };
+    } catch (e) {
+      const store = legacyReadAll();
+      return key in store ? { key, value: store[key], shared } : null;
+    }
   },
   async set(key, value, shared = false) {
-    const store = readAll();
-    store[key] = value;
-    writeAll(store);
+    try { await idbSet(key, value); }
+    catch (e) {
+      try { const store = legacyReadAll(); store[key] = value; localStorage.setItem(PREFIX + "__store__", JSON.stringify(store)); } catch (_) {}
+    }
     return { key, value, shared };
   },
   async delete(key, shared = false) {
-    const store = readAll();
-    const existed = key in store;
-    delete store[key];
-    writeAll(store);
-    return existed ? { key, deleted: true, shared } : null;
+    try { await idbDelete(key); return { key, deleted: true, shared }; }
+    catch (e) { return null; }
   },
   async list(prefix = "", shared = false) {
-    const store = readAll();
-    const keys = Object.keys(store).filter((k) => k.startsWith(prefix));
-    return { keys, prefix, shared };
+    try {
+      await migrateLegacyStorageOnce();
+      const keys = (await idbKeys()).filter((k) => String(k).startsWith(prefix));
+      return { keys, prefix, shared };
+    } catch (e) {
+      const store = legacyReadAll();
+      return { keys: Object.keys(store).filter((k) => k.startsWith(prefix)), prefix, shared };
+    }
   },
 };
-// ---- end storage polyfill ----
+// Ask the browser for persistent storage when supported. This does NOT prevent an intentional
+// "Clear site data"; the cloud backup below is the disaster-recovery layer.
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+// ---- end durable local storage ----
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
@@ -264,7 +337,8 @@ function toCSV(rows) {
   if (!rows.length) return "";
   const headers = Object.keys(rows[0]);
   const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  return [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");
+  return [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("
+");
 }
 function downloadFile(filename, content, mime) {
   const blob = new Blob([content], { type: mime });
@@ -458,6 +532,16 @@ function ChipButton({ onClick, label, active }) {
 
 const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalHours: 2, amount: 250, unit: "ml", groups: {}, days: [], scheduledTime: "" });
 
+// ---- Google Drive automatic backup ----
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const DRIVE_FOLDER_NAME = "Life Tracker Backups";
+const DRIVE_BACKUP_NAME = "Life-Tracker-Backup.json";
+const getDriveSetting = async (key) => { try { const r=await window.storage.get(key,false); return r ? JSON.parse(r.value) : null; } catch { return null; } };
+const setDriveSetting = async (key,value) => { try { await window.storage.set(key,JSON.stringify(value),false); } catch {} };
+const driveFetch = async (url,token,options={}) => { const headers=new Headers(options.headers||{}); headers.set("Authorization",`Bearer ${token}`); const res=await fetch(url,{...options,headers}); if(!res.ok){let msg=`${res.status} ${res.statusText}`; try{const j=await res.json();msg=j.error?.message||msg;}catch{} throw new Error(msg);} return res; };
+const findOrCreateDriveFolder = async (token) => { const q=encodeURIComponent(`name='${DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`); const r=await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name)`,token); const d=await r.json(); if(d.files?.[0])return d.files[0].id; const c=await driveFetch("https://www.googleapis.com/drive/v3/files",token,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:DRIVE_FOLDER_NAME,mimeType:"application/vnd.google-apps.folder"})}); return (await c.json()).id; };
+const driveMultipart = async (token,fileId,payload,folderId) => { const boundary="life_tracker_"+Date.now(); const media=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}); const meta={name:DRIVE_BACKUP_NAME,mimeType:"application/json",...(folderId&&!fileId?{parents:[folderId]}:{})}; const crlf="\r\n"; const body=new Blob(["--"+boundary+crlf,"Content-Type: application/json; charset=UTF-8"+crlf+crlf,JSON.stringify(meta),crlf+"--"+boundary+crlf,"Content-Type: application/json"+crlf+crlf,media,crlf+"--"+boundary+"--"]); const url=fileId?`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&fields=id,name,modifiedTime`:"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime"; const r=await driveFetch(url,token,{method:fileId?"PATCH":"POST",headers:{"Content-Type":`multipart/related; boundary=${boundary}`},body}); return r.json(); };
+
 function LifeTracker() {
   const [page, setPage] = useState("dashboard");
   const [insightPeriod, setInsightPeriod] = useState("month");
@@ -478,10 +562,22 @@ function LifeTracker() {
   const [savedShoppingCategories, setSavedShoppingCategories] = useState(["Groceries", "Vegetables", "Electronics"]);
   const [remindersEnabled, setRemindersEnabled] = useState(false);
   const [dataMode, setDataMode] = useState("offline");
+  const [driveClientId,setDriveClientId]=useState(""); const [driveConnected,setDriveConnected]=useState(false); const [driveStatus,setDriveStatus]=useState("idle"); const [driveLastBackup,setDriveLastBackup]=useState(null); const [driveMessage,setDriveMessage]=useState(""); const driveTokenRef=useRef(null); const driveClientRef=useRef(null); const driveTimerRef=useRef(null);
+  useEffect(()=>{(async()=>{const [cid,c,l]=await Promise.all([getDriveSetting("driveClientId"),getDriveSetting("driveConnected"),getDriveSetting("driveLastBackupAt")]); if(cid)setDriveClientId(cid); if(c)setDriveConnected(true); if(l)setDriveLastBackup(l);})();},[]);
+  const getDriveToken=async(interactive=true)=>{if(!window.google?.accounts?.oauth2)throw new Error("Google Identity Services is still loading. Try again."); if(!driveClientId.trim())throw new Error("Enter your Google OAuth Web Client ID first."); if(!driveClientRef.current) driveClientRef.current=window.google.accounts.oauth2.initTokenClient({client_id:driveClientId.trim(),scope:DRIVE_SCOPE,callback:()=>{}}); return new Promise((resolve,reject)=>{driveClientRef.current.callback=r=>{if(r?.error)return reject(new Error(r.error_description||r.error)); driveTokenRef.current=r.access_token; resolve(r.access_token);}; driveClientRef.current.requestAccessToken({prompt:interactive?'consent':''});});};
+  const makeBackup=()=>({format:"life-tracker-backup",version:3,app:"Life Tracker",exportedAt:new Date().toISOString(),data:{dailyItems,dailyLogs,goals,repayments,travelPlans,financeMonthly,shoppingLists,savedShopNames,savedShoppingCategories,remindersEnabled}});
+  const backupToDrive=async(silent=false)=>{if(!driveConnected)return; try{setDriveStatus("syncing"); if(!silent)setDriveMessage("Backing up…"); const token=await getDriveToken(false); const folder=await findOrCreateDriveFolder(token); const id=await getDriveSetting("driveBackupFileId"); const result=await driveMultipart(token,id,makeBackup(),folder); await setDriveSetting("driveBackupFileId",result.id); const now=new Date().toISOString(); await setDriveSetting("driveLastBackupAt",now); setDriveLastBackup(now); setDriveStatus("success"); setDriveMessage("Backup completed.");}catch(e){setDriveStatus("error");setDriveMessage("Backup failed: "+e.message);}};
+  const connectDrive=async()=>{try{setDriveStatus("syncing"); const token=await getDriveToken(true); await findOrCreateDriveFolder(token); await setDriveSetting("driveClientId",driveClientId.trim()); await setDriveSetting("driveConnected",true); setDriveConnected(true); setDriveStatus("success"); setDriveMessage("Google Drive connected."); await backupToDrive(false);}catch(e){setDriveStatus("error");setDriveMessage("Connection failed: "+e.message);}};
+  const restoreFromDrive=async()=>{try{setDriveStatus("syncing"); const token=await getDriveToken(true); let id=await getDriveSetting("driveBackupFileId"); if(!id){const q=encodeURIComponent(`name='${DRIVE_BACKUP_NAME}' and trashed=false`); const r=await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime desc&fields=files(id,modifiedTime)`,token); const d=await r.json(); id=d.files?.[0]?.id;} if(!id)throw new Error("No Life Tracker backup found."); const r=await driveFetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`,token); const payload=await r.json(); const d=payload.data||payload; if(!d?.dailyItems)throw new Error("Invalid Life Tracker backup."); setDailyItems(d.dailyItems||[]); setDailyLogs(d.dailyLogs||{}); setGoals(d.goals||[]); setRepayments(d.repayments||[]); setTravelPlans(d.travelPlans||[]); setFinanceMonthly(d.financeMonthly||{}); setShoppingLists(d.shoppingLists||[]); setSavedShopNames(d.savedShopNames||[]); setSavedShoppingCategories(d.savedShoppingCategories||[]); if(typeof d.remindersEnabled==='boolean')setRemindersEnabled(d.remindersEnabled); setDriveStatus("success"); setDriveMessage("Backup restored successfully.");}catch(e){setDriveStatus("error");setDriveMessage("Restore failed: "+e.message);}};
+  useEffect(()=>{if(!loaded||!driveConnected)return; clearTimeout(driveTimerRef.current); driveTimerRef.current=setTimeout(()=>backupToDrive(true),5000); return()=>clearTimeout(driveTimerRef.current);},[loaded,dailyItems,dailyLogs,goals,repayments,travelPlans,financeMonthly,shoppingLists,savedShopNames,savedShoppingCategories,remindersEnabled,driveConnected]);
+
   const [sheetUrl, setSheetUrl] = useState("");
   const [sheetUrlDraft, setSheetUrlDraft] = useState("");
   const [syncStatus, setSyncStatus] = useState("idle");
   const [lastSyncedAt, setLastSyncedAt] = useState("");
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(true);
+  const [lastBackupAt, setLastBackupAt] = useState("");
+  const [backupStatus, setBackupStatus] = useState("idle");
   const [importMessage, setImportMessage] = useState("");
   const [pendingImportData, setPendingImportData] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
@@ -529,10 +625,37 @@ function LifeTracker() {
   useEffect(() => { if (loaded) window.storage.set("dataMode", JSON.stringify(dataMode), false).catch(() => {}); }, [dataMode, loaded]);
   useEffect(() => { if (loaded) window.storage.set("sheetUrl", JSON.stringify(sheetUrl), false).catch(() => {}); }, [sheetUrl, loaded]);
   useEffect(() => { if (loaded) window.storage.set("lastSyncedAt", JSON.stringify(lastSyncedAt), false).catch(() => {}); }, [lastSyncedAt, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("autoBackupEnabled", JSON.stringify(autoBackupEnabled), false).catch(() => {}); }, [autoBackupEnabled, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("lastBackupAt", JSON.stringify(lastBackupAt), false).catch(() => {}); }, [lastBackupAt, loaded]);
+
+  // ---- Automatic local backup snapshot ----
+  const buildFullBackupObject = () => ({
+    format: "life-tracker-backup", version: 2, app: "Life Tracker",
+    exportedAt: new Date().toISOString(),
+    dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly,
+    shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled
+  });
+  const saveAutomaticLocalBackup = async () => {
+    if (!loaded || !autoBackupEnabled) return;
+    try {
+      const payload = JSON.stringify(buildFullBackupObject());
+      await window.storage.set("__latest_backup__", payload, false);
+      const stamp = new Date().toISOString();
+      setLastBackupAt(stamp);
+      setBackupStatus("success");
+    } catch (e) { setBackupStatus("error"); }
+  };
+  const backupTimerRef = useRef(null);
+  useEffect(() => {
+    if (!loaded || !autoBackupEnabled) return;
+    if (backupTimerRef.current) clearTimeout(backupTimerRef.current);
+    backupTimerRef.current = setTimeout(() => saveAutomaticLocalBackup(), 1200);
+    return () => clearTimeout(backupTimerRef.current);
+  }, [loaded, autoBackupEnabled, dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled]);
 
   // ---- Data Link: export / import (offline backup) ----
   const exportData = () => {
-    const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, exportedAt: new Date().toISOString() };
+    const payload = buildFullBackupObject();
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -574,6 +697,15 @@ function LifeTracker() {
     setPendingImportData(null);
   };
   const cancelImport = () => setPendingImportData(null);
+  const restoreLatestLocalBackup = async () => {
+    try {
+      const r = await window.storage.get("__latest_backup__", false);
+      if (!r || !r.value) { setImportMessage("No automatic backup is available on this device."); return; }
+      const data = JSON.parse(r.value);
+      setPendingImportData(data);
+      setImportMessage("Latest automatic backup found. Confirm restore below.");
+    } catch (e) { setImportMessage("Could not read the automatic backup."); }
+  };
 
   // ---- Data Link: online sync (Google Sheet via Apps Script Web App URL) ----
   const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, syncedAt: new Date().toISOString() });
@@ -2808,6 +2940,8 @@ function LifeTracker() {
 
       {page === "datalink" && (
         <div style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
+          <Card style={{marginBottom:9}}><SectionLabel>Google Drive automatic backup</SectionLabel><div style={{fontSize:14,color:INK_FAINT,lineHeight:1.5,marginBottom:8}}>Automatically backs up your complete Life Tracker data after changes.</div><TextField value={driveClientId} onChange={e=>setDriveClientId(e.target.value)} placeholder="Google OAuth Web Client ID" style={{width:"100%",fontSize:14,marginBottom:7}}/><div style={{display:"flex",gap:6,flexWrap:"wrap"}}><ActionButton onClick={connectDrive} label={driveConnected?"Reconnect Google Drive":"Connect Google Drive"} icon={Cloud} tone={BRASS}/><button onClick={()=>backupToDrive(false)} disabled={!driveConnected} style={{padding:"6px 12px",borderRadius:8,border:`1.5px solid ${LINE}`,background:"transparent",color:INK_DIM}}>Backup now</button><button onClick={restoreFromDrive} disabled={!driveConnected} style={{padding:"6px 12px",borderRadius:8,border:`1.5px solid ${BRASS}`,background:"transparent",color:BRASS}}>Restore</button></div><div style={{fontSize:13,marginTop:8,color:driveStatus==="error"?CORAL:TEAL}}>{driveConnected?"● Connected":"○ Not connected"}{driveLastBackup?` • Last backup ${fmtTime(driveLastBackup)}`:""}</div>{driveMessage&&<div style={{fontSize:13,color:INK_DIM,marginTop:5}}>{driveMessage}</div>}<div style={{fontSize:12,color:INK_FAINT,marginTop:7,lineHeight:1.45}}>One-time setup: create a Google Cloud OAuth Web Client ID and enable the Google Drive API, then paste the client ID above. The app uses the drive.file scope and manages its own backup file.</div></Card>
+
           <SectionLabel>Storage mode</SectionLabel>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
             <button onClick={() => setDataMode("offline")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "11px 8px", borderRadius: 10, background: dataMode === "offline" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "offline" ? BRASS : LINE}`, cursor: "pointer" }}>
@@ -2823,9 +2957,12 @@ function LifeTracker() {
           {dataMode === "offline" && (
             <Card style={{ marginBottom: 9 }}>
               <SectionLabel>Backup &amp; restore</SectionLabel>
-              <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Your data is saved only on this device. Export a backup file regularly, and import it to restore your data on a new device or browser.</div>
+              <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Your data now auto-saves to the device using IndexedDB. An automatic recovery snapshot is also kept locally. Export a JSON backup for an extra copy; Google Sheet sync can be used as the cloud copy.</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <ActionButton onClick={exportData} label="Export backup" icon={Download} tone={BRASS} />
+                 <button onClick={restoreLatestLocalBackup} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1.5px solid ${TEAL}`, color: TEAL, borderRadius: 8, padding: "6px 12px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>
+                   <RefreshCw size={15} /> Restore latest auto-backup
+                 </button>
                 <button onClick={exportExpensesCSV} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>
                   <Download size={15} /> Export expense CSV
                 </button>
