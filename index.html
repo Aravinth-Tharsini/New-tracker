@@ -2288,18 +2288,21 @@ function LifeTracker() {
               {isRoutineCategory && categoryGoals.some((g) => !g.done && g.sessionMinutes) && (
                 <Card style={{ marginBottom: 9 }}>
                   <SectionLabel>Planned time (from schedule)</SectionLabel>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 8px" }}>
                     {(() => {
                       const totals = categoryGoals.filter((g) => !g.done).reduce((acc, g) => {
                         const t = computeRoutineTotals(g);
                         return { dailyMin: acc.dailyMin + t.dailyMin, weeklyMin: acc.weeklyMin + t.weeklyMin, monthlyMin: acc.monthlyMin + t.monthlyMin, yearlyMin: acc.yearlyMin + t.yearlyMin };
                       }, { dailyMin: 0, weeklyMin: 0, monthlyMin: 0, yearlyMin: 0 });
+                      const cellStyle = { flex: "1 1 40%", minWidth: 92 };
+                      const labelStyle = { fontSize: 11, textTransform: "uppercase", color: INK_FAINT, whiteSpace: "nowrap" };
+                      const valueStyle = { fontFamily: mono, fontSize: 17, fontWeight: 600, marginTop: 2, color: BRASS, whiteSpace: "nowrap" };
                       return (
                         <>
-                          <div style={{ flex: 1 }}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Per day</div><div style={{ fontFamily: mono, fontSize: 17, fontWeight: 600, marginTop: 2, color: BRASS }}>{fmtDuration(totals.dailyMin)}</div></div>
-                          <div style={{ flex: 1 }}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Per week</div><div style={{ fontFamily: mono, fontSize: 17, fontWeight: 600, marginTop: 2, color: BRASS }}>{fmtDuration(totals.weeklyMin)}</div></div>
-                          <div style={{ flex: 1 }}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Per month</div><div style={{ fontFamily: mono, fontSize: 17, fontWeight: 600, marginTop: 2, color: BRASS }}>{fmtDuration(totals.monthlyMin)}</div></div>
-                          <div style={{ flex: 1 }}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Per year</div><div style={{ fontFamily: mono, fontSize: 17, fontWeight: 600, marginTop: 2, color: BRASS }}>{fmtDuration(totals.yearlyMin)}</div></div>
+                          <div style={cellStyle}><div style={labelStyle}>Per day</div><div style={valueStyle}>{fmtDuration(totals.dailyMin)}</div></div>
+                          <div style={cellStyle}><div style={labelStyle}>Per week</div><div style={valueStyle}>{fmtDuration(totals.weeklyMin)}</div></div>
+                          <div style={cellStyle}><div style={labelStyle}>Per month</div><div style={valueStyle}>{fmtDuration(totals.monthlyMin)}</div></div>
+                          <div style={cellStyle}><div style={labelStyle}>Per year</div><div style={valueStyle}>{fmtDuration(totals.yearlyMin)}</div></div>
                         </>
                       );
                     })()}
