@@ -2643,13 +2643,14 @@ function LifeTracker() {
                               </div>
                             )}
                             {span && (
-                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 7 }}>
-                                {g.goalType && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.goalType}</span>}
-                                <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.frequency || "Daily"}</span>
-                                {g.startTime && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.startTime}</span>}
-                                {g.reminderEnabled && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>Reminder {g.reminderMinutes || 15}m</span>}
-                              </div>
-                              {g.notes && <div style={{ fontSize: 13, color: INK_DIM, marginBottom: 7 }}>Target: {g.notes}</div>}
+                              <div>
+                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 7 }}>
+                                  {g.goalType && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.goalType}</span>}
+                                  <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.frequency || "Daily"}</span>
+                                  {g.startTime && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.startTime}</span>}
+                                  {g.reminderEnabled && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>Reminder {g.reminderMinutes || 15}m</span>}
+                                </div>
+                                {g.notes && <div style={{ fontSize: 13, color: INK_DIM, marginBottom: 7 }}>Target: {g.notes}</div>}
                               </div>
                             )}
                             {elapsedDays != null && (
