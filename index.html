@@ -734,12 +734,15 @@ function LifeTracker() {
   // Mobile Recharge) let the amount be edited here first, while the reminder schedule itself stays fixed.
   const payRepaymentQuick = (r) => {
     if (REPAYMENT_VARIABLE_CATEGORIES.includes(r.category)) {
-      const amt = parseFloat(getFlow(`repay-${r.id}`).amount);
+      const flow = getFlow(`repay-${r.id}`);
+      const amt = parseFloat(flow.amount);
       if (!amt || amt <= 0) return;
       const cls = repaymentCategoryClass(r.category);
-      setRepayments((prev) => prev.map((x) => (x.id !== r.id ? x : { ...x, amount: amt, ...(cls === "recharge" ? { planAmount: amt } : {}) })));
-      payRepayment({ ...r, amount: amt });
-      setFlow(`repay-${r.id}`, { amount: "" });
+      const durationValue = cls === "recharge" && flow.durationValue !== undefined && flow.durationValue !== "" ? parseFloat(flow.durationValue) : r.durationValue;
+      const durationUnit = cls === "recharge" && flow.durationUnit ? flow.durationUnit : r.durationUnit;
+      setRepayments((prev) => prev.map((x) => (x.id !== r.id ? x : { ...x, amount: amt, ...(cls === "recharge" ? { planAmount: amt, durationValue, durationUnit } : {}) })));
+      payRepayment({ ...r, amount: amt, durationValue, durationUnit });
+      setFlow(`repay-${r.id}`, { amount: "", durationValue: "", durationUnit: "" });
     } else {
       payRepayment(r);
     }
@@ -1383,9 +1386,22 @@ function LifeTracker() {
                                         {!variable && <span style={{ fontFamily: mono, fontSize: 16, color: CORAL, flexShrink: 0 }}>{inr(r.amount)}</span>}
                                       </div>
                                       {variable ? (
-                                        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                                          <TextField type="number" placeholder={`Amount (last ${inr(r.amount)})`} value={getFlow(`repay-${r.id}`).amount || ""} onChange={(e) => setFlow(`repay-${r.id}`, { amount: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
-                                          <button onClick={() => payRepaymentQuick(r)} style={{ background: TEAL, border: "none", borderRadius: 7, padding: "0 12px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>Pay</button>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+                                          <div style={{ display: "flex", gap: 6 }}>
+                                            <TextField type="number" placeholder={`Amount (last ${inr(r.amount)})`} value={getFlow(`repay-${r.id}`).amount || ""} onChange={(e) => setFlow(`repay-${r.id}`, { amount: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
+                                            <button onClick={() => payRepaymentQuick(r)} style={{ background: TEAL, border: "none", borderRadius: 7, padding: "0 12px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>Pay</button>
+                                          </div>
+                                          {cls === "recharge" && (
+                                            <div style={{ display: "flex", gap: 6 }}>
+                                              <TextField type="number" placeholder={`Plan duration (last ${r.durationValue || "-"})`} value={getFlow(`repay-${r.id}`).durationValue ?? ""} onChange={(e) => setFlow(`repay-${r.id}`, { durationValue: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
+                                              <Select value={getFlow(`repay-${r.id}`).durationUnit || r.durationUnit || "Days"} onChange={(e) => setFlow(`repay-${r.id}`, { durationUnit: e.target.value })} style={{ flex: 1 }}>
+                                                <option value="Days">Days</option>
+                                                <option value="Weeks">Weeks</option>
+                                                <option value="Months">Months</option>
+                                                <option value="Years">Years</option>
+                                              </Select>
+                                            </div>
+                                          )}
                                         </div>
                                       ) : (
                                         <button onClick={() => payRepaymentQuick(r)} style={{ width: "100%", marginTop: 6, background: TEAL, border: "none", borderRadius: 7, padding: "6px 0", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>{cls === "loan" ? "Pay EMI" : "Pay"}</button>
