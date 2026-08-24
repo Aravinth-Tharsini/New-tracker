@@ -278,6 +278,7 @@ const DEFAULT_EXPENSE_GROUPS = {
   Fuel: ["Petrol", "Diesel"],
   "Health Care": ["Grooming", "Medical", "Pharmacy"],
   Travel: ["Car", "Train", "Bus", "Flight", "Other"],
+  Shopping: ["Shopping list"],
   Other: ["Shopping", "Bills", "Entertainment", "Personal"],
 };
 // Groups whose payments are driven from the saved Repayment Due data instead of manual entry;
@@ -369,7 +370,17 @@ const CATEGORY_DEFS = [
   { id: "health", label: "Healthcare", icon: HeartPulse },
   { id: "trip", label: "Trip", icon: Plane },
   { id: "activity", label: "Daily Routine", icon: Activity },
+  { id: "shopping", label: "Shopping List", icon: ShoppingBag },
 ];
+function shoppingItemFinalAmount(it) {
+  const price = Number(it.price) || 0;
+  const qty = Number(it.qty) || 0;
+  const disc = Math.min(100, Math.max(0, Number(it.discountPct) || 0));
+  return round(price * qty * (1 - disc / 100));
+}
+function shoppingListTotal(list) {
+  return round((list.items || []).reduce((s, it) => s + (it.finalAmount != null ? it.finalAmount : shoppingItemFinalAmount(it)), 0));
+}
 const GOAL_CATEGORY_DEFS = CATEGORY_DEFS.filter((c) => ["finance", "career", "health"].includes(c.id));
 const DAILY_TAB_CATEGORY_DEFS = [
   { id: "expense", label: "Expense", icon: Receipt },
@@ -381,7 +392,7 @@ const DAILY_TAB_CATEGORY_DEFS = [
 // Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
 const DAILY_EXPENSE_GROUPS = Object.fromEntries(Object.entries(DEFAULT_EXPENSE_GROUPS).filter(([g]) => !REPAYMENT_LINKED_EXPENSE_GROUPS.includes(g)));
-const EXPENSE_GROUP_ICON = { Food: UtensilsCrossed, Grocery: ShoppingBag, Fuel: Car, "Health Care": HeartPulse, Travel: Plane, Other: Receipt };
+const EXPENSE_GROUP_ICON = { Food: UtensilsCrossed, Grocery: ShoppingBag, Fuel: Car, "Health Care": HeartPulse, Travel: Plane, Shopping: ShoppingBag, Other: Receipt };
 
 function Card({ children, style }) { return <div style={{ background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 16, padding: "14px 16px", ...style }}>{children}</div>; }
 function SectionLabel({ children }) { return <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: INK_FAINT, marginBottom: 8, fontWeight: 600 }}>{children}</div>; }
@@ -409,6 +420,9 @@ function LifeTracker() {
   const [repayments, setRepayments] = useState([]);
   const [travelPlans, setTravelPlans] = useState([]);
   const [financeMonthly, setFinanceMonthly] = useState({});
+  const [shoppingLists, setShoppingLists] = useState([]);
+  const [savedShopNames, setSavedShopNames] = useState([]);
+  const [savedShoppingCategories, setSavedShoppingCategories] = useState(["Groceries", "Vegetables", "Electronics"]);
   const [remindersEnabled, setRemindersEnabled] = useState(false);
   const [dataMode, setDataMode] = useState("offline");
   const [sheetUrl, setSheetUrl] = useState("");
@@ -436,8 +450,8 @@ function LifeTracker() {
 
   useEffect(() => {
     (async () => {
-      const keys = ["dailyItems", "dailyLogs", "goals", "repayments", "travelPlans", "financeMonthly", "remindersEnabled", "dataMode", "sheetUrl", "lastSyncedAt"];
-      const setters = [setDailyItems, setDailyLogs, setGoals, setRepayments, setTravelPlans, setFinanceMonthly, setRemindersEnabled, setDataMode, setSheetUrl, setLastSyncedAt];
+      const keys = ["dailyItems", "dailyLogs", "goals", "repayments", "travelPlans", "financeMonthly", "shoppingLists", "savedShopNames", "savedShoppingCategories", "remindersEnabled", "dataMode", "sheetUrl", "lastSyncedAt"];
+      const setters = [setDailyItems, setDailyLogs, setGoals, setRepayments, setTravelPlans, setFinanceMonthly, setShoppingLists, setSavedShopNames, setSavedShoppingCategories, setRemindersEnabled, setDataMode, setSheetUrl, setLastSyncedAt];
       for (let i = 0; i < keys.length; i++) {
         try { const r = await window.storage.get(keys[i], false); if (r && r.value) setters[i](JSON.parse(r.value)); } catch (e) {}
       }
@@ -450,6 +464,9 @@ function LifeTracker() {
   useEffect(() => { if (loaded) window.storage.set("repayments", JSON.stringify(repayments), false).catch(() => {}); }, [repayments, loaded]);
   useEffect(() => { if (loaded) window.storage.set("travelPlans", JSON.stringify(travelPlans), false).catch(() => {}); }, [travelPlans, loaded]);
   useEffect(() => { if (loaded) window.storage.set("financeMonthly", JSON.stringify(financeMonthly), false).catch(() => {}); }, [financeMonthly, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("shoppingLists", JSON.stringify(shoppingLists), false).catch(() => {}); }, [shoppingLists, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("savedShopNames", JSON.stringify(savedShopNames), false).catch(() => {}); }, [savedShopNames, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("savedShoppingCategories", JSON.stringify(savedShoppingCategories), false).catch(() => {}); }, [savedShoppingCategories, loaded]);
   useEffect(() => { if (loaded) window.storage.set("remindersEnabled", JSON.stringify(remindersEnabled), false).catch(() => {}); }, [remindersEnabled, loaded]);
   useEffect(() => { if (loaded) window.storage.set("dataMode", JSON.stringify(dataMode), false).catch(() => {}); }, [dataMode, loaded]);
   useEffect(() => { if (loaded) window.storage.set("sheetUrl", JSON.stringify(sheetUrl), false).catch(() => {}); }, [sheetUrl, loaded]);
@@ -457,7 +474,7 @@ function LifeTracker() {
 
   // ---- Data Link: export / import (offline backup) ----
   const exportData = () => {
-    const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, remindersEnabled, exportedAt: new Date().toISOString() };
+    const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -474,6 +491,9 @@ function LifeTracker() {
     if (data.repayments) setRepayments(data.repayments);
     if (data.travelPlans) setTravelPlans(data.travelPlans);
     if (data.financeMonthly) setFinanceMonthly(data.financeMonthly);
+    if (data.shoppingLists) setShoppingLists(data.shoppingLists);
+    if (data.savedShopNames) setSavedShopNames(data.savedShopNames);
+    if (data.savedShoppingCategories) setSavedShoppingCategories(data.savedShoppingCategories);
     if (data.remindersEnabled !== undefined) setRemindersEnabled(data.remindersEnabled);
     return true;
   };
@@ -492,7 +512,7 @@ function LifeTracker() {
   };
 
   // ---- Data Link: online sync (Google Sheet via Apps Script Web App URL) ----
-  const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, remindersEnabled, syncedAt: new Date().toISOString() });
+  const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, syncedAt: new Date().toISOString() });
   const pushToSheet = async () => {
     if (!sheetUrl) return;
     setSyncStatus("syncing");
@@ -708,6 +728,47 @@ function LifeTracker() {
   };
   const deleteExpense = (id) => {
     setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, expenses: log.expenses.filter((e) => e.id !== id) } }; });
+  };
+
+  // ---- Smart Shopping List ----
+  const blankShoppingItem = () => ({ id: "si" + Date.now() + Math.random().toString(36).slice(2, 7), name: "", category: savedShoppingCategories[0] || "", unit: "each", price: "", discountPct: "", qty: "1" });
+  const blankShoppingForm = () => ({ id: null, shopName: "", location: "", items: [blankShoppingItem()] });
+  const [shoppingForm, setShoppingForm] = useState(null);
+  const openNewShoppingForm = () => setShoppingForm(blankShoppingForm());
+  const openEditShoppingForm = (list) => setShoppingForm({ id: list.id, shopName: list.shopName, location: list.location || "", items: list.items.map((it) => ({ ...it })) });
+  const closeShoppingForm = () => setShoppingForm(null);
+  const updateShoppingItem = (itemId, patch) => setShoppingForm((f) => ({ ...f, items: f.items.map((it) => (it.id !== itemId ? it : { ...it, ...patch })) }));
+  const addShoppingItem = () => setShoppingForm((f) => ({ ...f, items: [...f.items, blankShoppingItem()] }));
+  const removeShoppingItem = (itemId) => setShoppingForm((f) => ({ ...f, items: f.items.filter((it) => it.id !== itemId) }));
+  const shoppingFormTotal = shoppingForm ? round(shoppingForm.items.reduce((s, it) => s + shoppingItemFinalAmount(it), 0)) : 0;
+  const saveShoppingForm = () => {
+    const shopName = (shoppingForm.shopName || "").trim();
+    if (!shopName) return;
+    const cleanItems = shoppingForm.items.filter((it) => it.name.trim()).map((it) => ({ ...it, finalAmount: shoppingItemFinalAmount(it) }));
+    if (!savedShopNames.some((s) => s.toLowerCase() === shopName.toLowerCase())) setSavedShopNames((prev) => [...prev, shopName]);
+    cleanItems.forEach((it) => {
+      const cat = (it.category || "").trim();
+      if (cat && !savedShoppingCategories.some((c) => c.toLowerCase() === cat.toLowerCase())) setSavedShoppingCategories((prev) => (prev.some((c) => c.toLowerCase() === cat.toLowerCase()) ? prev : [...prev, cat]));
+    });
+    if (shoppingForm.id) {
+      setShoppingLists((prev) => prev.map((l) => (l.id !== shoppingForm.id ? l : { ...l, shopName, location: (shoppingForm.location || "").trim(), items: cleanItems })));
+    } else {
+      setShoppingLists((prev) => [...prev, { id: "sl" + Date.now(), shopName, location: (shoppingForm.location || "").trim(), items: cleanItems, status: "planning", createdAt: new Date().toISOString(), paidAt: null }]);
+    }
+    setShoppingForm(null);
+  };
+  const deleteShoppingList = (id) => setShoppingLists((prev) => prev.filter((l) => l.id !== id));
+  const markShoppingDone = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "done" })));
+  const markShoppingPlanning = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "planning" })));
+  const payShoppingList = (list) => {
+    const total = shoppingListTotal(list);
+    if (total <= 0) return;
+    setDailyLogs((prev) => {
+      const log = prev[today] || defaultLog();
+      const entry = { id: "e" + Date.now(), itemId: "expense", amount: total, group: "Shopping", subcategory: list.shopName, vendor: list.shopName, remarks: list.location || "", time: new Date().toISOString(), linkedShoppingListId: list.id };
+      return { ...prev, [today]: { ...log, expenses: [...log.expenses, entry] } };
+    });
+    setShoppingLists((prev) => prev.map((l) => (l.id !== list.id ? l : { ...l, status: "paid", paidAt: new Date().toISOString() })));
   };
 
   const exportExpensesCSV = () => {
@@ -1159,11 +1220,13 @@ function LifeTracker() {
                 const todaysExpenseCount = todayLog.expenses.length;
                 const todaysExpenseTotal = todayLog.expenses.reduce((s, e) => s + e.amount, 0);
                 const visibleTrips = sortedTravelPlans.filter((t) => !t.dismissed && !t.completed);
+                const shoppingDueCount = shoppingLists.filter((l) => l.status === "done").length;
+                const expenseDueCount = todaysRepaymentReminders.length + shoppingDueCount;
                 const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
                 const doneCount = cat.id === "trip" || cat.id === "expense" ? 0 : itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
-                const countLabel = cat.id === "trip" ? `${totalCount} upcoming${todaysTravelPlans.length ? ` \u00b7 ${todaysTravelPlans.length} due` : ""}` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}${todaysRepaymentReminders.length ? ` \u00b7 ${todaysRepaymentReminders.length} due` : ""}` : `${doneCount}/${totalCount} done`;
+                const countLabel = cat.id === "trip" ? `${totalCount} upcoming${todaysTravelPlans.length ? ` \u00b7 ${todaysTravelPlans.length} due` : ""}` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}${expenseDueCount ? ` \u00b7 ${expenseDueCount} due` : ""}` : `${doneCount}/${totalCount} done`;
                 const trackableCount = cat.id === "trip" || cat.id === "expense" ? 0 : itemsForCat.filter((i) => i.type !== "interval").length;
-                const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "expense" ? todaysRepaymentReminders.length : Math.max(0, trackableCount - doneCount);
+                const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
                 return (
                   <div key={cat.id}>
                     <button onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS_DIM : LINE}`, borderRadius: 14, padding: "10px 12px", cursor: "pointer", transition: "background 0.15s, border-color 0.15s" }}>
@@ -1265,6 +1328,25 @@ function LifeTracker() {
                                     </div>
                                   );
                                 })}
+                              </div>
+                            </Card>
+                          )}
+                          {shoppingLists.some((l) => l.status === "done") && (
+                            <Card style={{ marginBottom: 10 }}>
+                              <SectionLabel>Shopping lists ready to pay</SectionLabel>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                {shoppingLists.filter((l) => l.status === "done").map((l) => (
+                                  <div key={l.id} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 10, padding: "10px 12px" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                                      <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: 13, color: INK }}>{l.shopName}</div>
+                                        <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>{l.items.length} item{l.items.length === 1 ? "" : "s"}{l.location ? ` \u00b7 ${l.location}` : ""}</div>
+                                      </div>
+                                      <span style={{ fontFamily: mono, fontSize: 14, color: CORAL, flexShrink: 0 }}>{inr(shoppingListTotal(l))}</span>
+                                    </div>
+                                    <button onClick={() => payShoppingList(l)} style={{ width: "100%", marginTop: 8, background: TEAL, border: "none", borderRadius: 8, padding: "7px 0", color: "#FFFFFF", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Pay</button>
+                                  </div>
+                                ))}
                               </div>
                             </Card>
                           )}
@@ -1705,6 +1787,121 @@ function LifeTracker() {
                   </div>
                 </Card>
               ))}
+            </>
+          ) : catTab === "shopping" ? (
+            <>
+              {!shoppingForm ? (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <SectionLabel>Shopping lists</SectionLabel>
+                    <button onClick={openNewShoppingForm} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}><Plus size={13} /> New list</button>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {[...shoppingLists].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).map((list) => {
+                      const total = shoppingListTotal(list);
+                      const statusColor = list.status === "paid" ? TEAL : list.status === "done" ? BRASS : INK_FAINT;
+                      const statusLabel = list.status === "paid" ? "Paid" : list.status === "done" ? "Done \u2014 ready to pay" : "Planning";
+                      return (
+                        <Card key={list.id}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: INK }}>{list.shopName}</div>
+                              {list.location && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>{list.location}</div>}
+                              <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2 }}>{list.items.length} item{list.items.length === 1 ? "" : "s"}</div>
+                            </div>
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, color: INK }}>{inr(total)}</div>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: statusColor, marginTop: 2 }}>{statusLabel}</div>
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                            {list.status !== "paid" && (
+                              <button onClick={() => openEditShoppingForm(list)} style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: `1px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}><Pencil size={12} /> Edit</button>
+                            )}
+                            {list.status === "planning" && (
+                              <button onClick={() => markShoppingDone(list.id)} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "6px 12px", color: "#FFFFFF", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Mark done</button>
+                            )}
+                            {list.status === "done" && (
+                              <>
+                                <button onClick={() => payShoppingList(list)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "6px 12px", color: "#FFFFFF", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Mark paid</button>
+                                <button onClick={() => markShoppingPlanning(list.id)} style={{ background: "transparent", border: `1px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>Reopen</button>
+                              </>
+                            )}
+                            {list.status !== "paid" && (
+                              <button onClick={() => deleteShoppingList(list.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer", marginLeft: "auto" }}><Trash2 size={14} /></button>
+                            )}
+                          </div>
+                        </Card>
+                      );
+                    })}
+                    {shoppingLists.length === 0 && <div style={{ color: INK_FAINT, fontSize: 13, textAlign: "center", padding: "16px 0" }}>No shopping lists yet.</div>}
+                  </div>
+                </>
+              ) : (
+                <Card>
+                  <SectionLabel>{shoppingForm.id ? "Edit shopping list" : "New shopping list"}</SectionLabel>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ flex: "1 1 160px" }}>
+                        <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Shop name</div>
+                        <TextField list="shop-name-suggestions" placeholder="e.g. Big Bazaar" value={shoppingForm.shopName} onChange={(e) => setShoppingForm((f) => ({ ...f, shopName: e.target.value }))} />
+                        <datalist id="shop-name-suggestions">{savedShopNames.map((s) => <option key={s} value={s} />)}</datalist>
+                      </div>
+                      <div style={{ flex: "1 1 160px" }}>
+                        <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Location</div>
+                        <TextField placeholder="e.g. MG Road" value={shoppingForm.location} onChange={(e) => setShoppingForm((f) => ({ ...f, location: e.target.value }))} />
+                      </div>
+                    </div>
+
+                    <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
+                      <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 8 }}>Items</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {shoppingForm.items.map((it) => {
+                          const finalAmt = shoppingItemFinalAmount(it);
+                          return (
+                            <div key={it.id} style={{ background: PANEL_2, borderRadius: 10, padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <TextField placeholder="Item name" value={it.name} onChange={(e) => updateShoppingItem(it.id, { name: e.target.value })} style={{ flex: 1 }} />
+                                <button onClick={() => removeShoppingItem(it.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer", flexShrink: 0 }}><Trash2 size={14} /></button>
+                              </div>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                <div style={{ flex: "1 1 120px" }}>
+                                  <TextField list="shopping-category-suggestions" placeholder="Category" value={it.category} onChange={(e) => updateShoppingItem(it.id, { category: e.target.value })} />
+                                </div>
+                                <Select value={it.unit} onChange={(e) => updateShoppingItem(it.id, { unit: e.target.value })} style={{ flex: "0 1 90px" }}>
+                                  <option value="each">each</option>
+                                  <option value="kg">kg</option>
+                                </Select>
+                              </div>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                <TextField type="number" placeholder="MRP / Price" value={it.price} onChange={(e) => updateShoppingItem(it.id, { price: e.target.value })} style={{ flex: "1 1 90px", fontFamily: mono }} />
+                                <TextField type="number" placeholder="Discount %" value={it.discountPct} onChange={(e) => updateShoppingItem(it.id, { discountPct: e.target.value })} style={{ flex: "1 1 90px", fontFamily: mono }} />
+                                <TextField type="number" placeholder="Qty" value={it.qty} onChange={(e) => updateShoppingItem(it.id, { qty: e.target.value })} style={{ flex: "1 1 70px", fontFamily: mono }} />
+                              </div>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: INK_DIM, paddingTop: 2 }}>
+                                <span>Final amount</span>
+                                <span style={{ fontFamily: mono, fontWeight: 600, color: BRASS }}>{inr(finalAmt)}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <datalist id="shopping-category-suggestions">{savedShoppingCategories.map((c) => <option key={c} value={c} />)}</datalist>
+                      </div>
+                      <button onClick={addShoppingItem} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px dashed ${LINE}`, color: BRASS, borderRadius: 8, padding: "8px 12px", fontSize: 12, cursor: "pointer", marginTop: 8, width: "100%", justifyContent: "center" }}><Plus size={13} /> Add item</button>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
+                      <span style={{ fontSize: 12, color: INK_FAINT }}>Estimated total bill</span>
+                      <span style={{ fontFamily: mono, fontSize: 18, fontWeight: 600, color: BRASS }}>{inr(shoppingFormTotal)}</span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 2 }}>
+                      <button onClick={saveShoppingForm} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "7px 14px", color: "#FFFFFF", cursor: "pointer", fontSize: 13 }}>{shoppingForm.id ? "Save changes" : "Save list"}</button>
+                      <button onClick={closeShoppingForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 13 }}>Cancel</button>
+                    </div>
+                  </div>
+                </Card>
+              )}
             </>
           ) : (
             <>
