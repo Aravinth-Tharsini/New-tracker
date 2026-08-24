@@ -366,11 +366,11 @@ function planSpan(startDate, endDate) {
 }
 const CATEGORY_DEFS = [
   { id: "finance", label: "Finance", icon: Wallet },
-  { id: "career", label: "Career growth", icon: Briefcase },
-  { id: "health", label: "Healthcare", icon: HeartPulse },
-  { id: "trip", label: "Trip", icon: Plane },
-  { id: "activity", label: "Daily Routine", icon: Activity },
-  { id: "shopping", label: "Shopping List", icon: ShoppingBag },
+  { id: "career", label: "Career", icon: Briefcase },
+  { id: "health", label: "Health", icon: HeartPulse },
+  { id: "trip", label: "Trips", icon: Plane },
+  { id: "activity", label: "Routine", icon: Activity },
+  { id: "shopping", label: "Shopping", icon: ShoppingBag },
 ];
 function shoppingItemFinalAmount(it) {
   const price = Number(it.price) || 0;
@@ -384,10 +384,10 @@ function shoppingListTotal(list) {
 const GOAL_CATEGORY_DEFS = CATEGORY_DEFS.filter((c) => ["finance", "career", "health"].includes(c.id));
 const DAILY_TAB_CATEGORY_DEFS = [
   { id: "expense", label: "Expense", icon: Receipt },
-  { id: "trip", label: "Trip", icon: Plane },
-  { id: "career", label: "Career growth", icon: Briefcase },
-  { id: "health", label: "Healthcare", icon: HeartPulse },
-  { id: "activity", label: "Daily Routine", icon: Activity },
+  { id: "trip", label: "Trips", icon: Plane },
+  { id: "career", label: "Career", icon: Briefcase },
+  { id: "health", label: "Health", icon: HeartPulse },
+  { id: "activity", label: "Routine", icon: Activity },
 ];
 // Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
@@ -835,6 +835,7 @@ function LifeTracker() {
 
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState(null);
+  const [expandedGoalId, setExpandedGoalId] = useState(null);
   const goalMonthOptionsRef = () => { const arr = []; const nowD = new Date(); for (let i = -3; i <= 12; i++) arr.push(monthKey(new Date(nowD.getFullYear(), nowD.getMonth() + i, 1))); return arr; };
   const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalHours: "2", intervalAmount: "1", intervalUnit: "session" });
   const [goalForm, setGoalForm] = useState(blankGoalForm());
@@ -1723,7 +1724,7 @@ function LifeTracker() {
                   </Select>
                 </div>
                 <div style={{ flex: "1 1 140px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>How much money I have</div>
+                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Monthly income</div>
                   <TextField type="number" value={financeMonthly[financeMonth]?.income ?? ""} onChange={(e) => setFinanceField(financeMonth, "income", e.target.value)} placeholder="30000" style={{ width: "100%", fontFamily: mono }} />
                 </div>
               </div>
@@ -1733,7 +1734,7 @@ function LifeTracker() {
                   <span style={{ fontFamily: mono, fontSize: 16, color: CORAL }}>{inr(expensesForMonth(financeMonth))}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 6, marginTop: 2 }}>
-                  <span style={{ fontSize: 14, color: INK_FAINT }}>Total amount you have</span>
+                  <span style={{ fontSize: 14, color: INK_FAINT }}>Savings available</span>
                   <span style={{ fontFamily: mono, fontSize: 20, fontWeight: 600, color: financeBalanceAvailable >= 0 ? TEAL : CORAL }}>{inr(financeBalanceAvailable)}</span>
                 </div>
               </div>
@@ -2367,36 +2368,18 @@ function LifeTracker() {
               </div>
               {isRoutineCategory && categoryGoals.some((g) => !g.done && g.sessionMinutes) && (
                 <Card style={{ marginBottom: 9 }}>
-                  <SectionLabel>Planned time (from schedule)</SectionLabel>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 8px" }}>
-                    {(() => {
-                      const totals = categoryGoals.filter((g) => !g.done).reduce((acc, g) => {
-                        const t = computeRoutineTotals(g);
-                        return { dailyMin: acc.dailyMin + t.dailyMin, weeklyMin: acc.weeklyMin + t.weeklyMin, monthlyMin: acc.monthlyMin + t.monthlyMin, yearlyMin: acc.yearlyMin + t.yearlyMin };
-                      }, { dailyMin: 0, weeklyMin: 0, monthlyMin: 0, yearlyMin: 0 });
-                      const cellStyle = { flex: "1 1 40%", minWidth: 92 };
-                      const labelStyle = { fontSize: 11, textTransform: "uppercase", color: INK_FAINT, whiteSpace: "nowrap" };
-                      const valueStyle = { fontFamily: mono, fontSize: 17, fontWeight: 600, marginTop: 2, color: BRASS, whiteSpace: "nowrap" };
-                      return (
-                        <>
-                          <div style={cellStyle}><div style={labelStyle}>Per day</div><div style={valueStyle}>{fmtDuration(totals.dailyMin)}</div></div>
-                          <div style={cellStyle}><div style={labelStyle}>Per week</div><div style={valueStyle}>{fmtDuration(totals.weeklyMin)}</div></div>
-                          <div style={cellStyle}><div style={labelStyle}>Per month</div><div style={valueStyle}>{fmtDuration(totals.monthlyMin)}</div></div>
-                          <div style={cellStyle}><div style={labelStyle}>Per year</div><div style={valueStyle}>{fmtDuration(totals.yearlyMin)}</div></div>
-                        </>
-                      );
-                    })()}
-                  </div>
+                  <SectionLabel>Plan summary</SectionLabel>
                   {(() => {
-                    const spans = categoryGoals.filter((g) => !g.done && g.startDate && g.expectedYear).map((g) => planSpan(g.startDate, g.expectedYear)).filter(Boolean);
-                    if (spans.length === 0) return null;
-                    const totalDays = spans.reduce((s, sp) => s + Math.abs(sp.totalDays), 0);
-                    const combined = daysToYMD(totalDays);
-                    return (
-                      <div style={{ marginTop: 8, paddingTop: 10, borderTop: `1px solid ${LINE}`, fontSize: 13, color: INK_DIM }}>
-                        Covers <span style={{ color: BRASS, fontWeight: 600 }}>{totalDays} {totalDays === 1 ? "day" : "days"}</span> total across {spans.length} active {spans.length === 1 ? "goal" : "goals"} &mdash; {combined.label}
-                      </div>
-                    );
+                    const activeGoals = categoryGoals.filter((g) => !g.done);
+                    const totals = activeGoals.reduce((acc, g) => {
+                      const t = computeRoutineTotals(g);
+                      return { dailyMin: acc.dailyMin + t.dailyMin, weeklyMin: acc.weeklyMin + t.weeklyMin };
+                    }, { dailyMin: 0, weeklyMin: 0 });
+                    return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                      <div><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Active goals</div><div style={{ fontFamily: mono, fontSize: 20, fontWeight: 700, color: BRASS, marginTop: 3 }}>{activeGoals.length}</div></div>
+                      <div><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Today plan</div><div style={{ fontFamily: mono, fontSize: 18, fontWeight: 700, color: BRASS, marginTop: 3 }}>{fmtDuration(totals.dailyMin)}</div></div>
+                      <div><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>This week</div><div style={{ fontFamily: mono, fontSize: 18, fontWeight: 700, color: BRASS, marginTop: 3 }}>{fmtDuration(totals.weeklyMin)}</div></div>
+                    </div>;
                   })()}
                 </Card>
               )}
@@ -2504,6 +2487,7 @@ function LifeTracker() {
                 {categoryGoals.map((g) => {
                   const allocated = catTab === "finance" ? (financeAllocations[g.id] || 0) : null;
                   const pct = catTab === "finance" && g.targetAmount ? round((allocated / g.targetAmount) * 100) : null;
+                  const detailsOpen = expandedGoalId === g.id;
                   return (
                     <Card key={g.id}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
@@ -2541,6 +2525,16 @@ function LifeTracker() {
                         </div>
                       )}
                       {ROUTINE_CATEGORIES.includes(g.category) && (() => {
+                        const compactSpan = g.startDate && g.expectedYear ? planSpan(g.startDate, g.expectedYear) : null;
+                        const compactSpent = g.trackingType ? computeLoggedTimeTotals(`goal-${g.id}`, dailyLogs, today) : null;
+                        return <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${LINE}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                          <div style={{ fontSize: 13, color: INK_DIM, minWidth: 0 }}>
+                            {compactSpan ? <><b style={{ color: BRASS }}>Progress</b> · Day {Math.min(compactSpan.totalDays, Math.max(0, Math.round((new Date(today) - new Date(g.startDate)) / 86400000) + 1))} of {compactSpan.totalDays}</> : <><b style={{ color: BRASS }}>Today</b> · {compactSpent ? fmtMinutesOnly(compactSpent.dayMin) : "0 min"}</>}
+                          </div>
+                          <button onClick={() => setExpandedGoalId(detailsOpen ? null : g.id)} style={{ background: detailsOpen ? "rgba(0,113,227,0.10)" : "transparent", border: `1px solid ${detailsOpen ? BRASS_DIM : LINE}`, color: BRASS, borderRadius: 7, padding: "5px 8px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>{detailsOpen ? "Hide details" : "View details"}</button>
+                        </div>;
+                      })()}
+                      {ROUTINE_CATEGORIES.includes(g.category) && detailsOpen && (() => {
                         const span = g.startDate && g.expectedYear ? planSpan(g.startDate, g.expectedYear) : null;
                         const spentToday = g.trackingType ? computeLoggedTimeTotals(`goal-${g.id}`, dailyLogs, today) : null;
                         const planned = g.sessionMinutes ? computeRoutineTotals(g) : null;
@@ -2627,6 +2621,7 @@ function LifeTracker() {
           return { income, expense, savings: income-expense, done };
         };
         const thisYearStats = yearStats(insightYear), prevYearStats = yearStats(previousYear);
+        const prevHasData = prevYearStats.income !== 0 || prevYearStats.expense !== 0 || prevYearStats.done !== 0;
         const growth = (a,b) => b ? Math.round(((a-b)/Math.abs(b))*100) : null;
         const savingsGrowth = growth(thisYearStats.savings, prevYearStats.savings);
         const incomeGrowth = growth(thisYearStats.income, prevYearStats.income);
@@ -2645,10 +2640,17 @@ function LifeTracker() {
 
           <SectionLabel>{fmtPeriod} overview</SectionLabel>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Income</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4}}>{inr(periodIncome)}</div></Card>
-            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Expense</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:CORAL}}>{inr(periodExpense)}</div></Card>
-            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Savings</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:periodSavings>=0?TEAL:CORAL}}>{inr(periodSavings)}</div></Card>
-            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Completion</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:BRASS}}>{completionPct}%</div></Card>
+            {insightPeriod === "day" ? <>
+              <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Expense</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:CORAL}}>{inr(periodExpense)}</div></Card>
+              <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Activities done</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:TEAL}}>{doneCount}</div></Card>
+              <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Completion</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:BRASS}}>{completionPct}%</div></Card>
+              <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Tracked items</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4}}>{dailyItems.filter((i)=>i.type!=="expense").length}</div></Card>
+            </> : <>
+              <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Income</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4}}>{inr(periodIncome)}</div></Card>
+              <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Expense</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:CORAL}}>{inr(periodExpense)}</div></Card>
+              <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Savings</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:periodSavings>=0?TEAL:CORAL}}>{inr(periodSavings)}</div></Card>
+              <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Completion</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:BRASS}}>{completionPct}%</div></Card>
+            </>}
           </div>
 
           <SectionLabel>Expense breakdown</SectionLabel>
@@ -2656,10 +2658,12 @@ function LifeTracker() {
 
           {insightPeriod === "year" && <>
             <SectionLabel>Yearly growth comparison</SectionLabel>
-            <Card style={{marginBottom:8}}><div style={{fontSize:13,color:INK_FAINT,marginBottom:8}}>{insightYear} compared with {previousYear}</div>
-              {[['Income growth',incomeGrowth],['Savings growth',savingsGrowth],['Activity growth',activityGrowth]].map(([label,val])=><div key={label} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:`1px solid ${LINE}`}}><span>{label}</span><span style={{fontFamily:mono,fontWeight:700,color:val===null?INK_FAINT:val>=0?TEAL:CORAL}}>{val===null?'No comparison data':`${val>=0?'↑':'↓'} ${Math.abs(val)}%`}</span></div>)}
-            </Card>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[[previousYear,prevYearStats],[insightYear,thisYearStats]].map(([yr,st])=><Card key={yr}><div style={{fontWeight:700,marginBottom:6}}>{yr}</div><div style={{fontSize:12,color:INK_DIM}}>Income {inr(st.income)}</div><div style={{fontSize:12,color:INK_DIM,marginTop:4}}>Expense {inr(st.expense)}</div><div style={{fontSize:12,color:TEAL,marginTop:4}}>Savings {inr(st.savings)}</div><div style={{fontSize:12,color:BRASS,marginTop:4}}>Activities {st.done}</div></Card>)}</div>
+            {!prevHasData ? <Card style={{marginBottom:12}}><div style={{fontSize:14,fontWeight:600,color:INK_DIM}}>Previous year data not available</div><div style={{fontSize:13,color:INK_FAINT,marginTop:4}}>Keep tracking your data to compare your growth in future years 📈</div></Card> : <>
+              <Card style={{marginBottom:8}}><div style={{fontSize:13,color:INK_FAINT,marginBottom:8}}>{insightYear} compared with {previousYear}</div>
+                {[['Income growth',incomeGrowth],['Savings growth',savingsGrowth],['Activity growth',activityGrowth]].map(([label,val])=><div key={label} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:`1px solid ${LINE}`}}><span>{label}</span><span style={{fontFamily:mono,fontWeight:700,color:val===null?INK_FAINT:val>=0?TEAL:CORAL}}>{val===null?'No comparison data':`${val>=0?'↑':'↓'} ${Math.abs(val)}%`}</span></div>)}
+              </Card>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[[previousYear,prevYearStats],[insightYear,thisYearStats]].map(([yr,st])=><Card key={yr}><div style={{fontWeight:700,marginBottom:6}}>{yr}</div><div style={{fontSize:12,color:INK_DIM}}>Income {inr(st.income)}</div><div style={{fontSize:12,color:INK_DIM,marginTop:4}}>Expense {inr(st.expense)}</div><div style={{fontSize:12,color:TEAL,marginTop:4}}>Savings {inr(st.savings)}</div><div style={{fontSize:12,color:BRASS,marginTop:4}}>Activities {st.done}</div></Card>)}</div>
+            </>}
           </>}
 
         </div>
