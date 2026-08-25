@@ -93,7 +93,7 @@ import {
   CalendarDays, LayoutGrid, TrendingUp, Plus, Trash2, Check, Wallet, Briefcase, HeartPulse,
   Settings2, Play, Square, ArrowUp, ArrowDown, Sun, Building2, Dumbbell, Moon, Droplet, Receipt,
   Target, Clock, Pencil, ChevronUp, ChevronDown, Bell, BellOff, Flame, Download, FileJson,
-  Plane, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
+  Plane, Train, BusFront, MapPin, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, Home as HomeIcon,
 } from "lucide-react";
@@ -1439,7 +1439,15 @@ function LifeTracker() {
           <Card>
             {dueRepayments === 0 && todaysTravelPlans.length === 0 && pendingActivities === 0 ? <div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {dueRepayments > 0 && <div style={{ fontSize: 14 }}>🔔 {dueRepayments} repayment{dueRepayments > 1 ? "s" : ""} need attention</div>}
-              {todaysTravelPlans.length > 0 && <div style={{ fontSize: 14 }}>✈️ {todaysTravelPlans.length} trip reminder{todaysTravelPlans.length > 1 ? "s" : ""}</div>}
+              {todaysTravelPlans.map((trip) => {
+                const TravelIcon = trip.mode === "Train" ? Train : trip.mode === "Bus" ? BusFront : trip.mode === "Car" ? Car : trip.mode === "Flight" ? Plane : MapPin;
+                return (
+                  <div key={trip.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                    <TravelIcon size={20} color={BRASS} />
+                    <span>{trip.mode || "Trip"} trip reminder</span>
+                  </div>
+                );
+              })}
               {pendingActivities > 0 && <div style={{ fontSize: 14 }}>✓ {pendingActivities} activity{pendingActivities > 1 ? "ies" : ""} still pending</div>}
             </div>}
           </Card>
