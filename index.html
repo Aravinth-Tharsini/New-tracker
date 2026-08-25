@@ -966,8 +966,7 @@ function LifeTracker() {
     } else {
       setGoals((prev) => [...prev, { id: newGoalId, category: catTab, title: fullTitle, sequence: parseInt(goalForm.sequence) || 0, targetAmount: catTab === "finance" ? parseFloat(goalForm.targetAmount) || 0 : undefined, savedAmount: catTab === "finance" ? 0 : undefined, done: false, ...routineFields }]);
     }
-    const savedId = newGoalId;
-    setSelectedGoalId(savedId);
+    setSelectedGoalId(null);
     setGoalForm(blankGoalForm());
     setEditingGoalId(null);
     setShowAddGoal(false);
@@ -2810,6 +2809,51 @@ function LifeTracker() {
                                     <span style={{ fontFamily: mono, fontWeight: 700, color: BRASS }}>{minutesToYMDH(spentToday.totalMin).label}</span>
                                   </div>
                                 </div>
+                                {(() => {
+                                  const planTotalMin = computeGoalPlanTotalMinutes(g);
+                                  if (!planTotalMin) return null;
+                                  const spentYMDH = minutesToYMDH(spentToday.totalMin);
+                                  const overallPct = round(Math.min(100, (spentToday.totalMin / planTotalMin) * 100));
+                                  const yearPct = round(Math.min(100, (spentYMDH.months / 12) * 100));
+                                  const monthPct = round(Math.min(100, (spentYMDH.days / 30) * 100));
+                                  const dayPct = round(Math.min(100, (spentYMDH.hours / 24) * 100));
+                                  return (
+                                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${LINE}` }}>
+                                      <div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT, marginBottom: 5 }}>Planned summary</div>
+                                      <ProgressBar pct={overallPct} color={BRASS} />
+                                      <div style={{ fontSize: 13, color: INK_DIM, marginTop: 4, marginBottom: 9, fontFamily: mono }}>{overallPct}% of planned duration completed</div>
+                                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
+                                        <div style={{ flex: "1 1 70px", textAlign: "center" }}>
+                                          <div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Year</div>
+                                          <div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, color: TEAL }}>{spentYMDH.months}/12 mo</div>
+                                          <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 1, fontFamily: mono }}>{yearPct}%</div>
+                                        </div>
+                                        <div style={{ flex: "1 1 70px", textAlign: "center" }}>
+                                          <div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Month</div>
+                                          <div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, color: TEAL }}>{spentYMDH.days}/30 d</div>
+                                          <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 1, fontFamily: mono }}>{monthPct}%</div>
+                                        </div>
+                                        <div style={{ flex: "1 1 70px", textAlign: "center" }}>
+                                          <div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Day</div>
+                                          <div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, color: TEAL }}>{spentYMDH.hours}/24 h</div>
+                                          <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 1, fontFamily: mono }}>{dayPct}%</div>
+                                        </div>
+                                      </div>
+                                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: INK_DIM, marginBottom: 4 }}>
+                                        <span>Total planned time</span>
+                                        <span style={{ fontFamily: mono, fontWeight: 700, color: INK }}>{minutesToYMDH(planTotalMin).label}</span>
+                                      </div>
+                                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: INK_DIM, marginBottom: 4 }}>
+                                        <span>Total time spent</span>
+                                        <span style={{ fontFamily: mono, fontWeight: 700, color: BRASS }}>{spentYMDH.label}</span>
+                                      </div>
+                                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: INK_DIM }}>
+                                        <span>Overall completion</span>
+                                        <span style={{ fontFamily: mono, fontWeight: 700, color: TEAL }}>{overallPct}%</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             )}
                           </div>
