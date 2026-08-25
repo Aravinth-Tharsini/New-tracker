@@ -1544,7 +1544,15 @@ function LifeTracker() {
           <Card>
             {dueRepayments === 0 && todaysTravelPlans.length === 0 && pendingActivities === 0 ? <div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {dueRepayments > 0 && <button onClick={() => setPage("daily")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>🔔 {dueRepayments} repayment{dueRepayments > 1 ? "s" : ""} need attention</button>}
-              {todaysTravelPlans.length > 0 && <button onClick={() => setPage("categories")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>{todaysTravelPlans[0]?.travelMode === "Train" ? "🚆" : todaysTravelPlans[0]?.travelMode === "Bus" ? "🚌" : todaysTravelPlans[0]?.travelMode === "Car" ? "🚗" : todaysTravelPlans[0]?.travelMode === "Flight" ? "✈️" : "📍"} {todaysTravelPlans.length} trip reminder{todaysTravelPlans.length > 1 ? "s" : ""}</button>}
+              {todaysTravelPlans.length > 0 && <button onClick={() => setPage("categories")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>{(() => {
+  const mode = String(todaysTravelPlans[0]?.mode || todaysTravelPlans[0]?.travelMode || "").trim().toLowerCase();
+  if (mode === "train") return "🚆";
+  if (mode === "bus") return "🚌";
+  if (mode === "car") return "🚗";
+  if (mode === "flight" || mode === "plane" || mode === "airplane") return "✈️";
+  if (mode === "bike" || mode === "bicycle") return "🚴";
+  return "📍";
+})()} {todaysTravelPlans.length} trip reminder{todaysTravelPlans.length > 1 ? "s" : ""}</button>}
               {pendingActivities > 0 && <button onClick={() => setPage("daily")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>✓ {pendingActivities} activity{pendingActivities > 1 ? "ies" : ""} still pending</button>}
             </div>}
           </Card>
