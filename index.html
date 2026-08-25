@@ -2814,16 +2814,18 @@ function LifeTracker() {
             <Card style={{ marginBottom: 9 }}>
               <SectionLabel>Backup &amp; restore</SectionLabel>
               <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Your data is saved only on this device. Export a backup file regularly, and import it to restore your data on a new device or browser.</div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <ActionButton onClick={exportData} label="Export backup" icon={Download} tone={BRASS} />
-                <button onClick={exportExpensesCSV} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>
-                  <Download size={15} /> Export expense CSV
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={exportData} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}>
+                  <Download size={15} /> Export backup
                 </button>
-                <button onClick={() => fileInputRef.current && fileInputRef.current.click()} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1.5px solid ${BRASS}`, color: BRASS, borderRadius: 8, padding: "6px 12px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>
+                <button onClick={() => fileInputRef.current && fileInputRef.current.click()} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: `1.5px solid ${BRASS}`, color: BRASS, borderRadius: 8, padding: "9px 10px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}>
                   <Upload size={15} /> Import backup
                 </button>
                 <input ref={fileInputRef} type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) importDataFile(f); e.target.value = ""; }} />
               </div>
+              <button onClick={exportExpensesCSV} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "8px 10px", fontSize: 14, cursor: "pointer", fontFamily: disp, fontWeight: 600, marginTop: 8 }}>
+                <Download size={14} /> Export expense CSV
+              </button>
               {importMessage && <div style={{ fontSize: 14, color: TEAL, marginTop: 8 }}>{importMessage}</div>}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${LINE}` }}>
                 <div style={{ paddingRight: 10 }}>
