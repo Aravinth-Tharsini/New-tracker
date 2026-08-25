@@ -296,6 +296,59 @@ const ICON_MAP = {
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
 };
 const ICON_NAMES = Object.keys(ICON_MAP);
+
+const ROUTINE_ICON_OPTIONS = [
+  { value: "Sun", label: "Wake up", emoji: "🌅" },
+  { value: "Building2", label: "Office", emoji: "🏢" },
+  { value: "Dumbbell", label: "Exercise", emoji: "🏋️" },
+  { value: "Moon", label: "Sleep", emoji: "😴" },
+  { value: "Droplet", label: "Water", emoji: "💧" },
+  { value: "Receipt", label: "Bill", emoji: "🧾" },
+  { value: "Target", label: "Goal", emoji: "🎯" },
+  { value: "Clock", label: "Reminder", emoji: "⏰" },
+  { value: "Bike", label: "Bike", emoji: "🚴" },
+  { value: "Car", label: "Car", emoji: "🚗" },
+  { value: "Bath", label: "Bath", emoji: "🚿" },
+  { value: "Gamepad2", label: "Gaming", emoji: "🎮" },
+  { value: "Home", label: "Home", emoji: "🏠" },
+  { value: "BookOpen", label: "Reading", emoji: "📚" },
+  { value: "Laptop", label: "Laptop", emoji: "💻" },
+  { value: "ChefHat", label: "Cooking", emoji: "🍳" },
+  { value: "UtensilsCrossed", label: "Eating", emoji: "🍽️" },
+  { value: "ShoppingBag", label: "Shopping", emoji: "🛒" },
+  { value: "Footprints", label: "Walking", emoji: "🚶" },
+  { value: "Film", label: "Movie", emoji: "🎬" },
+  { value: "Music", label: "Music", emoji: "🎧" },
+  { value: "Users", label: "Family", emoji: "👨‍👩‍👧‍👦" },
+  { value: "HandHeart", label: "Prayer", emoji: "🙏" },
+  { value: "Brush", label: "Cleaning", emoji: "🧹" },
+  { value: "Coffee", label: "Tea / Coffee", emoji: "☕" },
+  { value: "Smile", label: "Relax", emoji: "😊" },
+  { value: "Study", label: "Study", emoji: "📝" },
+  { value: "Train", label: "Train", emoji: "🚆" },
+  { value: "Bus", label: "Bus", emoji: "🚌" },
+  { value: "Flight", label: "Flight", emoji: "✈️" },
+  { value: "Prayer", label: "Prayer", emoji: "🕌" },
+  { value: "Medicine", label: "Medicine", emoji: "💊" },
+  { value: "Meditation", label: "Meditation", emoji: "🧘" },
+  { value: "Phone", label: "Phone", emoji: "📱" },
+  { value: "Work", label: "Work", emoji: "💼" },
+  { value: "Drive", label: "Driving", emoji: "🚗" },
+  { value: "Run", label: "Running", emoji: "🏃" },
+];
+
+const ROUTINE_ICON_LOOKUP = Object.fromEntries(
+  ROUTINE_ICON_OPTIONS.map((icon) => [icon.value, icon])
+);
+
+function getRoutineEmoji(iconName) {
+  return ROUTINE_ICON_LOOKUP[iconName]?.emoji || "✨";
+}
+
+function getRoutineIconLabel(iconName) {
+  return ROUTINE_ICON_LOOKUP[iconName]?.label || iconName || "Activity";
+}
+
 const TYPE_OPTIONS = [
   { value: "instant", label: "Instant \u00b7 one button" },
   { value: "duration", label: "Duration \u00b7 start / stop timer" },
@@ -1155,6 +1208,16 @@ function LifeTracker() {
   const [showAddTravel, setShowAddTravel] = useState(false);
   const [editingTravelId, setEditingTravelId] = useState(null);
   const [travelTimeInputMode, setTravelTimeInputMode] = useState("24h");
+  const getTravelModeIcon = (mode) => {
+  const m = String(mode || "").trim().toLowerCase();
+  if (m === "train") return "🚆";
+  if (m === "bus") return "🚌";
+  if (m === "car") return "🚗";
+  if (m === "flight" || m === "plane" || m === "airplane") return "✈️";
+  if (m === "bike" || m === "bicycle") return "🚴";
+  return "📍";
+};
+
   const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", amount: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [] });
   const [travelForm, setTravelForm] = useState(blankTravelForm());
   const [newTravelNoteText, setNewTravelNoteText] = useState("");
@@ -1491,7 +1554,7 @@ function LifeTracker() {
           <Card>
             {dueRepayments === 0 && todaysTravelPlans.length === 0 && pendingActivities === 0 ? <div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {dueRepayments > 0 && <button onClick={() => setPage("daily")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>🔔 {dueRepayments} repayment{dueRepayments > 1 ? "s" : ""} need attention</button>}
-              {todaysTravelPlans.length > 0 && <button onClick={() => setPage("categories")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>{todaysTravelPlans[0]?.mode === "Train" ? "🚆" : todaysTravelPlans[0]?.mode === "Bus" ? "🚌" : todaysTravelPlans[0]?.mode === "Car" ? "🚗" : todaysTravelPlans[0]?.mode === "Flight" ? "✈️" : "📍"} {todaysTravelPlans.length} trip reminder{todaysTravelPlans.length > 1 ? "s" : ""}</button>}
+              {todaysTravelPlans.length > 0 && <button onClick={() => setPage("categories")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>{getTravelModeIcon(todaysTravelPlans[0]?.mode)} {todaysTravelPlans.length} trip reminder{todaysTravelPlans.length > 1 ? "s" : ""}</button>}
               {pendingActivities > 0 && <button onClick={() => setPage("daily")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>✓ {pendingActivities} activity{pendingActivities > 1 ? "ies" : ""} still pending</button>}
             </div>}
           </Card>
@@ -2099,10 +2162,11 @@ function LifeTracker() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {dailyItems.map((item, idx) => {
                       const Icon = ICON_MAP[item.icon] || Target;
+                      const routineEmoji = getRoutineEmoji(item.icon);
                       const valid = isItemValid(item);
                       return (
                         <Card key={item.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          <Icon size={16} color={valid ? BRASS : INK_FAINT} style={{ flexShrink: 0, marginRight: 4 }} />
+                          <span style={{ fontSize: 21, lineHeight: 1, flexShrink: 0, marginRight: 4 }}>{routineEmoji}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 15 }}>{item.name || <span style={{ color: INK_FAINT }}>(unnamed)</span>}</div>
                             <div style={{ fontSize: 13, color: valid ? TEAL : CORAL, marginTop: 2 }}>{item.type} &middot; {valid ? "on Daily tab" : "incomplete \u2014 hidden"}</div>
@@ -2136,14 +2200,34 @@ function LifeTracker() {
                     </Select>
                     <div>
                       <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 6 }}>Icon</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6, width: "100%", boxSizing: "border-box" }}>
-                        {ICON_NAMES.map((name) => {
-                          const I = ICON_MAP[name]; const sel = itemForm.icon === name;
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 7, width: "100%", boxSizing: "border-box" }}>
+                        {ROUTINE_ICON_OPTIONS.map((option) => {
+                          const sel = itemForm.icon === option.value;
                           return (
-                            <button key={name} onClick={() => setItemForm((f) => ({ ...f, icon: name }))} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, height: 56, minWidth: 0, borderRadius: 8, background: sel ? "rgba(0,113,227,0.15)" : PANEL_2, border: `1px solid ${sel ? BRASS : LINE}`, cursor: "pointer", overflow: "hidden" }}>
-                              <I size={18} color={sel ? BRASS : INK_DIM} />
-                              <span style={{ fontSize: 10, color: sel ? BRASS : INK_FAINT, textTransform: "uppercase", letterSpacing: "0.03em", textAlign: "center", lineHeight: 1.1, wordBreak: "break-word", overflowWrap: "anywhere", padding: "0 2px", maxWidth: "100%" }}>{name}</span>
-                              {sel && <div style={{ position: "absolute", top: 4, right: 4, width: 12, height: 12, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Check size={9} color={BG} /></div>}
+                            <button
+                              key={option.value}
+                              type="button"
+                              aria-label={option.label}
+                              onClick={() => setItemForm((f) => ({ ...f, icon: option.value }))}
+                              style={{
+                                position: "relative",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 4,
+                                height: 62,
+                                minWidth: 0,
+                                borderRadius: 12,
+                                background: sel ? "rgba(0,113,227,0.12)" : PANEL_2,
+                                border: `1px solid ${sel ? BRASS : LINE}`,
+                                cursor: "pointer",
+                                overflow: "hidden"
+                              }}
+                            >
+                              <span style={{ fontSize: 25, lineHeight: 1 }}>{option.emoji}</span>
+                              <span style={{ fontSize: 9, color: sel ? BRASS : INK_FAINT, textAlign: "center", lineHeight: 1.05, padding: "0 3px", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{option.label}</span>
+                              {sel && <div style={{ position: "absolute", top: 4, right: 4, width: 15, height: 15, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Check size={10} color={BG} /></div>}
                             </button>
                           );
                         })}
