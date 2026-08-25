@@ -93,7 +93,7 @@ import {
   CalendarDays, LayoutGrid, TrendingUp, Plus, Trash2, Check, Wallet, Briefcase, HeartPulse,
   Settings2, Play, Square, ArrowUp, ArrowDown, Sun, Building2, Dumbbell, Moon, Droplet, Receipt,
   Target, Clock, Pencil, ChevronUp, ChevronDown, Bell, BellOff, Flame, Download, FileJson,
-  Plane, Train, BusFront, MapPin, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
+  Plane, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, Home as HomeIcon,
 } from "lucide-react";
@@ -296,74 +296,7 @@ const ICON_MAP = {
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
 };
 const ICON_NAMES = Object.keys(ICON_MAP);
-
-// Natural activity icons for the Daily tab.
-// The existing icon names and saved activity data are kept unchanged.
-const NATURAL_ACTIVITY_ICONS = {
-  Sun: "🌅",
-  Building2: "🏢",
-  Dumbbell: "🏃",
-  Moon: "😴",
-  Droplet: "💧",
-  Bike: "🚴",
-  Car: "🚗",
-  Bath: "🚿",
-  Gamepad2: "🎮",
-  Home: "🏠",
-  BookOpen: "📚",
-  Laptop: "💻",
-  ChefHat: "🍳",
-  UtensilsCrossed: "🍽️",
-  ShoppingBag: "🛒",
-  Footprints: "🚶",
-  Film: "🎬",
-  Music: "🎧",
-  Users: "👨‍👩‍👧‍👦",
-  HandHeart: "🤝",
-  Brush: "🧹",
-  Coffee: "☕",
-  Smile: "😊",
-  Target: "🎯",
-  Clock: "⏰",
-  Receipt: "🧾",
-};
-
-function getNaturalActivityIcon(item) {
-  const name = String(item?.name || "").toLowerCase();
-  if (name.includes("wake")) return "🌅";
-  if (name.includes("bath") || name.includes("shower")) return "🚿";
-  if (name.includes("office")) return "🏢";
-  if (name.includes("work") || name.includes("career")) return "💼";
-  if (name.includes("leave")) return "🚪";
-  if (name.includes("reach") || name.includes("home")) return "🏠";
-  if (name.includes("drive") || name.includes("car")) return "🚗";
-  if (name.includes("train")) return "🚆";
-  if (name.includes("bus")) return "🚌";
-  if (name.includes("flight") || name.includes("fly")) return "✈️";
-  if (name.includes("bike") || name.includes("ride")) return "🚴";
-  if (name.includes("read") || name.includes("book")) return "📚";
-  if (name.includes("study") || name.includes("learn")) return "📝";
-  if (name.includes("computer") || name.includes("laptop")) return "💻";
-  if (name.includes("cook")) return "🍳";
-  if (name.includes("eat") || name.includes("breakfast") || name.includes("lunch") || name.includes("dinner")) return "🍽️";
-  if (name.includes("shop")) return "🛒";
-  if (name.includes("exercise") || name.includes("workout") || name.includes("gym")) return "🏋️";
-  if (name.includes("run")) return "🏃";
-  if (name.includes("walk")) return "🚶";
-  if (name.includes("sleep")) return "😴";
-  if (name.includes("movie") || name.includes("film")) return "🎬";
-  if (name.includes("music") || name.includes("listen")) return "🎧";
-  if (name.includes("family")) return "👨‍👩‍👧‍👦";
-  if (name.includes("pray") || name.includes("prayer")) return "🙏";
-  if (name.includes("clean")) return "🧹";
-  if (name.includes("water") || name.includes("drink")) return "💧";
-  if (name.includes("meditat")) return "🧘";
-  if (name.includes("game") || name.includes("play")) return "🎮";
-  if (name.includes("coffee") || name.includes("tea")) return "☕";
-  return NATURAL_ACTIVITY_ICONS[item?.icon] || "✨";
-}
-
-const TYPE_OPTIONS = 
+const TYPE_OPTIONS = [
   { value: "instant", label: "Instant \u00b7 one button" },
   { value: "duration", label: "Duration \u00b7 start / stop timer" },
   { value: "interval", label: "Interval \u00b7 recurring reminder" },
@@ -1484,11 +1417,26 @@ function LifeTracker() {
         const completedActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
         const totalActivities = validItems.filter((i) => i.type !== "interval").length;
         const todayExpenses = todayLog.expenses.reduce((sum, e) => sum + e.amount, 0);
+        const progressPercent = totalActivities > 0 ? Math.round((completedActivities / totalActivities) * 100) : 0;
+        const currentHour = new Date().getHours();
+        const greeting = currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
+        const remainingActivities = Math.max(0, totalActivities - completedActivities);
+        const nextActivities = validItems
+          .filter((i) => i.type !== "interval" && field(i.id).status !== "done" && i.scheduledTime)
+          .sort((a, b) => String(a.scheduledTime).localeCompare(String(b.scheduledTime)))
+          .slice(0, 3);
         return <div style={{ padding: "6px 16px 16px", flex: 1, width: "100%" }}>
           <div className="notificationStickyBar"><Card style={{ marginBottom: 10, background: `linear-gradient(135deg, ${PANEL}, ${PANEL_2})` }}>
             <div style={{ fontSize: 13, color: INK_FAINT }}>TODAY'S OVERVIEW</div>
-            <div style={{ fontSize: 25, fontWeight: 700, marginTop: 4 }}>Good day! Keep going.</div>
-            <div style={{ fontSize: 14, color: INK_DIM, marginTop: 4 }}>{formatDateLong(new Date())}</div>
+            <div style={{ fontSize: 25, fontWeight: 700, marginTop: 4 }}>{greeting}!</div>
+            <div style={{ fontSize: 14, color: INK_DIM, marginTop: 4 }}>
+              {totalActivities === 0
+                ? "Plan your day and get started."
+                : completedActivities === totalActivities
+                  ? "Great work! Everything planned for today is completed."
+                  : `${remainingActivities} activity${remainingActivities !== 1 ? "ies" : ""} remaining today.`}
+            </div>
+            <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 6 }}>{formatDateLong(new Date())}</div>
           </Card></div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
             <Card><div style={{ fontSize: 12, color: INK_FAINT }}>ACTIVITIES</div><div style={{ fontSize: 22, fontFamily: mono, fontWeight: 700 }}>{completedActivities}/{totalActivities}</div><div style={{ fontSize: 12, color: INK_DIM }}>completed</div></Card>
@@ -1496,26 +1444,55 @@ function LifeTracker() {
             <Card><div style={{ fontSize: 12, color: INK_FAINT }}>DUE</div><div style={{ fontSize: 22, fontFamily: mono, fontWeight: 700, color: dueRepayments ? CORAL : INK }}>{dueRepayments}</div><div style={{ fontSize: 12, color: INK_DIM }}>repayments</div></Card>
             <Card><div style={{ fontSize: 12, color: INK_FAINT }}>PENDING</div><div style={{ fontSize: 22, fontFamily: mono, fontWeight: 700 }}>{pendingActivities}</div><div style={{ fontSize: 12, color: INK_DIM }}>activities</div></Card>
           </div>
+
+          {totalActivities > 0 && (
+            <Card style={{ marginBottom: 12, padding: "13px 14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: INK_FAINT }}>TODAY'S PROGRESS</div>
+                <div style={{ fontSize: 13, color: BRASS, fontFamily: mono, fontWeight: 700 }}>{progressPercent}%</div>
+              </div>
+              <div style={{ height: 8, borderRadius: 999, background: PANEL_2, overflow: "hidden" }}>
+                <div style={{ width: `${progressPercent}%`, height: "100%", borderRadius: 999, background: BRASS, transition: "width 0.25s ease" }} />
+              </div>
+              <div style={{ marginTop: 7, fontSize: 12, color: INK_DIM }}>{completedActivities} of {totalActivities} activities completed</div>
+            </Card>
+          )}
+
           <SectionLabel>Quick actions</SectionLabel>
           <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }}>
-            <ActionButton onClick={() => setPage("daily")} label="Open Daily" icon={CalendarDays} tone={BRASS} />
-            <IconBtn onClick={() => setPage("categories")}><Plus size={15} /> Add</IconBtn>
-            <IconBtn onClick={() => setPage("analysis")}><TrendingUp size={15} /> Reports</IconBtn>
+            <ActionButton onClick={() => setPage("daily")} label="Open Today" icon={CalendarDays} tone={BRASS} />
+            <IconBtn onClick={() => setPage("categories")}><Plus size={15} /> Add Plan</IconBtn>
+            <IconBtn onClick={() => setPage("analysis")}><TrendingUp size={15} /> View Insights</IconBtn>
           </div>
+          {nextActivities.length > 0 && (
+            <>
+              <SectionLabel>Next up</SectionLabel>
+              <Card style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {nextActivities.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => { setActiveTab(item.id); setPage("daily"); }}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: 0, background: "transparent", border: "none", color: INK, textAlign: "left", cursor: "pointer", width: "100%" }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                        <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Tap to open in Today</div>
+                      </div>
+                      <div style={{ flexShrink: 0, fontSize: 13, color: BRASS, fontFamily: mono, fontWeight: 700 }}>{fmtTimeString12(item.scheduledTime)}</div>
+                    </button>
+                  ))}
+                </div>
+              </Card>
+            </>
+          )}
+
           <SectionLabel>Upcoming attention</SectionLabel>
           <Card>
             {dueRepayments === 0 && todaysTravelPlans.length === 0 && pendingActivities === 0 ? <div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {dueRepayments > 0 && <div style={{ fontSize: 14 }}>🔔 {dueRepayments} repayment{dueRepayments > 1 ? "s" : ""} need attention</div>}
-              {todaysTravelPlans.map((trip) => {
-                const TravelIcon = trip.mode === "Train" ? Train : trip.mode === "Bus" ? BusFront : trip.mode === "Car" ? Car : trip.mode === "Flight" ? Plane : MapPin;
-                return (
-                  <div key={trip.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-                    <TravelIcon size={20} color={BRASS} />
-                    <span>{trip.mode || "Trip"} trip reminder</span>
-                  </div>
-                );
-              })}
-              {pendingActivities > 0 && <div style={{ fontSize: 14 }}>✓ {pendingActivities} activity{pendingActivities > 1 ? "ies" : ""} still pending</div>}
+              {dueRepayments > 0 && <button onClick={() => setPage("daily")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>🔔 {dueRepayments} repayment{dueRepayments > 1 ? "s" : ""} need attention</button>}
+              {todaysTravelPlans.length > 0 && <button onClick={() => setPage("categories")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>{todaysTravelPlans[0]?.travelMode === "Train" ? "🚆" : todaysTravelPlans[0]?.travelMode === "Bus" ? "🚌" : todaysTravelPlans[0]?.travelMode === "Car" ? "🚗" : todaysTravelPlans[0]?.travelMode === "Flight" ? "✈️" : "📍"} {todaysTravelPlans.length} trip reminder{todaysTravelPlans.length > 1 ? "s" : ""}</button>}
+              {pendingActivities > 0 && <button onClick={() => setPage("daily")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>✓ {pendingActivities} activity{pendingActivities > 1 ? "ies" : ""} still pending</button>}
             </div>}
           </Card>
         </div>;
@@ -1796,68 +1773,74 @@ function LifeTracker() {
                     })()}
                     {expanded && cat.id !== "trip" && cat.id !== "expense" && (
                       <div style={{ marginTop: 6 }}>
-              <div className="no-scrollbar" style={{ display: "flex", gap: 8, padding: "4px 2px 12px", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <div className="no-scrollbar" style={{ display: "flex", gap: 8, paddingBottom: 14, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                 {itemsForCat.map((item) => {
                   const Icon = ICON_MAP[item.icon] || Target;
-                  const naturalIcon = getNaturalActivityIcon(item);
                   const active = activeTab === item.id;
                   const done = (item.type === "instant" || item.type === "duration") && field(item.id).status === "done";
                   const due = item.type === "interval" && isIntervalDue(item, todayLog, now.getTime());
                   const streak = streaks[item.id] || 0;
+                  const ringColor = active ? BRASS : done ? TEAL : due ? CORAL : LINE;
                   return (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveTab(item.id)}
-                      aria-label={item.name}
-                      style={{
-                        width: 58,
-                        minWidth: 58,
-                        height: 58,
-                        padding: 0,
-                        borderRadius: 16,
-                        border: active ? `2px solid ${BRASS}` : `1px solid ${LINE}`,
-                        background: active ? "rgba(0,113,227,0.10)" : PANEL,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0
-                      }}
-                    >
-                      <div style={{ position: "relative", width: 42, height: 42, borderRadius: 13, background: done ? "rgba(52,199,89,0.14)" : due ? "rgba(255,100,80,0.12)" : active ? "rgba(0,113,227,0.14)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {done ? <Check size={21} color={TEAL} strokeWidth={3} /> : <span style={{ fontSize: 25, lineHeight: 1, filter: active ? "none" : "saturate(0.95)" }}>{naturalIcon}</span>}
-                        {streak > 0 && <div style={{ position: "absolute", top: -6, right: -6, display: "flex", alignItems: "center", gap: 1, background: BG, border: `1px solid ${BRASS_DIM}`, borderRadius: 7, padding: "1px 3px", fontSize: 10, color: BRASS, fontFamily: mono }}><Flame size={9} /> {streak}</div>}
+                    <button key={item.id} onClick={() => setActiveTab(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 58 }}>
+                      <div style={{ position: "relative", width: 44, height: 44, borderRadius: 10, background: active ? "rgba(0,113,227,0.16)" : PANEL, border: `1.5px solid ${ringColor}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Icon size={18} color={active ? BRASS : done ? TEAL : due ? CORAL : INK_FAINT} />
+                        {streak > 0 && (
+                          <div style={{ position: "absolute", top: -6, right: -6, display: "flex", alignItems: "center", gap: 1, background: BG, border: `1px solid ${BRASS_DIM}`, borderRadius: 7, padding: "1px 3px", fontSize: 10, color: BRASS, fontFamily: mono }}>
+                            <Flame size={9} /> {streak}
+                          </div>
+                        )}
                       </div>
+                      <span style={{ fontSize: 11, color: active ? BRASS : INK_FAINT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 58 }}>{item.name}</span>
                     </button>
                   );
                 })}
               </div>
 
               <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 12 }}>
+                  <Clock size={17} color={INK_FAINT} />
+                  <div style={{ textAlign: "center", fontFamily: mono, fontSize: 23, fontWeight: 600, color: INK, letterSpacing: "0.02em" }}>{fmtClock12(now)}</div>
+                </div>
+
                 {itemsForCat.filter((i) => i.id === activeTab).map((item) => {
                   const Icon = ICON_MAP[item.icon] || Target;
-                  const naturalIcon = getNaturalActivityIcon(item);
                   const rec = field(item.id);
 
                   if (item.type === "instant") {
-                    const scheduledLabel = item.scheduledTime ? fmtTimeString12(item.scheduledTime) : "Any time";
                     return (
-                      <Card key={item.id} style={{ textAlign: "center", padding: "22px 16px" }}>
+                      <Card key={item.id} style={{ textAlign: "center", padding: "19px 12px" }}>
                         {rec.status === "done" ? (
                           <>
-                            <div style={{ width: 60, height: 60, margin: "0 auto 12px", borderRadius: 18, background: "rgba(52,199,89,0.14)", display: "flex", alignItems: "center", justifyContent: "center" }}><Check size={30} color={TEAL} strokeWidth={3} /></div>
-                            <div style={{ fontSize: 18, fontWeight: 700, color: TEAL }}>Completed</div>
-                            <div style={{ marginTop: 6, fontSize: 14, color: INK_DIM }}>Done at {fmtTime(rec.time)}</div>
+                            <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 5 }}>{item.name} recorded</div>
+                            {editingInstantTime[item.id] ? (
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                                <TextField type="time" value={instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(rec.time)} onChange={(e) => setInstantTimeInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 120, fontFamily: mono, textAlign: "center" }} />
+                                <button onClick={() => editInstantTime(item.id, instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(rec.time))} style={{ background: TEAL, border: "none", borderRadius: 7, padding: "6px 8px", color: "#FFFFFF", cursor: "pointer" }}><Check size={15} /></button>
+                              </div>
+                            ) : (
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                <div style={{ fontFamily: mono, fontSize: 18, color: TEAL, fontWeight: 700 }}>{fmtTime(rec.time)}</div>
+                                <button onClick={() => { setInstantTimeInputs((p) => ({ ...p, [item.id]: hhmm(rec.time) })); setEditingInstantTime((p) => ({ ...p, [item.id]: true })); }} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={14} /></button>
+                              </div>
+                            )}
                           </>
                         ) : (
                           <>
-                            <div style={{ width: 60, height: 60, margin: "0 auto 12px", borderRadius: 18, background: "rgba(0,113,227,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, lineHeight: 1 }}>{naturalIcon}</div>
-                            <div style={{ fontSize: 19, fontWeight: 700, color: INK }}>{item.name}</div>
-                            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 9, padding: "8px 13px", borderRadius: 12, background: PANEL_2, color: INK_DIM, fontSize: 14 }}><Clock size={15} color={BRASS} />Scheduled: {scheduledLabel}</div>
-                            <div style={{ marginTop: 18 }}><ActionButton onClick={() => pressInstant(item.id)} label="Mark as Done" icon={Check} tone={TEAL} big /></div>
+                            <Icon size={24} color={BRASS} style={{ marginBottom: 8 }} />
+                            <div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Tap when {item.name.toLowerCase()} happens</div>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginBottom: 10 }}>
+                              <span style={{ fontSize: 13, color: INK_FAINT }}>at</span>
+                              <TextField type="time" value={instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(now)} onChange={(e) => setInstantTimeInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 120, fontFamily: mono, textAlign: "center" }} />
+                            </div>
+                            <ActionButton onClick={() => pressInstant(item.id, instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(now))} label="Done" icon={Check} tone={TEAL} big />
                           </>
                         )}
-                        {streaks[item.id] > 0 && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, marginTop: 14, fontSize: 13, color: BRASS, fontFamily: mono }}><Flame size={15} /> {streaks[item.id]} day streak</div>}
+                        {streaks[item.id] > 0 && (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 3, marginTop: 10, fontSize: 14, color: BRASS, fontFamily: mono }}>
+                            <Flame size={14} /> {streaks[item.id]} day streak
+                          </div>
+                        )}
                       </Card>
                     );
                   }
@@ -1867,10 +1850,10 @@ function LifeTracker() {
                         {rec.status === "done" ? (
                           <><div style={{ fontSize: 15, color: INK_DIM, marginBottom: 5 }}>{item.name} completed</div><div style={{ fontFamily: mono, fontSize: 18, color: TEAL, fontWeight: 600 }}>{fmtDuration(rec.durationMin)}</div></>
                         ) : rec.status === "in_progress" ? (
-                          <><div style={{ fontSize: 27, lineHeight: 1, marginBottom: 8 }}>{naturalIcon}</div><div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{fmtElapsed(now - new Date(rec.startTime))}</div><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></>
+                          <><Icon size={24} color={BRASS} style={{ marginBottom: 8 }} /><div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{fmtElapsed(now - new Date(rec.startTime))}</div><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></>
                         ) : (
                           <>
-                            <div style={{ fontSize: 27, lineHeight: 1, marginBottom: 8 }}>{naturalIcon}</div><div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Start when {item.name.toLowerCase()} begins</div><ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
+                            <Icon size={24} color={BRASS} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Start when {item.name.toLowerCase()} begins</div><ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 10 }}>
                               <span style={{ fontSize: 13, color: INK_FAINT }}>or log time spent (min)</span>
                               <TextField type="number" value={timeSpentInputs[item.id] || ""} onChange={(e) => setTimeSpentInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 60, fontFamily: mono, textAlign: "center" }} />
@@ -1895,7 +1878,7 @@ function LifeTracker() {
                     return (
                       <div key={item.id}>
                         <Card style={{ textAlign: "center", padding: "19px 12px", marginBottom: 9 }}>
-                          <div style={{ fontSize: 27, lineHeight: 1, marginBottom: 8 }}>{naturalIcon}</div>
+                          <Icon size={24} color={BRASS} style={{ marginBottom: 8 }} />
                           <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 3 }}>{due ? "An interval is due" : `Next at ${fmtTime(new Date(nextDueMs).toISOString())}`}</div>
                           <div style={{ fontFamily: mono, fontSize: 18, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{item.amount} {item.unit}</div>
                           <ActionButton onClick={() => logInterval(item)} label={`Log ${item.amount}${item.unit}`} icon={Check} tone={TEAL} big />
