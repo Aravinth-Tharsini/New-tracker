@@ -1736,14 +1736,30 @@ function LifeTracker() {
                   const done = (item.type === "instant" || item.type === "duration") && field(item.id).status === "done";
                   const due = item.type === "interval" && isIntervalDue(item, todayLog, now.getTime());
                   const streak = streaks[item.id] || 0;
-                  const scheduledLabel = item.scheduledTime ? fmtTimeString12(item.scheduledTime) : "Any time";
                   return (
-                    <button key={item.id} onClick={() => setActiveTab(item.id)} style={{ width: 62, minWidth: 62, padding: "7px 4px", borderRadius: 14, border: active ? `2px solid ${BRASS}` : `1px solid ${LINE}`, background: active ? "rgba(0,113,227,0.10)" : PANEL, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      aria-label={item.name}
+                      style={{
+                        width: 58,
+                        minWidth: 58,
+                        height: 58,
+                        padding: 0,
+                        borderRadius: 16,
+                        border: active ? `2px solid ${BRASS}` : `1px solid ${LINE}`,
+                        background: active ? "rgba(0,113,227,0.10)" : PANEL,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0
+                      }}
+                    >
                       <div style={{ position: "relative", width: 42, height: 42, borderRadius: 13, background: done ? "rgba(52,199,89,0.14)" : due ? "rgba(255,100,80,0.12)" : active ? "rgba(0,113,227,0.14)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center" }}>
                         {done ? <Check size={21} color={TEAL} strokeWidth={3} /> : <Icon size={21} color={active ? BRASS : due ? CORAL : INK_DIM} />}
                         {streak > 0 && <div style={{ position: "absolute", top: -6, right: -6, display: "flex", alignItems: "center", gap: 1, background: BG, border: `1px solid ${BRASS_DIM}`, borderRadius: 7, padding: "1px 3px", fontSize: 10, color: BRASS, fontFamily: mono }}><Flame size={9} /> {streak}</div>}
                       </div>
-                      <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 3, fontSize: 10, color: done ? TEAL : INK_FAINT, fontFamily: mono }}><Clock size={10} />{done ? "Done" : scheduledLabel}</span>
                     </button>
                   );
                 })}
