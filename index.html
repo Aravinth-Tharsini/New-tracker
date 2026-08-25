@@ -1401,7 +1401,7 @@ function LifeTracker() {
         const totalActivities = validItems.filter((i) => i.type !== "interval").length;
         const todayExpenses = todayLog.expenses.reduce((sum, e) => sum + e.amount, 0);
         return <div style={{ padding: "6px 16px 16px", flex: 1, width: "100%" }}>
-          <div className="notificationStickyBar"><Card style={{ marginBottom: 10, background: "linear-gradient(135deg, #FFFFFF, #F2F7FF)" }}>
+          <div className="notificationStickyBar"><Card style={{ marginBottom: 10, background: `linear-gradient(135deg, ${PANEL}, ${PANEL_2})` }}>
             <div style={{ fontSize: 13, color: INK_FAINT }}>TODAY'S OVERVIEW</div>
             <div style={{ fontSize: 25, fontWeight: 700, marginTop: 4 }}>Good day! Keep going.</div>
             <div style={{ fontSize: 14, color: INK_DIM, marginTop: 4 }}>{formatDateLong(new Date())}</div>
