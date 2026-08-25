@@ -94,7 +94,7 @@ import {
   Settings2, Play, Square, ArrowUp, ArrowDown, Sun, Building2, Dumbbell, Moon, Droplet, Receipt,
   Target, Clock, Pencil, ChevronUp, ChevronDown, Bell, BellOff, Flame, Download, FileJson,
   Plane, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
-  ShoppingBag, Footprints, Film, Music, Users, HandHeart: PrayerTempleIcon, Brush, Coffee, Smile,
+  ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, Home as HomeIcon,
 } from "lucide-react";
 
@@ -290,14 +290,57 @@ function downloadFile(filename, content, mime) {
   document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-const PrayerTempleIcon = ({ size = 20, style = {} }) => (
+const ROUTINE_ICON_EMOJI = {
+  Sun: "🌅",
+  Building2: "🏢",
+  Dumbbell: "🏋️",
+  Moon: "🌙",
+  Droplet: "💧",
+  Receipt: "🧾",
+  Target: "🎯",
+  Clock: "⏰",
+  Bike: "🚴",
+  Car: "🚗",
+  Bath: "🚿",
+  Gamepad2: "🎮",
+  Home: "🏠",
+  BookOpen: "📚",
+  Laptop: "💻",
+  ChefHat: "🍳",
+  UtensilsCrossed: "🍽️",
+  ShoppingBag: "🛒",
+  Footprints: "🚶",
+  Film: "🎬",
+  Music: "🎧",
+  Users: "👨‍👩‍👧‍👦",
+  HandHeart: "🛕",
+  Brush: "🧹",
+  Coffee: "☕",
+  Smile: "😊"
+};
+
+const RoutineActivityIcon = ({ icon, size = 20, style = {}, title }) => (
   <span
     role="img"
-    aria-label="Hindu temple"
-    style={{ fontSize: size, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", ...style }}
+    aria-label={title || icon || "Activity"}
+    title={title || icon || "Activity"}
+    style={{
+      fontSize: size,
+      lineHeight: 1,
+      width: size,
+      height: size,
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      ...style
+    }}
   >
-    🛕
+    {ROUTINE_ICON_EMOJI[icon] || "✨"}
   </span>
+);
+
+const PrayerTempleIcon = ({ size = 20, style = {} }) => (
+  <RoutineActivityIcon icon="HandHeart" size={size} style={style} title="Prayer" />
 );
 
 const ICON_MAP = {
@@ -1785,7 +1828,6 @@ function LifeTracker() {
                       <div style={{ marginTop: 6 }}>
               <div className="no-scrollbar" style={{ display: "flex", gap: 8, paddingBottom: 14, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                 {itemsForCat.map((item) => {
-                  const Icon = ICON_MAP[item.icon] || Target;
                   const active = activeTab === item.id;
                   const done = (item.type === "instant" || item.type === "duration") && field(item.id).status === "done";
                   const due = item.type === "interval" && isIntervalDue(item, todayLog, now.getTime());
@@ -1794,14 +1836,13 @@ function LifeTracker() {
                   return (
                     <button key={item.id} onClick={() => setActiveTab(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 58 }}>
                       <div style={{ position: "relative", width: 44, height: 44, borderRadius: 10, background: active ? "rgba(0,113,227,0.16)" : PANEL, border: `1.5px solid ${ringColor}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <Icon size={18} color={active ? BRASS : done ? TEAL : due ? CORAL : INK_FAINT} />
+                        <RoutineActivityIcon icon={item.icon} size={20} title={item.name} />
                         {streak > 0 && (
                           <div style={{ position: "absolute", top: -6, right: -6, display: "flex", alignItems: "center", gap: 1, background: BG, border: `1px solid ${BRASS_DIM}`, borderRadius: 7, padding: "1px 3px", fontSize: 10, color: BRASS, fontFamily: mono }}>
                             <Flame size={9} /> {streak}
                           </div>
                         )}
                       </div>
-                      <span style={{ fontSize: 11, color: active ? BRASS : INK_FAINT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 58 }}>{item.name}</span>
                     </button>
                   );
                 })}
@@ -1814,7 +1855,6 @@ function LifeTracker() {
                 </div>
 
                 {itemsForCat.filter((i) => i.id === activeTab).map((item) => {
-                  const Icon = ICON_MAP[item.icon] || Target;
                   const rec = field(item.id);
 
                   if (item.type === "instant") {
@@ -1837,7 +1877,7 @@ function LifeTracker() {
                           </>
                         ) : (
                           <>
-                            <Icon size={24} color={BRASS} style={{ marginBottom: 8 }} />
+                            <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
                             <div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Tap when {item.name.toLowerCase()} happens</div>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginBottom: 10 }}>
                               <span style={{ fontSize: 13, color: INK_FAINT }}>at</span>
@@ -1860,10 +1900,10 @@ function LifeTracker() {
                         {rec.status === "done" ? (
                           <><div style={{ fontSize: 15, color: INK_DIM, marginBottom: 5 }}>{item.name} completed</div><div style={{ fontFamily: mono, fontSize: 18, color: TEAL, fontWeight: 600 }}>{fmtDuration(rec.durationMin)}</div></>
                         ) : rec.status === "in_progress" ? (
-                          <><Icon size={24} color={BRASS} style={{ marginBottom: 8 }} /><div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{fmtElapsed(now - new Date(rec.startTime))}</div><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></>
+                          <><RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{fmtElapsed(now - new Date(rec.startTime))}</div><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></>
                         ) : (
                           <>
-                            <Icon size={24} color={BRASS} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Start when {item.name.toLowerCase()} begins</div><ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
+                            <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Start when {item.name.toLowerCase()} begins</div><ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 10 }}>
                               <span style={{ fontSize: 13, color: INK_FAINT }}>or log time spent (min)</span>
                               <TextField type="number" value={timeSpentInputs[item.id] || ""} onChange={(e) => setTimeSpentInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 60, fontFamily: mono, textAlign: "center" }} />
@@ -1888,7 +1928,7 @@ function LifeTracker() {
                     return (
                       <div key={item.id}>
                         <Card style={{ textAlign: "center", padding: "19px 12px", marginBottom: 9 }}>
-                          <Icon size={24} color={BRASS} style={{ marginBottom: 8 }} />
+                          <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
                           <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 3 }}>{due ? "An interval is due" : `Next at ${fmtTime(new Date(nextDueMs).toISOString())}`}</div>
                           <div style={{ fontFamily: mono, fontSize: 18, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{item.amount} {item.unit}</div>
                           <ActionButton onClick={() => logInterval(item)} label={`Log ${item.amount}${item.unit}`} icon={Check} tone={TEAL} big />
@@ -2108,11 +2148,10 @@ function LifeTracker() {
                   <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Only items with their required fields filled in show up on the Daily tab.</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {dailyItems.map((item, idx) => {
-                      const Icon = ICON_MAP[item.icon] || Target;
                       const valid = isItemValid(item);
                       return (
                         <Card key={item.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          <Icon size={16} color={valid ? BRASS : INK_FAINT} style={{ flexShrink: 0, marginRight: 4 }} />
+                          <RoutineActivityIcon icon={item.icon} size={18} title={item.name} style={{ flexShrink: 0, marginRight: 4 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 15 }}>{item.name || <span style={{ color: INK_FAINT }}>(unnamed)</span>}</div>
                             <div style={{ fontSize: 13, color: valid ? TEAL : CORAL, marginTop: 2 }}>{item.type} &middot; {valid ? "on Daily tab" : "incomplete \u2014 hidden"}</div>
@@ -2146,14 +2185,32 @@ function LifeTracker() {
                     </Select>
                     <div>
                       <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 6 }}>Icon</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6, width: "100%", boxSizing: "border-box" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 7, width: "100%", boxSizing: "border-box" }}>
                         {ICON_NAMES.map((name) => {
-                          const I = ICON_MAP[name]; const sel = itemForm.icon === name;
+                          const sel = itemForm.icon === name;
                           return (
-                            <button key={name} onClick={() => setItemForm((f) => ({ ...f, icon: name }))} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, height: 56, minWidth: 0, borderRadius: 8, background: sel ? "rgba(0,113,227,0.15)" : PANEL_2, border: `1px solid ${sel ? BRASS : LINE}`, cursor: "pointer", overflow: "hidden" }}>
-                              <I size={18} color={sel ? BRASS : INK_DIM} />
-                              <span style={{ fontSize: 10, color: sel ? BRASS : INK_FAINT, textTransform: "uppercase", letterSpacing: "0.03em", textAlign: "center", lineHeight: 1.1, wordBreak: "break-word", overflowWrap: "anywhere", padding: "0 2px", maxWidth: "100%" }}>{name}</span>
-                              {sel && <div style={{ position: "absolute", top: 4, right: 4, width: 12, height: 12, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Check size={9} color={BG} /></div>}
+                            <button
+                              key={name}
+                              type="button"
+                              aria-label={name}
+                              title={name}
+                              onClick={() => setItemForm((f) => ({ ...f, icon: name }))}
+                              style={{
+                                position: "relative",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                height: 54,
+                                minWidth: 0,
+                                borderRadius: 11,
+                                background: sel ? "rgba(0,113,227,0.12)" : PANEL_2,
+                                border: `1px solid ${sel ? BRASS : LINE}`,
+                                cursor: "pointer",
+                                overflow: "hidden"
+                              }}
+                            >
+                              <RoutineActivityIcon icon={name} size={24} />
+                              {sel && <div style={{ position: "absolute", top: 4, right: 4, width: 14, height: 14, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Check size={9} color={BG} /></div>}
                             </button>
                           );
                         })}
