@@ -505,6 +505,7 @@ function LifeTracker() {
   const [undoAction, setUndoAction] = useState(null);
   const undoTimerRef = useRef(null);
   const fileInputRef = useRef(null);
+  const headerDateInputRef = useRef(null);
   const syncTimerRef = useRef(null);
   const didInitialPull = useRef(false);
   const pullSettledRef = useRef(false);
@@ -1343,11 +1344,34 @@ function LifeTracker() {
         <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
           {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "Data Link" : "Insights"}
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
           <button onClick={toggleReminders} title={remindersEnabled ? "Reminders on" : "Reminders off"} style={{ background: "transparent", border: "none", color: remindersEnabled ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}>
             {remindersEnabled ? <Bell size={16} /> : <BellOff size={16} />}
           </button>
-          <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 14, color: INK_FAINT, fontFamily: mono }}><CalendarDays size={13} /> {formatDateLong(new Date())}</span>
+          <button
+            onClick={() => {
+              const el = headerDateInputRef.current;
+              if (!el) return;
+              if (typeof el.showPicker === "function") { try { el.showPicker(); } catch (e) { el.focus(); el.click(); } }
+              else { el.focus(); el.click(); }
+            }}
+            title="Open calendar"
+            style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 14, color: INK_FAINT, fontFamily: mono, background: "transparent", border: "none", cursor: "pointer", padding: 0 }}
+          >
+            <CalendarDays size={13} /> {formatDateLong(new Date())}
+          </button>
+          <input
+            ref={headerDateInputRef}
+            type="date"
+            value={insightDate}
+            onChange={(e) => {
+              if (!e.target.value) return;
+              setInsightDate(e.target.value);
+              setInsightPeriod("day");
+              setPage("analysis");
+            }}
+            style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+          />
         </div>
       </div>
 
