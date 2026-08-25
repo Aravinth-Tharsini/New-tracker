@@ -188,6 +188,40 @@ function computeRechargePlan(planAmount, durationValue, durationUnit, startDate)
 function inr(n) { return "₹" + Math.round(n).toLocaleString("en-IN"); }
 function fmtClock12(d) { return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" }); }
 function fmtTime(iso) { return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); }
+
+// ---- IndexedDB helpers: remember which folder was picked for auto-backup ----
+// (Note: this pointer lives in IndexedDB, so "Clear browsing data" can wipe it too —
+// but the backup FILES it writes live on disk, outside the browser, so your data survives either way.)
+function idbGetHandle(key) {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open("life-tracker-fs", 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore("handles"); };
+      req.onsuccess = () => {
+        const tx = req.result.transaction("handles", "readonly");
+        const g = tx.objectStore("handles").get(key);
+        g.onsuccess = () => resolve(g.result || null);
+        g.onerror = () => resolve(null);
+      };
+      req.onerror = () => resolve(null);
+    } catch (e) { resolve(null); }
+  });
+}
+function idbSetHandle(key, value) {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open("life-tracker-fs", 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore("handles"); };
+      req.onsuccess = () => {
+        const tx = req.result.transaction("handles", "readwrite");
+        tx.objectStore("handles").put(value, key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      };
+      req.onerror = () => resolve(false);
+    } catch (e) { resolve(false); }
+  });
+}
 function hhmm(d) { const dt = d instanceof Date ? d : new Date(d); return `${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`; }
 function fmtTimeString12(hhmmStr) {
   if (!hhmmStr) return "";
@@ -492,6 +526,12 @@ function LifeTracker() {
   const syncTimerRef = useRef(null);
   const didInitialPull = useRef(false);
   const pullSettledRef = useRef(false);
+  const folderBackupTimerRef = useRef(null);
+  const fsSupported = typeof window !== "undefined" && !!window.showDirectoryPicker;
+  const [backupDirHandle, setBackupDirHandle] = useState(null);
+  const [backupDirName, setBackupDirName] = useState("");
+  const [backupStatus, setBackupStatus] = useState("idle"); // idle | saving | saved | error | needs-permission
+  const [lastBackupAt, setLastBackupAt] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [now, setNow] = useState(new Date());
   const notifiedRef = useRef({});
@@ -574,6 +614,59 @@ function LifeTracker() {
     setPendingImportData(null);
   };
   const cancelImport = () => setPendingImportData(null);
+
+  // ---- Data Link: auto-backup to a folder on this device (File System Access API) ----
+  useEffect(() => {
+    (async () => {
+      if (!fsSupported) return;
+      const handle = await idbGetHandle("backupDir");
+      if (!handle) return;
+      setBackupDirHandle(handle);
+      setBackupDirName(handle.name || "");
+      try {
+        const perm = await handle.queryPermission({ mode: "readwrite" });
+        setBackupStatus(perm === "granted" ? "idle" : "needs-permission");
+      } catch (e) { setBackupStatus("needs-permission"); }
+    })();
+  }, []);
+  const writeBackupToFolder = async (handle) => {
+    if (!handle) return;
+    setBackupStatus("saving");
+    try {
+      const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, exportedAt: new Date().toISOString() };
+      const fileHandle = await handle.getFileHandle("life-tracker-backup.json", { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(payload, null, 2));
+      await writable.close();
+      setLastBackupAt(new Date().toISOString());
+      setBackupStatus("saved");
+    } catch (e) {
+      setBackupStatus("error");
+    }
+  };
+  const chooseBackupFolder = async () => {
+    try {
+      const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+      setBackupDirHandle(handle);
+      setBackupDirName(handle.name);
+      await idbSetHandle("backupDir", handle);
+      await writeBackupToFolder(handle);
+    } catch (e) { /* user cancelled the picker */ }
+  };
+  const reconnectBackupFolder = async () => {
+    if (!backupDirHandle) return;
+    try {
+      const perm = await backupDirHandle.requestPermission({ mode: "readwrite" });
+      if (perm === "granted") await writeBackupToFolder(backupDirHandle);
+    } catch (e) {}
+  };
+  useEffect(() => {
+    if (!loaded || !backupDirHandle || backupStatus === "needs-permission") return;
+    if (folderBackupTimerRef.current) clearTimeout(folderBackupTimerRef.current);
+    folderBackupTimerRef.current = setTimeout(() => { writeBackupToFolder(backupDirHandle); }, 2500);
+    return () => clearTimeout(folderBackupTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, backupDirHandle, loaded]);
 
   // ---- Data Link: online sync (Google Sheet via Apps Script Web App URL) ----
   const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, syncedAt: new Date().toISOString() });
@@ -2835,6 +2928,47 @@ function LifeTracker() {
                 <input ref={fileInputRef} type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) importDataFile(f); e.target.value = ""; }} />
               </div>
               {importMessage && <div style={{ fontSize: 14, color: TEAL, marginTop: 8 }}>{importMessage}</div>}
+            </Card>
+          )}
+
+          {dataMode === "offline" && (
+            <Card style={{ marginBottom: 9 }}>
+              <SectionLabel>Auto backup to a folder</SectionLabel>
+              {!fsSupported && (
+                <div style={{ fontSize: 14, color: INK_FAINT, lineHeight: 1.5 }}>
+                  This device/browser doesn't support automatic folder backup (it needs Chrome or Edge on a computer). Use Export backup above regularly instead \u2014 or set up Online mode for automatic cloud backup.
+                </div>
+              )}
+              {fsSupported && !backupDirHandle && (
+                <>
+                  <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Pick a folder on this device. Your data will auto-save there a couple seconds after any change \u2014 as a real file, outside browser storage, so clearing Chrome data won't erase it.</div>
+                  <ActionButton onClick={chooseBackupFolder} label="Choose backup folder" icon={HardDrive} tone={BRASS} />
+                </>
+              )}
+              {fsSupported && backupDirHandle && backupStatus === "needs-permission" && (
+                <>
+                  <div style={{ fontSize: 14, color: INK_DIM, marginBottom: 9 }}>Backup folder "{backupDirName}" is remembered, but needs permission again this session.</div>
+                  <ActionButton onClick={reconnectBackupFolder} label="Reconnect folder" icon={RefreshCw} tone={BRASS} />
+                </>
+              )}
+              {fsSupported && backupDirHandle && backupStatus !== "needs-permission" && (
+                <>
+                  <div style={{ fontSize: 14, color: INK_DIM, marginBottom: 8 }}>Backing up to folder: <b>{backupDirName}</b></div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                    <ActionButton onClick={() => writeBackupToFolder(backupDirHandle)} label="Backup now" icon={RefreshCw} tone={BRASS} />
+                    <button onClick={chooseBackupFolder} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>
+                      Change folder
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 5, color: backupStatus === "error" ? CORAL : backupStatus === "saving" ? BRASS : TEAL }}>
+                    {backupStatus === "error" ? <CloudOff size={14} /> : <HardDrive size={14} />}
+                    {backupStatus === "saving" && "Saving\u2026"}
+                    {backupStatus === "saved" && lastBackupAt && `Last backed up ${fmtTime(lastBackupAt)}`}
+                    {backupStatus === "error" && "Backup failed \u2014 tap Backup now to retry."}
+                    {backupStatus === "idle" && !lastBackupAt && "Not backed up yet."}
+                  </div>
+                </>
+              )}
             </Card>
           )}
 
