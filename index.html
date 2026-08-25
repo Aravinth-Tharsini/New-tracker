@@ -95,7 +95,7 @@ import {
   Target, Clock, Pencil, ChevronUp, ChevronDown, Bell, BellOff, Flame, Download, FileJson,
   Plane, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
-  Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Search, Undo2, Home as HomeIcon,
+  Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, Home as HomeIcon,
 } from "lucide-react";
 
 const INK = "#1D1D1F";
@@ -118,6 +118,21 @@ function pad2(n) { return String(n).padStart(2, "0"); }
 function dateKey(d = new Date()) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 function monthKey(d = new Date()) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; }
 function formatDateLong(d) { return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); }
+function formatDMY(dateStr) {
+  if (!dateStr) return "";
+  let dt;
+  if (typeof dateStr === "string" && dateStr.length === 10 && dateStr.includes("-") && !dateStr.includes("T")) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    dt = new Date(y, m - 1, d);
+  } else {
+    dt = new Date(dateStr);
+  }
+  if (isNaN(dt.getTime())) return dateStr;
+  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+function formatDMYForFilename(dateStr) {
+  return formatDMY(dateStr).replace(/ /g, "-"); // e.g. "25-Aug-2026", safe for filenames
+}
 function monthLabel(mk) { const [y, m] = mk.split("-"); return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" }); }
 function round(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
 function durationToMonths(value, unit) {
@@ -488,8 +503,6 @@ function LifeTracker() {
   const [lastAutoExportAt, setLastAutoExportAt] = useState("");
   const [pendingImportData, setPendingImportData] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
   const undoTimerRef = useRef(null);
   const fileInputRef = useRef(null);
   const syncTimerRef = useRef(null);
@@ -541,7 +554,7 @@ function LifeTracker() {
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `life-tracker-backup-${dateKey()}.json`;
+    a.href = url; a.download = `life-tracker-backup-${formatDMYForFilename(dateKey())}.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
     setImportMessage("Backup file downloaded.");
@@ -1281,7 +1294,7 @@ function LifeTracker() {
           notifiedRef.current[`travel:${plan.id}:${offset}`] = notifyKey;
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
             const label = (REMINDER_OPTIONS.find((o) => o.value === offset) || {}).label || "";
-            try { new Notification(`Upcoming trip: ${plan.fromLocation} \u2192 ${plan.toLocation}`, { body: `${plan.mode} on ${plan.travelDate}${plan.travelTime ? ` at ${plan.travelTime}` : ""} \u2014 ${label.toLowerCase()}` }); } catch (e) {}
+            try { new Notification(`Upcoming trip: ${plan.fromLocation} \u2192 ${plan.toLocation}`, { body: `${plan.mode} on ${formatDMY(plan.travelDate)}${plan.travelTime ? ` at ${plan.travelTime}` : ""} \u2014 ${label.toLowerCase()}` }); } catch (e) {}
           }
         }
       });
@@ -1331,52 +1344,12 @@ function LifeTracker() {
           {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "Data Link" : "Insights"}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={() => setShowSearch((v) => !v)} title="Search" style={{ background: "transparent", border: "none", color: showSearch ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}><Search size={16} /></button>
           <button onClick={toggleReminders} title={remindersEnabled ? "Reminders on" : "Reminders off"} style={{ background: "transparent", border: "none", color: remindersEnabled ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}>
             {remindersEnabled ? <Bell size={16} /> : <BellOff size={16} />}
           </button>
           <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 14, color: INK_FAINT, fontFamily: mono }}><CalendarDays size={13} /> {formatDateLong(new Date())}</span>
         </div>
       </div>
-
-      {showSearch && (() => {
-        const q = searchQuery.trim().toLowerCase();
-        const matchedExpenses = q ? Object.entries(dailyLogs).flatMap(([d, log]) => (log.expenses || [])
-          .filter((e) => [e.group, e.subcategory, e.vendor, e.remarks].some((f) => f && String(f).toLowerCase().includes(q)))
-          .map((e) => ({ ...e, date: d }))) : [];
-        const matchedGoals = q ? goals.filter((g) => (g.title || "").toLowerCase().includes(q)) : [];
-        const matchedRepayments = q ? repayments.filter((r) => [r.name, r.purpose, r.remarks, r.category].some((f) => f && String(f).toLowerCase().includes(q))) : [];
-        const totalMatches = matchedExpenses.length + matchedGoals.length + matchedRepayments.length;
-        return (
-          <div style={{ padding: "0 16px 8px" }}>
-            <TextField value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search expenses, goals, repayments..." autoFocus />
-            {!q && <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 5 }}>Type a keyword to quickly find your records.</div>}
-            {q && (
-              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}>
-                {totalMatches === 0 && <div style={{ fontSize: 13, color: INK_FAINT }}>No matches for &ldquo;{searchQuery}&rdquo;.</div>}
-                {matchedExpenses.slice(0, 10).map((e, i) => (
-                  <div key={"se" + (e.id || i)} style={{ fontSize: 13, color: INK_DIM, display: "flex", justifyContent: "space-between", gap: 8, background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 8, padding: "7px 10px" }}>
-                    <span>{e.group}{e.subcategory ? ` \u203a ${e.subcategory}` : ""}{e.vendor ? ` \u2014 ${e.vendor}` : ""}</span>
-                    <span style={{ fontFamily: mono, color: INK, whiteSpace: "nowrap" }}>{inr(e.amount)} &middot; {e.date}</span>
-                  </div>
-                ))}
-                {matchedGoals.slice(0, 10).map((g) => (
-                  <div key={g.id} style={{ fontSize: 13, color: INK_DIM, display: "flex", justifyContent: "space-between", gap: 8, background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 8, padding: "7px 10px" }}>
-                    <span>Goal &middot; {g.title}</span>
-                    <span style={{ color: g.done ? TEAL : INK_FAINT, whiteSpace: "nowrap" }}>{g.done ? "Done" : "In progress"}</span>
-                  </div>
-                ))}
-                {matchedRepayments.slice(0, 10).map((r) => (
-                  <div key={r.id} style={{ fontSize: 13, color: INK_DIM, display: "flex", justifyContent: "space-between", gap: 8, background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 8, padding: "7px 10px" }}>
-                    <span>{r.category} &middot; {r.name}</span>
-                    <span style={{ fontFamily: mono, color: INK, whiteSpace: "nowrap" }}>{r.amount ? inr(r.amount) : ""}{r.dueDate ? ` \u00b7 ${r.dueDate}` : ""}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       {page === "dashboard" && (() => {
         const pendingActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status !== "done").length;
@@ -1476,7 +1449,7 @@ function LifeTracker() {
                                     {dayLabel && (
                                       <span style={{ fontSize: 13, fontWeight: 700, color: "#FFFFFF", background: BRASS, borderRadius: 980, padding: "2px 8px" }}>{dayLabel}</span>
                                     )}
-                                    <span style={{ fontSize: 13, fontWeight: 700, color: BRASS, background: "rgba(0,113,227,0.10)", borderRadius: 980, padding: "2px 8px" }}>{t.travelDate}</span>
+                                    <span style={{ fontSize: 13, fontWeight: 700, color: BRASS, background: "rgba(0,113,227,0.10)", borderRadius: 980, padding: "2px 8px" }}>{formatDMY(t.travelDate)}</span>
                                     {t.travelTime && (
                                       <span style={{ fontSize: 13, fontWeight: 700, color: TEAL, background: "rgba(52,199,89,0.12)", borderRadius: 980, padding: "2px 8px" }}>{fmtTimeString12(t.travelTime)} &middot; {timeOfDayLabel(t.travelTime)}</span>
                                     )}
@@ -1518,7 +1491,7 @@ function LifeTracker() {
                                             </div>
                                           ))}
                                         </div>
-                                        {!scheduledDay && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 4 }}>Marking done is available on {t.travelDate}</div>}
+                                        {!scheduledDay && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 4 }}>Marking done is available on {formatDMY(t.travelDate)}</div>}
                                       </div>
                                     );
                                   })()}
@@ -1531,7 +1504,7 @@ function LifeTracker() {
                                     </div>
                                   ) : (
                                     <div style={{ fontSize: 12, color: INK_FAINT, textAlign: "center", padding: "5px 0" }}>
-                                      {today < t.travelDate ? `Done / Dismiss available on ${t.travelDate}` : "Travel date has passed \u2014 edit or delete from Categories"}
+                                      {today < t.travelDate ? `Done / Dismiss available on ${formatDMY(t.travelDate)}` : "Travel date has passed \u2014 edit or delete from Categories"}
                                     </div>
                                   )}
                                 </div>
@@ -1563,7 +1536,7 @@ function LifeTracker() {
                                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
                                         <div style={{ flex: 1 }}>
                                           <div style={{ fontSize: 15, color: INK }}>{r.name || r.category}</div>
-                                          <div style={{ fontSize: 13, color: overdue ? CORAL : INK_FAINT, marginTop: 2 }}>{r.category} &middot; due {r.dueDate}{overdue ? " \u00b7 overdue" : ""}</div>
+                                          <div style={{ fontSize: 13, color: overdue ? CORAL : INK_FAINT, marginTop: 2 }}>{r.category} &middot; due {formatDMY(r.dueDate)}{overdue ? " \u00b7 overdue" : ""}</div>
                                         </div>
                                         {!variable && <span style={{ fontFamily: mono, fontSize: 16, color: CORAL, flexShrink: 0 }}>{inr(r.amount)}</span>}
                                       </div>
@@ -1972,7 +1945,7 @@ function LifeTracker() {
                           <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
                           <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3, display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
                             {dayLabel && <span style={{ fontWeight: 700, color: BRASS }}>{dayLabel}</span>}
-                            <span>{t.travelDate}</span>
+                            <span>{formatDMY(t.travelDate)}</span>
                             {t.travelTime && <><span>&middot;</span><span style={{ fontWeight: 700, color: INK_DIM }}>{fmtTimeString12(t.travelTime)}</span><span>({timeOfDayLabel(t.travelTime)})</span></>}
                             {t.amount ? <span>&middot; {inr(t.amount)}</span> : null}
                             {t.amount > 0 && <span style={{ fontWeight: 700, color: t.paymentStatus === "Already Paid" ? TEAL : CORAL }}>&middot; {t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}</span>}
@@ -2120,7 +2093,7 @@ function LifeTracker() {
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>{list.shopName}</div>
                               {list.location && <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 2 }}>{list.location}</div>}
-                              <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 2 }}>{list.items.length} item{list.items.length === 1 ? "" : "s"}{list.shoppingDate ? ` \u00b7 planned ${list.shoppingDate}` : ""}</div>
+                              <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 2 }}>{list.items.length} item{list.items.length === 1 ? "" : "s"}{list.shoppingDate ? ` \u00b7 planned ${formatDMY(list.shoppingDate)}` : ""}</div>
                             </div>
                             <div style={{ textAlign: "right", flexShrink: 0 }}>
                               <div style={{ fontFamily: mono, fontSize: 17, fontWeight: 600, color: INK }}>{inr(total)}</div>
@@ -2145,9 +2118,9 @@ function LifeTracker() {
                             <div style={{ marginTop: 9, borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
                               <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 6 }}>
                                 {list.location && <div>Location: {list.location}</div>}
-                                {list.shoppingDate && <div>Planned date: {list.shoppingDate}</div>}
-                                <div>Created: {list.createdAt ? new Date(list.createdAt).toLocaleDateString() : "-"}</div>
-                                {list.paidAt && <div>Paid: {new Date(list.paidAt).toLocaleDateString()}</div>}
+                                {list.shoppingDate && <div>Planned date: {formatDMY(list.shoppingDate)}</div>}
+                                <div>Created: {list.createdAt ? formatDMY(list.createdAt) : "-"}</div>
+                                {list.paidAt && <div>Paid: {formatDMY(list.paidAt)}</div>}
                               </div>
                               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                                 {list.items.map((it) => (
@@ -2419,11 +2392,11 @@ function LifeTracker() {
                               <div style={{ fontSize: 16, fontWeight: 600, textDecoration: r.paid ? "line-through" : "none", color: r.paid ? INK_FAINT : INK }}>{r.name || r.category}{r.purpose ? ` \u00b7 ${r.purpose}` : ""}</div>
                               <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3, fontFamily: mono, display: "flex", flexDirection: "column", gap: 2 }}>
                                 <span>{r.category}{cls === "gold" ? ` \u00b7 ${r.goldWeight || "?"}g${r.location ? ` \u00b7 ${r.location}` : ""}` : ""}{cls === "simple" && r.frequency ? ` \u00b7 ${r.frequency}${r.dueDayStart ? ` (day ${r.dueDayStart}${r.dueDayEnd ? `\u2013${r.dueDayEnd}` : ""})` : ""}` : ""}</span>
-                                {r.receivedDate && <span>Received {r.receivedDate}</span>}
+                                {r.receivedDate && <span>Received {formatDMY(r.receivedDate)}</span>}
                                 {cls === "recharge" ? (
-                                  <span>Renews {r.dueDate || "-"}</span>
+                                  <span>Renews {r.dueDate ? formatDMY(r.dueDate) : "-"}</span>
                                 ) : r.dueDate ? (
-                                  <span style={{ color: overdue ? CORAL : INK_FAINT }}>Due {r.dueDate}{overdue ? " \u00b7 overdue" : ""}</span>
+                                  <span style={{ color: overdue ? CORAL : INK_FAINT }}>Due {formatDMY(r.dueDate)}{overdue ? " \u00b7 overdue" : ""}</span>
                                 ) : null}
                                 {r.dueDate && !r.paid && (
                                   <span>Reminder {(REMINDER_OPTIONS.find((o) => o.value === r.reminderOffset) || REMINDER_OPTIONS[3]).label.toLowerCase()}</span>
