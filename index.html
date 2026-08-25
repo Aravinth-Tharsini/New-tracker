@@ -2480,6 +2480,26 @@ function LifeTracker() {
                 <SectionLabel>Goals</SectionLabel>
                 <button onClick={() => (showAddGoal ? cancelGoalForm() : setShowAddGoal(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add goal</button>
               </div>
+              {isRoutineCategory && categoryGoals.length > 0 && (() => {
+                const totalGoals = categoryGoals.length;
+                const doneGoals = categoryGoals.filter((g) => g.done).length;
+                const pendingGoals = totalGoals - doneGoals;
+                const pct = totalGoals ? Math.round((doneGoals / totalGoals) * 100) : 0;
+                return (
+                  <Card style={{ marginBottom: 9 }}>
+                    <SectionLabel>Overall summary</SectionLabel>
+                    <div style={{ display: "flex", gap: "10px 8px", flexWrap: "wrap", marginBottom: 8 }}>
+                      <div style={{ flex: "1 1 30%", minWidth: 80 }}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Total</div><div style={{ fontFamily: mono, fontSize: 19, fontWeight: 700 }}>{totalGoals}</div></div>
+                      <div style={{ flex: "1 1 30%", minWidth: 80 }}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Completed</div><div style={{ fontFamily: mono, fontSize: 19, fontWeight: 700, color: TEAL }}>{doneGoals}</div></div>
+                      <div style={{ flex: "1 1 30%", minWidth: 80 }}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Pending</div><div style={{ fontFamily: mono, fontSize: 19, fontWeight: 700, color: pendingGoals ? BRASS : INK }}>{pendingGoals}</div></div>
+                    </div>
+                    <div style={{ height: 6, borderRadius: 999, background: PANEL_2, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${pct}%`, background: TEAL, borderRadius: 999 }} />
+                    </div>
+                    <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 4 }}>{pct}% of all {catTab === "career" ? "career growth" : "health"} goals completed</div>
+                  </Card>
+                );
+              })()}
               {isRoutineCategory && !selectedGoalId && categoryGoals.some((g) => !g.done && g.sessionMinutes) && (
                 <Card style={{ marginBottom: 9 }}>
                   <SectionLabel>Planned time (from schedule)</SectionLabel>
