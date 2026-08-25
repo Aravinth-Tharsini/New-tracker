@@ -517,6 +517,8 @@ function LifeTracker() {
   const [syncStatus, setSyncStatus] = useState("idle");
   const [lastSyncedAt, setLastSyncedAt] = useState("");
   const [importMessage, setImportMessage] = useState("");
+  const [autoExportEnabled, setAutoExportEnabled] = useState(false);
+  const [lastAutoExportAt, setLastAutoExportAt] = useState("");
   const [pendingImportData, setPendingImportData] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -548,8 +550,8 @@ function LifeTracker() {
 
   useEffect(() => {
     (async () => {
-      const keys = ["dailyItems", "dailyLogs", "goals", "repayments", "travelPlans", "financeMonthly", "shoppingLists", "savedShopNames", "savedShoppingCategories", "remindersEnabled", "dataMode", "sheetUrl", "lastSyncedAt"];
-      const setters = [setDailyItems, setDailyLogs, setGoals, setRepayments, setTravelPlans, setFinanceMonthly, setShoppingLists, setSavedShopNames, setSavedShoppingCategories, setRemindersEnabled, setDataMode, setSheetUrl, setLastSyncedAt];
+      const keys = ["dailyItems", "dailyLogs", "goals", "repayments", "travelPlans", "financeMonthly", "shoppingLists", "savedShopNames", "savedShoppingCategories", "remindersEnabled", "dataMode", "sheetUrl", "lastSyncedAt", "autoExportEnabled", "lastAutoExportAt"];
+      const setters = [setDailyItems, setDailyLogs, setGoals, setRepayments, setTravelPlans, setFinanceMonthly, setShoppingLists, setSavedShopNames, setSavedShoppingCategories, setRemindersEnabled, setDataMode, setSheetUrl, setLastSyncedAt, setAutoExportEnabled, setLastAutoExportAt];
       for (let i = 0; i < keys.length; i++) {
         try { const r = await window.storage.get(keys[i], false); if (r && r.value) setters[i](JSON.parse(r.value)); } catch (e) {}
       }
@@ -569,6 +571,8 @@ function LifeTracker() {
   useEffect(() => { if (loaded) window.storage.set("dataMode", JSON.stringify(dataMode), false).catch(() => {}); }, [dataMode, loaded]);
   useEffect(() => { if (loaded) window.storage.set("sheetUrl", JSON.stringify(sheetUrl), false).catch(() => {}); }, [sheetUrl, loaded]);
   useEffect(() => { if (loaded) window.storage.set("lastSyncedAt", JSON.stringify(lastSyncedAt), false).catch(() => {}); }, [lastSyncedAt, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("autoExportEnabled", JSON.stringify(autoExportEnabled), false).catch(() => {}); }, [autoExportEnabled, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("lastAutoExportAt", JSON.stringify(lastAutoExportAt), false).catch(() => {}); }, [lastAutoExportAt, loaded]);
 
   // ---- Data Link: export / import (offline backup) ----
   const exportData = () => {
@@ -581,6 +585,18 @@ function LifeTracker() {
     URL.revokeObjectURL(url);
     setImportMessage("Backup file downloaded.");
   };
+  const autoExportTimerRef = useRef(null);
+  useEffect(() => {
+    if (!loaded || !autoExportEnabled || dataMode !== "offline") return;
+    if (lastAutoExportAt === today) return; // already downloaded once today
+    if (autoExportTimerRef.current) clearTimeout(autoExportTimerRef.current);
+    autoExportTimerRef.current = setTimeout(() => {
+      exportData();
+      setLastAutoExportAt(today);
+    }, 2500);
+    return () => clearTimeout(autoExportTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, loaded, autoExportEnabled, dataMode, lastAutoExportAt, today]);
   const applyImportedData = (data) => {
     if (!data || typeof data !== "object") return false;
     if (data.dailyItems) setDailyItems(data.dailyItems);
@@ -2928,6 +2944,16 @@ function LifeTracker() {
                 <input ref={fileInputRef} type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) importDataFile(f); e.target.value = ""; }} />
               </div>
               {importMessage && <div style={{ fontSize: 14, color: TEAL, marginTop: 8 }}>{importMessage}</div>}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${LINE}` }}>
+                <div style={{ paddingRight: 10 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>Auto-download backup daily</div>
+                  <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 2 }}>Works on any device, including phones. Downloads one backup file to your Downloads folder the first time you make a change each day.</div>
+                </div>
+                <button onClick={() => setAutoExportEnabled((v) => !v)} style={{ flexShrink: 0, width: 44, height: 26, borderRadius: 999, border: "none", cursor: "pointer", background: autoExportEnabled ? BRASS : LINE, position: "relative", padding: 0 }}>
+                  <span style={{ position: "absolute", top: 2, left: autoExportEnabled ? 20 : 2, width: 22, height: 22, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "left 0.15s" }} />
+                </button>
+              </div>
+              {autoExportEnabled && <div style={{ fontSize: 13, color: TEAL, marginTop: 6 }}>{lastAutoExportAt === today ? `Already backed up today (${lastAutoExportAt}).` : "On \u2014 will download on your next change today."}</div>}
             </Card>
           )}
 
