@@ -372,8 +372,8 @@ function computeLoggedTimeTotals(itemId, dailyLogs, todayStr) {
   const weekStartStr = dateKey(weekStart);
   const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
   const weekEndStr = dateKey(weekEnd);
-  let dayMin = 0, weekMin = 0, monthMin = 0, yearMin = 0;
-  let dayCount = 0, weekCount = 0, monthCount = 0, yearCount = 0;
+  let dayMin = 0, weekMin = 0, monthMin = 0, yearMin = 0, totalMin = 0;
+  let dayCount = 0, weekCount = 0, monthCount = 0, yearCount = 0, totalDaysLogged = 0;
   for (const d in dailyLogs) {
     const rec = dailyLogs[d] && dailyLogs[d][itemId];
     if (!rec || rec.status !== "done") continue;
@@ -382,8 +382,23 @@ function computeLoggedTimeTotals(itemId, dailyLogs, todayStr) {
     if (d >= weekStartStr && d <= weekEndStr) { weekMin += min; weekCount += 1; }
     if (d.slice(0, 7) === curMonth) { monthMin += min; monthCount += 1; }
     if (d.slice(0, 4) === curYear) { yearMin += min; yearCount += 1; }
+    totalMin += min; totalDaysLogged += 1;
   }
-  return { dayMin, weekMin, monthMin, yearMin, dayCount, weekCount, monthCount, yearCount };
+  return { dayMin, weekMin, monthMin, yearMin, totalMin, dayCount, weekCount, monthCount, yearCount, totalDaysLogged };
+}
+function minutesToYMDH(totalMinutes) {
+  const totalHoursFloat = (totalMinutes || 0) / 60;
+  const totalDaysFloat = totalHoursFloat / 24;
+  const years = Math.floor(totalDaysFloat / 365.25);
+  const months = Math.floor((totalDaysFloat % 365.25) / 30.4375);
+  const days = Math.floor(totalDaysFloat - years * 365.25 - months * 30.4375);
+  const hours = Math.floor(totalHoursFloat - Math.floor(totalDaysFloat) * 24);
+  const parts = [];
+  if (years > 0) parts.push(`${years}y`);
+  if (months > 0) parts.push(`${months}mo`);
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0 || parts.length === 0) parts.push(`${hours}h`);
+  return { years, months, days, hours, label: parts.join(" ") };
 }
 function fmtMinutesOnly(min) { return `${Math.round(min || 0)} min`; }
 function fmtHoursOnly(min) { return `${Math.round(((min || 0) / 60) * 10) / 10}h`; }
@@ -2782,6 +2797,17 @@ function LifeTracker() {
                                     <div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Year</div>
                                     <div style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, color: TEAL }}>{fmtHoursOnly(spentToday.yearMin)}</div>
                                     <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 1, fontFamily: mono }}>{fmtQty(spentToday.yearMin, 365)} yr</div>
+                                  </div>
+                                </div>
+                                <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${LINE}` }}>
+                                  <div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT, marginBottom: 5 }}>Overall summary (all-time)</div>
+                                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: INK_DIM, marginBottom: 4 }}>
+                                    <span>Total days logged</span>
+                                    <span style={{ fontFamily: mono, fontWeight: 700, color: INK }}>{spentToday.totalDaysLogged}</span>
+                                  </div>
+                                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: INK_DIM }}>
+                                    <span>Total time spent</span>
+                                    <span style={{ fontFamily: mono, fontWeight: 700, color: BRASS }}>{minutesToYMDH(spentToday.totalMin).label}</span>
                                   </div>
                                 </div>
                               </div>
