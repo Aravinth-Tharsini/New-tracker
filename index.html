@@ -296,7 +296,74 @@ const ICON_MAP = {
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
 };
 const ICON_NAMES = Object.keys(ICON_MAP);
-const TYPE_OPTIONS = [
+
+// Natural activity icons for the Daily tab.
+// The existing icon names and saved activity data are kept unchanged.
+const NATURAL_ACTIVITY_ICONS = {
+  Sun: "🌅",
+  Building2: "🏢",
+  Dumbbell: "🏃",
+  Moon: "😴",
+  Droplet: "💧",
+  Bike: "🚴",
+  Car: "🚗",
+  Bath: "🚿",
+  Gamepad2: "🎮",
+  Home: "🏠",
+  BookOpen: "📚",
+  Laptop: "💻",
+  ChefHat: "🍳",
+  UtensilsCrossed: "🍽️",
+  ShoppingBag: "🛒",
+  Footprints: "🚶",
+  Film: "🎬",
+  Music: "🎧",
+  Users: "👨‍👩‍👧‍👦",
+  HandHeart: "🤝",
+  Brush: "🧹",
+  Coffee: "☕",
+  Smile: "😊",
+  Target: "🎯",
+  Clock: "⏰",
+  Receipt: "🧾",
+};
+
+function getNaturalActivityIcon(item) {
+  const name = String(item?.name || "").toLowerCase();
+  if (name.includes("wake")) return "🌅";
+  if (name.includes("bath") || name.includes("shower")) return "🚿";
+  if (name.includes("office")) return "🏢";
+  if (name.includes("work") || name.includes("career")) return "💼";
+  if (name.includes("leave")) return "🚪";
+  if (name.includes("reach") || name.includes("home")) return "🏠";
+  if (name.includes("drive") || name.includes("car")) return "🚗";
+  if (name.includes("train")) return "🚆";
+  if (name.includes("bus")) return "🚌";
+  if (name.includes("flight") || name.includes("fly")) return "✈️";
+  if (name.includes("bike") || name.includes("ride")) return "🚴";
+  if (name.includes("read") || name.includes("book")) return "📚";
+  if (name.includes("study") || name.includes("learn")) return "📝";
+  if (name.includes("computer") || name.includes("laptop")) return "💻";
+  if (name.includes("cook")) return "🍳";
+  if (name.includes("eat") || name.includes("breakfast") || name.includes("lunch") || name.includes("dinner")) return "🍽️";
+  if (name.includes("shop")) return "🛒";
+  if (name.includes("exercise") || name.includes("workout") || name.includes("gym")) return "🏋️";
+  if (name.includes("run")) return "🏃";
+  if (name.includes("walk")) return "🚶";
+  if (name.includes("sleep")) return "😴";
+  if (name.includes("movie") || name.includes("film")) return "🎬";
+  if (name.includes("music") || name.includes("listen")) return "🎧";
+  if (name.includes("family")) return "👨‍👩‍👧‍👦";
+  if (name.includes("pray") || name.includes("prayer")) return "🙏";
+  if (name.includes("clean")) return "🧹";
+  if (name.includes("water") || name.includes("drink")) return "💧";
+  if (name.includes("meditat")) return "🧘";
+  if (name.includes("game") || name.includes("play")) return "🎮";
+  if (name.includes("coffee") || name.includes("tea")) return "☕";
+  return NATURAL_ACTIVITY_ICONS[item?.icon] || "✨";
+}
+
+const TYPE_OPTIONS = 
   { value: "instant", label: "Instant \u00b7 one button" },
   { value: "duration", label: "Duration \u00b7 start / stop timer" },
   { value: "interval", label: "Interval \u00b7 recurring reminder" },
@@ -1732,6 +1799,7 @@ function LifeTracker() {
               <div className="no-scrollbar" style={{ display: "flex", gap: 8, padding: "4px 2px 12px", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                 {itemsForCat.map((item) => {
                   const Icon = ICON_MAP[item.icon] || Target;
+                  const naturalIcon = getNaturalActivityIcon(item);
                   const active = activeTab === item.id;
                   const done = (item.type === "instant" || item.type === "duration") && field(item.id).status === "done";
                   const due = item.type === "interval" && isIntervalDue(item, todayLog, now.getTime());
@@ -1757,7 +1825,7 @@ function LifeTracker() {
                       }}
                     >
                       <div style={{ position: "relative", width: 42, height: 42, borderRadius: 13, background: done ? "rgba(52,199,89,0.14)" : due ? "rgba(255,100,80,0.12)" : active ? "rgba(0,113,227,0.14)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {done ? <Check size={21} color={TEAL} strokeWidth={3} /> : <Icon size={21} color={active ? BRASS : due ? CORAL : INK_DIM} />}
+                        {done ? <Check size={21} color={TEAL} strokeWidth={3} /> : <span style={{ fontSize: 25, lineHeight: 1, filter: active ? "none" : "saturate(0.95)" }}>{naturalIcon}</span>}
                         {streak > 0 && <div style={{ position: "absolute", top: -6, right: -6, display: "flex", alignItems: "center", gap: 1, background: BG, border: `1px solid ${BRASS_DIM}`, borderRadius: 7, padding: "1px 3px", fontSize: 10, color: BRASS, fontFamily: mono }}><Flame size={9} /> {streak}</div>}
                       </div>
                     </button>
@@ -1768,6 +1836,7 @@ function LifeTracker() {
               <div>
                 {itemsForCat.filter((i) => i.id === activeTab).map((item) => {
                   const Icon = ICON_MAP[item.icon] || Target;
+                  const naturalIcon = getNaturalActivityIcon(item);
                   const rec = field(item.id);
 
                   if (item.type === "instant") {
@@ -1782,7 +1851,7 @@ function LifeTracker() {
                           </>
                         ) : (
                           <>
-                            <div style={{ width: 60, height: 60, margin: "0 auto 12px", borderRadius: 18, background: "rgba(0,113,227,0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon size={30} color={BRASS} /></div>
+                            <div style={{ width: 60, height: 60, margin: "0 auto 12px", borderRadius: 18, background: "rgba(0,113,227,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, lineHeight: 1 }}>{naturalIcon}</div>
                             <div style={{ fontSize: 19, fontWeight: 700, color: INK }}>{item.name}</div>
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 9, padding: "8px 13px", borderRadius: 12, background: PANEL_2, color: INK_DIM, fontSize: 14 }}><Clock size={15} color={BRASS} />Scheduled: {scheduledLabel}</div>
                             <div style={{ marginTop: 18 }}><ActionButton onClick={() => pressInstant(item.id)} label="Mark as Done" icon={Check} tone={TEAL} big /></div>
@@ -1798,10 +1867,10 @@ function LifeTracker() {
                         {rec.status === "done" ? (
                           <><div style={{ fontSize: 15, color: INK_DIM, marginBottom: 5 }}>{item.name} completed</div><div style={{ fontFamily: mono, fontSize: 18, color: TEAL, fontWeight: 600 }}>{fmtDuration(rec.durationMin)}</div></>
                         ) : rec.status === "in_progress" ? (
-                          <><Icon size={24} color={BRASS} style={{ marginBottom: 8 }} /><div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{fmtElapsed(now - new Date(rec.startTime))}</div><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></>
+                          <><div style={{ fontSize: 27, lineHeight: 1, marginBottom: 8 }}>{naturalIcon}</div><div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{fmtElapsed(now - new Date(rec.startTime))}</div><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></>
                         ) : (
                           <>
-                            <Icon size={24} color={BRASS} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Start when {item.name.toLowerCase()} begins</div><ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
+                            <div style={{ fontSize: 27, lineHeight: 1, marginBottom: 8 }}>{naturalIcon}</div><div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Start when {item.name.toLowerCase()} begins</div><ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 10 }}>
                               <span style={{ fontSize: 13, color: INK_FAINT }}>or log time spent (min)</span>
                               <TextField type="number" value={timeSpentInputs[item.id] || ""} onChange={(e) => setTimeSpentInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 60, fontFamily: mono, textAlign: "center" }} />
@@ -1826,7 +1895,7 @@ function LifeTracker() {
                     return (
                       <div key={item.id}>
                         <Card style={{ textAlign: "center", padding: "19px 12px", marginBottom: 9 }}>
-                          <Icon size={24} color={BRASS} style={{ marginBottom: 8 }} />
+                          <div style={{ fontSize: 27, lineHeight: 1, marginBottom: 8 }}>{naturalIcon}</div>
                           <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 3 }}>{due ? "An interval is due" : `Next at ${fmtTime(new Date(nextDueMs).toISOString())}`}</div>
                           <div style={{ fontFamily: mono, fontSize: 18, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{item.amount} {item.unit}</div>
                           <ActionButton onClick={() => logInterval(item)} label={`Log ${item.amount}${item.unit}`} icon={Check} tone={TEAL} big />
