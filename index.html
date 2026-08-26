@@ -1646,7 +1646,8 @@ function LifeTracker() {
               Nothing to track yet. Go to <span style={{ color: BRASS }}>Planner</span> to add a Trip, or set up Daily Routine, Career growth, or Healthcare goals.
             </div>
           ) : (
-            <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ fontSize: 13, color: INK_FAINT, padding: "2px 2px 0" }}>Choose what you want to update today</div>
               {availableDailyCategories.map((cat) => {
                 const CatIcon = cat.icon;
                 const expanded = expandedDailyCategory === cat.id;
@@ -1663,21 +1664,21 @@ function LifeTracker() {
                 const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
                 return (
                   <div key={cat.id}>
-                    <button onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS_DIM : LINE}`, borderRadius: 11, padding: "8px 9px", cursor: "pointer", transition: "background 0.15s, border-color 0.15s" }}>
-                      <div style={{ position: "relative", width: 34, height: 34, borderRadius: 8, background: expanded ? "rgba(0,113,227,0.18)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <CatIcon size={16} color={expanded ? BRASS : INK_DIM} />
+                    <button onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", minHeight: 78, display: "flex", alignItems: "center", gap: 12, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS_DIM : LINE}`, borderRadius: 16, padding: "11px 13px", cursor: "pointer", transition: "background 0.15s, border-color 0.15s", boxShadow: CARD_SHADOW }}>
+                      <div style={{ position: "relative", width: 50, height: 50, borderRadius: 14, background: expanded ? "rgba(0,113,227,0.18)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <CatIcon size={23} color={expanded ? BRASS : INK_DIM} />
                         {attentionCount > 0 && (
                           <div style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, borderRadius: 999, background: CORAL, color: "#FFFFFF", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", border: "2px solid " + BG, fontFamily: mono }}>
                             {attentionCount > 9 ? "9+" : attentionCount}
                           </div>
                         )}
                       </div>
-                      <div style={{ flex: 1, textAlign: "left" }}>
-                        <div style={{ fontSize: 15, color: expanded ? BRASS : INK, fontWeight: 600 }}>{cat.label}</div>
-                        {totalCount > 0 && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 1 }}>{countLabel}</div>}
+                      <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                        <div style={{ fontSize: 18, color: expanded ? BRASS : INK, fontWeight: 700, lineHeight: 1.15 }}>{cat.label}</div>
+                        <div style={{ fontSize: 13, color: attentionCount > 0 ? CORAL : INK_FAINT, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{totalCount > 0 ? countLabel : "Tap to add or update"}</div>
                       </div>
-                      <div style={{ color: INK_FAINT, display: "flex", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
-                        <ChevronDown size={15} />
+                      <div style={{ color: INK_FAINT, display: "flex", padding: 5, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+                        <ChevronDown size={20} />
                       </div>
                     </button>
                     {expanded && cat.id === "trip" && (
@@ -2055,11 +2056,17 @@ function LifeTracker() {
 
       {page === "categories" && (
         <div style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
-          <div style={{ display: "flex", gap: 5, marginBottom: 12, flexWrap: "wrap" }}>
-            {CATEGORY_DEFS.map((c) => {
-              const Icon = c.icon; const active = catTab === c.id;
-              return <button key={c.id} onClick={() => { setCatTab(c.id); setHistoryExpanded(false); setEditingHistoryExpense(null); closeItemForm(); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, height: 34, background: active ? "rgba(0,113,227,0.12)" : "transparent", border: `1px solid ${active ? BRASS_DIM : LINE}`, borderRadius: 7, padding: "0 9px", color: active ? BRASS : INK_DIM, fontSize: 14, fontWeight: active ? 600 : 500, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, boxSizing: "border-box" }}><Icon size={14} /> {c.label}</button>;
-            })}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 8 }}>Choose what you want to plan</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+              {CATEGORY_DEFS.map((c) => {
+                const Icon = c.icon; const active = catTab === c.id;
+                return <button key={c.id} onClick={() => { setCatTab(c.id); setHistoryExpanded(false); setEditingHistoryExpense(null); closeItemForm(); }} style={{ minHeight: 64, display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 10, background: active ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${active ? BRASS : LINE}`, borderRadius: 13, padding: "9px 10px", color: active ? BRASS : INK, fontSize: 15, fontWeight: active ? 700 : 600, cursor: "pointer", textAlign: "left", boxShadow: active ? CARD_SHADOW : "none" }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: active ? "rgba(0,113,227,0.16)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon size={18} /></div>
+                  <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.label}</span>
+                </button>;
+              })}
+            </div>
           </div>
 
           {catTab === "finance" && (
