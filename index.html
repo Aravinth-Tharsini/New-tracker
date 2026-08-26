@@ -1498,19 +1498,19 @@ function LifeTracker() {
           --nav-bg:rgba(28,28,30,0.92);
         }
         /* Today: full card → animated small icon at top-left → details below */
-        .today-expand-enter { animation: todaySlideIn .32s ease both; overflow: hidden; }
+        .today-expand-enter { animation: todaySlideIn .48s cubic-bezier(.22,.8,.25,1) both; overflow: hidden; }
         @keyframes todaySlideIn {
           from { opacity: 0; transform: translateY(-10px); max-height: 0; }
           to { opacity: 1; transform: translateY(0); max-height: 3000px; }
         }
         .today-focus-card {
-          transition: width .32s ease, min-height .32s ease, padding .32s ease,
-                      border-radius .32s ease, background .25s ease, border-color .25s ease;
+          transition: width .48s cubic-bezier(.22,.8,.25,1), min-height .48s cubic-bezier(.22,.8,.25,1), padding .48s cubic-bezier(.22,.8,.25,1),
+                      border-radius .48s cubic-bezier(.22,.8,.25,1), background .28s ease, border-color .28s ease;
           transform-origin: top left;
           overflow: hidden;
         }
-        .today-focus-icon { transition: width .28s ease, height .28s ease, border-radius .28s ease, transform .28s ease; }
-        .today-focus-text, .today-focus-arrow { transition: opacity .18s ease, transform .25s ease, width .25s ease; }
+        .today-focus-icon { transition: width .42s cubic-bezier(.22,.8,.25,1), height .42s cubic-bezier(.22,.8,.25,1), border-radius .42s cubic-bezier(.22,.8,.25,1), transform .42s cubic-bezier(.22,.8,.25,1); }
+        .today-focus-text, .today-focus-arrow { transition: opacity .24s ease, transform .36s cubic-bezier(.22,.8,.25,1), width .36s cubic-bezier(.22,.8,.25,1); }
         .today-focus-card.is-open {
           width: 58px !important;
           min-height: 58px !important;
@@ -1705,7 +1705,7 @@ function LifeTracker() {
                 const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
                 return (
                   <div key={cat.id}>
-                    <button className={`today-focus-card ${expanded ? "is-open" : ""}`} onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", minHeight: 78, display: "flex", alignItems: "center", gap: 12, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS_DIM : LINE}`, borderRadius: 16, padding: "11px 13px", cursor: "pointer", transition: "background 0.15s, border-color 0.15s", boxShadow: CARD_SHADOW }}>
+                    <button className={`today-focus-card ${expanded ? "is-open" : ""}`} onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", minHeight: 78, display: "flex", alignItems: "center", gap: 12, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS_DIM : LINE}`, borderRadius: 16, padding: "11px 13px", cursor: "pointer", transition: "background 0.28s ease, border-color 0.28s ease", boxShadow: CARD_SHADOW }}>
                       <div className="today-focus-icon" style={{ position: "relative", width: 50, height: 50, borderRadius: 14, background: expanded ? "rgba(0,113,227,0.18)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <CatIcon size={23} color={expanded ? BRASS : INK_DIM} />
                         {attentionCount > 0 && (
@@ -2111,18 +2111,6 @@ function LifeTracker() {
               return (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 7, marginBottom: 10 }}>
                   <div style={{ fontSize: 13, color: INK_FAINT }}>Choose what you want to plan</div>
-                  {plannerHistoryCount > 0 && (
-                    <button
-                      onClick={() => setHistoryExpanded((v) => !v)}
-                      title={historyExpanded ? "Hide history" : "View history"}
-                      aria-label={historyExpanded ? "Hide history" : "View history"}
-                      style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 38, padding: "0 12px", borderRadius: 9, border: `1px solid ${historyExpanded ? TEAL : LINE}`, background: historyExpanded ? PANEL_2 : PANEL, color: historyExpanded ? TEAL : INK_DIM, cursor: "pointer", position: "relative", fontWeight: 700 }}
-                    >
-                      <History size={18} />
-                      <span>{historyExpanded ? "Hide History" : "History"}</span>
-                      <span style={{ minWidth: 19, height: 19, padding: "0 5px", borderRadius: 999, background: TEAL, color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{plannerHistoryCount > 99 ? "99+" : plannerHistoryCount}</span>
-                    </button>
-                  )}
                 </div>
               );
             })()}
@@ -2803,9 +2791,14 @@ function LifeTracker() {
                 </>
               ) : (
                 <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <SectionLabel>Goals</SectionLabel>
-                <button onClick={() => (showAddGoal ? cancelGoalForm() : setShowAddGoal(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add goal</button>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <button onClick={() => (showAddGoal ? cancelGoalForm() : setShowAddGoal(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add goal</button>
+                  {((catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).length > 0) && (
+                    <button onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide history" : "View history"} style={{ display: "flex", alignItems: "center", gap: 4, background: historyExpanded ? PANEL_2 : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={15} /> <span>History</span></button>
+                  )}
+                </div>
               </div>
               {isRoutineCategory && categoryGoals.length > 0 && (() => {
                 const totalGoals = categoryGoals.length;
