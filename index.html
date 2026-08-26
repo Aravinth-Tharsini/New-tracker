@@ -2632,17 +2632,8 @@ function LifeTracker() {
                     No manual entry is needed in this page. Add expenses using your existing Daily expense option.
                   </div>
                   {(() => {
-                    const expenseItems = [
-                      ...(Array.isArray(expenses) ? expenses : []),
-                      ...(Array.isArray(expenseHistory) ? expenseHistory : [])
-                    ];
-                    const seenExpenseKeys = new Set();
-                    const uniqueExpenses = expenseItems.filter((item, index) => {
-                      const key = item?.id || `${item?.date || item?.createdAt || ""}-${item?.amount || ""}-${item?.name || item?.title || item?.category || ""}-${index}`;
-                      if (seenExpenseKeys.has(key)) return false;
-                      seenExpenseKeys.add(key);
-                      return true;
-                    });
+                    const expenseItems = [];
+                    const uniqueExpenses = expenseItems;
                     return uniqueExpenses.length > 0 ? (
                       <div style={{ display: "grid", gap: 8 }}>
                         {uniqueExpenses.map((item, index) => (
