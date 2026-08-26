@@ -1064,7 +1064,8 @@ function LifeTracker() {
     .flatMap(([date, log]) => (log.expenses || []).map((e) => ({ ...e, date })))
     .sort((a, b) => (b.time || b.date || "").localeCompare(a.time || a.date || "")), [dailyLogs]);
   const financeHistoryRepayments = useMemo(() => repayments.filter((r) => r.paid).sort((a, b) => (b.paidAt || b.dueDate || "").localeCompare(a.paidAt || a.dueDate || "")), [repayments]);
-  const financeHistoryCount = financeHistoryExpenses.length + financeHistoryRepayments.length;
+  const financeHistoryGoals = useMemo(() => goals.filter((g) => g.category === "finance" && g.done), [goals]);
+  const financeHistoryCount = financeHistoryExpenses.length + financeHistoryRepayments.length + financeHistoryGoals.length;
 
   const exportExpensesCSV = () => {
     const rows = Object.entries(dailyLogs).flatMap(([day, log]) =>
@@ -2616,41 +2617,80 @@ function LifeTracker() {
               {catTab === "finance" && (
                 <div style={{ display: "flex", gap: 5, marginBottom: 9 }}>
                   <ChipButton label="Expenses" active={financeGoalView === "expenses"} onClick={() => { setFinanceGoalView("expenses"); setHistoryExpanded(false); }} />
-                  <ChipButton label="Goals" active={financeGoalView === "goals"} onClick={() => { setFinanceGoalView("goals"); }} />
+                  <ChipButton label="Goals" active={financeGoalView === "goals"} onClick={() => { setFinanceGoalView("goals"); setHistoryExpanded(false); }} />
                   <ChipButton label="Repayment due" active={financeGoalView === "repayments"} onClick={() => { setFinanceGoalView("repayments"); setHistoryExpanded(false); }} />
                 </div>
+                {financeHistoryCount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                    <button onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide history" : "View history"} style={{ display: "flex", alignItems: "center", gap: 5, background: historyExpanded ? PANEL_2 : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 8, padding: "6px 10px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}>
+                      <History size={16} /> <span>History</span>
+                    </button>
+                  </div>
+                )}
               )}
               {catTab === "finance" && financeGoalView === "expenses" && (
                 <>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <div>
-                      <SectionLabel>Expenses</SectionLabel>
-                      <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>All saved expenses appear here automatically</div>
-                    </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <SectionLabel>All Expenses</SectionLabel>
                   </div>
-                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 10 }}>
-                    No manual entry is needed in this page. Add expenses using your existing Daily expense option.
-                  </div>
+
                   {(() => {
                     const expenseItems = financeHistoryExpenses;
-                    const uniqueExpenses = expenseItems;
-                    return uniqueExpenses.length > 0 ? (
-                      <div style={{ display: "grid", gap: 8 }}>
-                        {uniqueExpenses.map((item, index) => (
-                          <div key={item?.id || index} style={{ padding: "11px 12px", border: `1px solid ${LINE}`, borderRadius: 10, background: PANEL }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                              <div style={{ minWidth: 0 }}>
-                                <div style={{ fontWeight: 700, color: INK }}>{item?.subcategory || item?.group || "Expense"}</div>
-                                <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 3 }}>{formatDMY(item?.date) + (item?.time ? " · " + fmtTime(item?.time) : "")}</div>
+                    return expenseItems.length > 0 ? (
+                      <div style={{ display: "grid", gap: 10 }}>
+                        {expenseItems.map((item, index) => {
+                          const category = item?.group || "General";
+                          const title = item?.subcategory || category || "Expense";
+                          const detail = item?.vendor || item?.remarks || category;
+                          const dateTime = formatDMY(item?.date) + (item?.time ? " · " + fmtTime(item?.time) : "");
+                          return (
+                            <div key={item?.id || index} style={{
+                              padding: "12px",
+                              border: `1px solid ${LINE}`,
+                              borderRadius: 14,
+                              background: PANEL,
+                              boxShadow: "0 2px 8px rgba(0,0,0,.03)"
+                            }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                                <div style={{
+                                  width: 42, height: 42, borderRadius: 12, flex: "0 0 42px",
+                                  display: "grid", placeItems: "center",
+                                  background: PANEL_2, border: `1px solid ${LINE}`, color: BRASS
+                                }}>
+                                  <Receipt size={21} />
+                                </div>
+
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ fontWeight: 750, fontSize: 17, color: INK, lineHeight: 1.2 }}>
+                                        {title}
+                                      </div>
+                                      {detail && detail !== title && (
+                                        <div style={{ fontSize: 12, color: INK_DIM, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                          {detail}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div style={{ fontFamily: mono, fontWeight: 800, fontSize: 17, color: BRASS, whiteSpace: "nowrap" }}>
+                                      {inr(item?.amount || 0)}
+                                    </div>
+                                  </div>
+
+                                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 7, fontSize: 12, color: INK_FAINT }}>
+                                    <Clock size={13} />
+                                    <span>{dateTime}</span>
+                                  </div>
+                                </div>
                               </div>
-                              <div style={{ fontWeight: 700, color: BRASS, whiteSpace: "nowrap" }}>₹{Number(item?.amount || 0).toLocaleString("en-IN")}</div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
-                      <div style={{ padding: "18px 12px", border: `1px dashed ${LINE}`, borderRadius: 10, color: INK_FAINT, fontSize: 14, textAlign: "center" }}>
-                        🧾 No expenses yet. Expenses you add in the Daily tab will appear here automatically.
+                      <div style={{ padding: "18px 12px", border: `1px dashed ${LINE}`, borderRadius: 12, color: INK_FAINT, fontSize: 14, textAlign: "center" }}>
+                        <Receipt size={20} style={{ marginBottom: 5 }} /><br />
+                        No expenses yet
                       </div>
                     );
                   })()}
@@ -2872,7 +2912,7 @@ function LifeTracker() {
                 <SectionLabel>Goals</SectionLabel>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <button onClick={() => (showAddGoal ? cancelGoalForm() : setShowAddGoal(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add goal</button>
-                  {(((catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).length > 0) || (catTab === "finance" && financeHistoryCount > 0)) && (
+                  {(((catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).length > 0)) && (
                     <button onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide history" : "View history"} style={{ display: "flex", alignItems: "center", gap: 4, background: historyExpanded ? PANEL_2 : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={15} /> <span>History</span></button>
                   )}
                 </div>
@@ -3239,7 +3279,7 @@ function LifeTracker() {
             </>
           )}
 
-          {((catTab !== "finance" || financeGoalView === "goals") && (catTab === "finance" || catTab === "trip" || catTab === "career" || catTab === "health" || catTab === "shopping")) && (() => {
+          {(catTab === "finance" || catTab === "trip" || catTab === "career" || catTab === "health" || catTab === "shopping") && (() => {
             const historyCount = catTab === "finance"
               ? financeHistoryCount
               : catTab === "trip"
@@ -3258,7 +3298,24 @@ function LifeTracker() {
                     {!hasHistory && <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "14px 0" }}>No history yet.</div>}
 
                     {catTab === "finance" && <>
-                      {financeHistoryRepayments.map((r) => (
+                      {financeHistoryGoals.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: INK_FAINT, letterSpacing: 1, margin: "10px 0 6px" }}>GOALS</div>
+                        {financeHistoryGoals.map((g) => (
+                          <div key={g.id} style={{ padding: "10px 12px", border: `1px solid ${LINE}`, borderRadius: 10, background: PANEL, marginBottom: 8 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                              <div>
+                                <div style={{ fontWeight: 700, color: INK }}>{g.title || "Goal"}</div>
+                                <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 3 }}>Goal completed</div>
+                              </div>
+                              <div style={{ color: TEAL, fontWeight: 800 }}>✓ Done</div>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+
+                    {financeHistoryRepayments.map((r) => (
                         <div key={`repay-history-${r.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
                           <Wallet size={18} color={BRASS} />
                           <div style={{ flex: 1, minWidth: 0 }}>
