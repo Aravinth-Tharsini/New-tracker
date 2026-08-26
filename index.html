@@ -3103,16 +3103,18 @@ function LifeTracker() {
                   ? shoppingLists.filter((l) => l.status === "done" || l.status === "paid").length
                   : goals.filter((g) => g.category === catTab && g.done).length;
             const hasHistory = historyCount > 0;
+            // Show the History button only when this section actually has history.
+            if (!hasHistory) return null;
             return (
               <Card style={{ marginTop: 12, marginBottom: 12, padding: 0, overflow: "hidden" }}>
                 <button
                   onClick={() => setHistoryExpanded((v) => !v)}
-                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "transparent", border: "none", padding: "14px 16px", color: INK, cursor: "pointer" }}
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 12, padding: "13px 16px", color: INK, cursor: "pointer", minHeight: 48 }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Clock size={16} />
-                    <span style={{ fontSize: 15, fontWeight: 700 }}>History</span>
-                    {hasHistory && <span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>{historyCount}</span>}
+                    <Clock size={17} />
+                    <span style={{ fontSize: 15, fontWeight: 700 }}>{historyExpanded ? "Hide History" : "View History"}</span>
+                    <span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>{historyCount}</span>
                   </div>
                   {historyExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
                 </button>
