@@ -28,6 +28,36 @@
     }
   }
   </script>
+
+<style id="mobile-auto-fit-ui">
+/* ===== SIMPLE MOBILE AUTO-FIT UI ===== */
+*{box-sizing:border-box;}
+html,body,#root{width:100%;max-width:100%;min-height:100%;margin:0;overflow-x:hidden;}
+body{min-height:100dvh;padding-bottom:calc(76px + env(safe-area-inset-bottom));-webkit-text-size-adjust:100%;}
+#root{width:100%;min-width:0;}
+button,input,select,textarea{font-size:16px;max-width:100%;min-width:0;}
+img,svg{max-width:100%;}
+/* Prevent long cards/rows from pushing outside the phone screen */
+#root *{min-width:0;}
+#root [style*="display: flex"],#root [style*="display:flex"]{max-width:100%;}
+/* Better touch targets */
+button{touch-action:manipulation;}
+@media(max-width:480px){
+  #root{width:100vw;}
+  body{overflow-x:hidden;}
+}
+@media(max-width:380px){
+  #root{font-size:14px;}
+}
+@media(min-width:768px){
+  #root{max-width:700px;margin:0 auto;}
+}
+/* Bottom navigation: compact and easy to understand on every phone */
+@media(max-width:420px){
+  #root button{max-width:100%;}
+}
+</style>
+
 </head>
 <body style="margin:0; background:#F5F5F7;">
   
@@ -3354,7 +3384,7 @@ function doPost(e) {
       )}
 
       <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: "var(--nav-bg)", backdropFilter: "blur(20px)", position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 10000, paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: LayoutGrid }, { id: "analysis", label: "Insights", icon: TrendingUp }, { id: "datalink", label: "Data Link", icon: Link2 }].map((p) => {
+        {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: LayoutGrid }, { id: "analysis", label: "Progress", icon: TrendingUp }, { id: "datalink", label: "More", icon: Settings2 }].map((p) => {
           const Icon = p.icon; const active = page === p.id;
           return <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 0 8px", background: "transparent", border: "none", cursor: "pointer", color: active ? BRASS : INK_FAINT }}><Icon size={18} strokeWidth={active ? 2.2 : 1.8} /><span style={{ fontSize: 11, fontWeight: active ? 600 : 500, fontFamily: disp }}>{p.label}</span></button>;
         })}
