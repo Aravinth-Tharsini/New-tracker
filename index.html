@@ -2623,14 +2623,46 @@ function LifeTracker() {
               {catTab === "finance" && financeGoalView === "expenses" && (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <SectionLabel>Expenses</SectionLabel>
-                    <button onClick={() => setActiveTab("daily")} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "5px 9px", fontSize: 14, cursor: "pointer" }}>
-                      <Plus size={14} /> Add Expense
-                    </button>
+                    <div>
+                      <SectionLabel>Expenses</SectionLabel>
+                      <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>All saved expenses appear here automatically</div>
+                    </div>
                   </div>
-                  <div style={{ padding: "14px 12px", border: `1px dashed ${LINE}`, borderRadius: 10, color: INK_FAINT, fontSize: 14 }}>
-                    Tap <b style={{ color: BRASS }}>Add Expense</b> to add a new expense. Your existing expense system and saved records are not changed.
+                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 10 }}>
+                    No manual entry is needed in this page. Add expenses using your existing Daily expense option.
                   </div>
+                  {(() => {
+                    const expenseItems = [
+                      ...(Array.isArray(expenses) ? expenses : []),
+                      ...(Array.isArray(expenseHistory) ? expenseHistory : [])
+                    ];
+                    const seenExpenseKeys = new Set();
+                    const uniqueExpenses = expenseItems.filter((item, index) => {
+                      const key = item?.id || `${item?.date || item?.createdAt || ""}-${item?.amount || ""}-${item?.name || item?.title || item?.category || ""}-${index}`;
+                      if (seenExpenseKeys.has(key)) return false;
+                      seenExpenseKeys.add(key);
+                      return true;
+                    });
+                    return uniqueExpenses.length > 0 ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {uniqueExpenses.map((item, index) => (
+                          <div key={item?.id || index} style={{ padding: "11px 12px", border: `1px solid ${LINE}`, borderRadius: 10, background: PANEL }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, color: INK }}>{item?.name || item?.title || item?.category || "Expense"}</div>
+                                <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 3 }}>{item?.date || item?.createdAt || "Saved expense"}</div>
+                              </div>
+                              <div style={{ fontWeight: 700, color: BRASS, whiteSpace: "nowrap" }}>₹{Number(item?.amount || 0).toLocaleString("en-IN")}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ padding: "18px 12px", border: `1px dashed ${LINE}`, borderRadius: 10, color: INK_FAINT, fontSize: 14, textAlign: "center" }}>
+                        🧾 No expenses yet. Expenses you add in the Daily tab will appear here automatically.
+                      </div>
+                    );
+                  })()}
                 </>
               )}
               {catTab === "finance" && financeGoalView === "repayments" ? (
