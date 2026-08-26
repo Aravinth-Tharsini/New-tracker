@@ -237,6 +237,18 @@ function parseHHMMSafe(hhmmStr) {
   return { h: isNaN(h) ? 9 : h, m: isNaN(m) ? 0 : m };
 }
 function buildHHMM(h, m) { return `${pad2(h)}:${pad2(m)}`; }
+// Compares a scheduled "HH:MM" time against a live Date and returns an early/on-time/late verdict.
+// Within 5 minutes either side counts as "On time".
+function timingStatus(scheduledTime, nowDate) {
+  if (!scheduledTime) return null;
+  const parsed = parseHHMMSafe(scheduledTime);
+  const plannedMins = parsed.h * 60 + parsed.m;
+  const nowMins = nowDate.getHours() * 60 + nowDate.getMinutes() + nowDate.getSeconds() / 60;
+  const diff = Math.round(nowMins - plannedMins);
+  if (Math.abs(diff) <= 5) return { label: "On time", diff, color: TEAL };
+  if (diff < 0) return { label: `Early by ${fmtDuration(-diff)}`, diff, color: BRASS };
+  return { label: `Late by ${fmtDuration(diff)}`, diff, color: "#D9534F" };
+}
 function fmtDuration(min) { if (min == null) return "-"; const h = Math.floor(min / 60), m = Math.round(min % 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; }
 function fmtElapsed(ms) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -1903,6 +1915,26 @@ function LifeTracker() {
                           <>
                             <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
                             <div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Tap when {item.name.toLowerCase()} happens</div>
+                            {item.scheduledTime && (() => {
+                              const status = timingStatus(item.scheduledTime, now);
+                              return (
+                                <div style={{ marginBottom: 10 }}>
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, marginBottom: 6 }}>
+                                    <div>
+                                      <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 2 }}>Planned</div>
+                                      <div style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: INK }}>{fmtTimeString12(item.scheduledTime)}</div>
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 2 }}>Live now</div>
+                                      <div style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: INK }}>{fmtClock12(now)}</div>
+                                    </div>
+                                  </div>
+                                  {status && (
+                                    <div style={{ display: "inline-block", fontSize: 12, fontWeight: 700, color: "#FFFFFF", background: status.color, borderRadius: 980, padding: "3px 12px" }}>{status.label}</div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginBottom: 10 }}>
                               <span style={{ fontSize: 13, color: INK_FAINT }}>at</span>
                               <Time12Input value={instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(now)} onChange={(v) => setInstantTimeInputs((p) => ({ ...p, [item.id]: v }))} style={{ fontFamily: mono }} />
