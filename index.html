@@ -1926,11 +1926,7 @@ function LifeTracker() {
                                 </div>
                               );
                             })()}
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginBottom: 10 }}>
-                              <span style={{ fontSize: 13, color: INK_FAINT }}>at</span>
-                              <Time12Input value={instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(now)} onChange={(v) => setInstantTimeInputs((p) => ({ ...p, [item.id]: v }))} style={{ fontFamily: mono }} />
-                            </div>
-                            <ActionButton onClick={() => pressInstant(item.id, instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(now))} label="Done" icon={Check} tone={TEAL} big />
+                            <ActionButton onClick={() => pressInstant(item.id, hhmm(now))} label="Done" icon={Check} tone={TEAL} big />
                           </>
                         )}
                         {streaks[item.id] > 0 && (
