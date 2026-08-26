@@ -3106,21 +3106,23 @@ function LifeTracker() {
             // Show the History button only when this section actually has history.
             if (!hasHistory) return null;
             return (
-              <Card style={{ marginTop: 12, marginBottom: 12, padding: 0, overflow: "hidden" }}>
-                <button
-                  onClick={() => setHistoryExpanded((v) => !v)}
-                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 12, padding: "13px 16px", color: INK, cursor: "pointer", minHeight: 48 }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <History size={18} />
-                    <span style={{ fontSize: 15, fontWeight: 700 }}>{historyExpanded ? "Hide History" : "History"}</span>
-                    <span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>{historyCount}</span>
-                  </div>
-                  {historyExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
-                </button>
+              <div style={{ marginTop: 12, marginBottom: 12 }}>
+                {/* History is an icon button, similar to the action icons used in Goals and Repayment. */}
+                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginBottom: historyExpanded ? 8 : 0 }}>
+                  <button
+                    onClick={() => setHistoryExpanded((v) => !v)}
+                    title={historyExpanded ? "Hide history" : "View history"}
+                    aria-label={historyExpanded ? "Hide history" : "View history"}
+                    style={{ width: 38, height: 38, borderRadius: 9, border: `1px solid ${historyExpanded ? TEAL : LINE}`, background: historyExpanded ? PANEL_2 : PANEL, color: historyExpanded ? TEAL : INK_DIM, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", position: "relative", flexShrink: 0 }}
+                  >
+                    <History size={19} />
+                    {historyCount > 0 && <span style={{ position: "absolute", top: -5, right: -5, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 999, background: TEAL, color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${BG}` }}>{historyCount > 99 ? "99+" : historyCount}</span>}
+                  </button>
+                </div>
 
                 {historyExpanded && (
-                  <div style={{ borderTop: `1px solid ${LINE}`, padding: "10px 12px 12px" }}>
+                  <Card style={{ margin: 0 }}>
+                  <div style={{ padding: "2px 0" }}>
                     {!hasHistory && <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "14px 0" }}>No history yet.</div>}
 
                     {catTab === "finance" && <>
@@ -3196,8 +3198,9 @@ function LifeTracker() {
                       </div>
                     ))}
                   </div>
+                  </Card>
                 )}
-              </Card>
+              </div>
             );
           })()}
         </div>
