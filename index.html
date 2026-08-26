@@ -125,7 +125,7 @@ import {
   Target, Clock, Pencil, ChevronUp, ChevronDown, Bell, BellOff, Flame, Download, FileJson,
   Plane, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
-  Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, Home as HomeIcon,
+  Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, History, Home as HomeIcon,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -3112,8 +3112,8 @@ function LifeTracker() {
                   style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 12, padding: "13px 16px", color: INK, cursor: "pointer", minHeight: 48 }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Clock size={17} />
-                    <span style={{ fontSize: 15, fontWeight: 700 }}>{historyExpanded ? "Hide History" : "View History"}</span>
+                    <History size={18} />
+                    <span style={{ fontSize: 15, fontWeight: 700 }}>{historyExpanded ? "Hide History" : "History"}</span>
                     <span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>{historyCount}</span>
                   </div>
                   {historyExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
