@@ -2615,9 +2615,9 @@ function LifeTracker() {
             <>
               {catTab === "finance" && (
                 <div style={{ display: "flex", gap: 5, marginBottom: 9 }}>
-                  <ChipButton label="Expenses" active={financeGoalView === "expenses"} onClick={() => setFinanceGoalView("expenses")} />
-                  <ChipButton label="Goals" active={financeGoalView === "goals"} onClick={() => setFinanceGoalView("goals")} />
-                  <ChipButton label="Repayment due" active={financeGoalView === "repayments"} onClick={() => setFinanceGoalView("repayments")} />
+                  <ChipButton label="Expenses" active={financeGoalView === "expenses"} onClick={() => { setFinanceGoalView("expenses"); setHistoryExpanded(false); }} />
+                  <ChipButton label="Goals" active={financeGoalView === "goals"} onClick={() => { setFinanceGoalView("goals"); }} />
+                  <ChipButton label="Repayment due" active={financeGoalView === "repayments"} onClick={() => { setFinanceGoalView("repayments"); setHistoryExpanded(false); }} />
                 </div>
               )}
               {catTab === "finance" && financeGoalView === "expenses" && (
@@ -2632,7 +2632,7 @@ function LifeTracker() {
                     No manual entry is needed in this page. Add expenses using your existing Daily expense option.
                   </div>
                   {(() => {
-                    const expenseItems = [];
+                    const expenseItems = financeHistoryExpenses;
                     const uniqueExpenses = expenseItems;
                     return uniqueExpenses.length > 0 ? (
                       <div style={{ display: "grid", gap: 8 }}>
@@ -2640,8 +2640,8 @@ function LifeTracker() {
                           <div key={item?.id || index} style={{ padding: "11px 12px", border: `1px solid ${LINE}`, borderRadius: 10, background: PANEL }}>
                             <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                               <div style={{ minWidth: 0 }}>
-                                <div style={{ fontWeight: 700, color: INK }}>{item?.name || item?.title || item?.category || "Expense"}</div>
-                                <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 3 }}>{item?.date || item?.createdAt || "Saved expense"}</div>
+                                <div style={{ fontWeight: 700, color: INK }}>{item?.subcategory || item?.group || "Expense"}</div>
+                                <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 3 }}>{formatDMY(item?.date) + (item?.time ? " · " + fmtTime(item?.time) : "")}</div>
                               </div>
                               <div style={{ fontWeight: 700, color: BRASS, whiteSpace: "nowrap" }}>₹{Number(item?.amount || 0).toLocaleString("en-IN")}</div>
                             </div>
@@ -2656,7 +2656,7 @@ function LifeTracker() {
                   })()}
                 </>
               )}
-              {catTab === "finance" && financeGoalView === "repayments" ? (
+              {catTab === "finance" && financeGoalView === "repayments" && (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <SectionLabel>Repayment due</SectionLabel>
@@ -2865,13 +2865,14 @@ function LifeTracker() {
                     {sortedRepayments.length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>No repayments added yet.</div>}
                   </div>
                 </>
-              ) : (
+              )}
+              {(catTab !== "finance" || financeGoalView === "goals") && (
                 <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <SectionLabel>Goals</SectionLabel>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <button onClick={() => (showAddGoal ? cancelGoalForm() : setShowAddGoal(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add goal</button>
-                  {((catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).length > 0) && (
+                  {(((catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).length > 0) || (catTab === "finance" && financeHistoryCount > 0)) && (
                     <button onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide history" : "View history"} style={{ display: "flex", alignItems: "center", gap: 4, background: historyExpanded ? PANEL_2 : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={15} /> <span>History</span></button>
                   )}
                 </div>
@@ -3238,7 +3239,7 @@ function LifeTracker() {
             </>
           )}
 
-          {(catTab === "finance" || catTab === "trip" || catTab === "career" || catTab === "health" || catTab === "shopping") && (() => {
+          {((catTab !== "finance" || financeGoalView === "goals") && (catTab === "finance" || catTab === "trip" || catTab === "career" || catTab === "health" || catTab === "shopping")) && (() => {
             const historyCount = catTab === "finance"
               ? financeHistoryCount
               : catTab === "trip"
