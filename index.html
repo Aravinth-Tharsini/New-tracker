@@ -1175,7 +1175,7 @@ function LifeTracker() {
     return map;
   }, [catTab, categoryGoals, financeBalanceAvailable]);
 
-  const [financeGoalView, setFinanceGoalView] = useState("goals");
+  const [financeGoalView, setFinanceGoalView] = useState("expenses");
   const [showAddRepayment, setShowAddRepayment] = useState(false);
   const [editingRepaymentId, setEditingRepaymentId] = useState(null);
   const blankRepaymentForm = () => ({
@@ -2632,7 +2632,7 @@ function LifeTracker() {
                     Tap <b style={{ color: BRASS }}>Add Expense</b> to add a new expense. Your existing expense system and saved records are not changed.
                   </div>
                 </>
-              ) : {catTab === "finance" && financeGoalView === "repayments" ? (
+              ) : (catTab === "finance" && financeGoalView === "repayments" ? (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <SectionLabel>Repayment due</SectionLabel>
@@ -2906,7 +2906,7 @@ function LifeTracker() {
                     );
                   })()}
                 </Card>
-              )}
+              ))}
               {showAddGoal && (
                 <Card style={{ marginBottom: 9 }}>
                   <SectionLabel>{editingGoalId ? "Edit goal" : "New goal"}</SectionLabel>
