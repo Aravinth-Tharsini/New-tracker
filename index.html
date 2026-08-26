@@ -2615,11 +2615,24 @@ function LifeTracker() {
             <>
               {catTab === "finance" && (
                 <div style={{ display: "flex", gap: 5, marginBottom: 9 }}>
+                  <ChipButton label="Expenses" active={financeGoalView === "expenses"} onClick={() => setFinanceGoalView("expenses")} />
                   <ChipButton label="Goals" active={financeGoalView === "goals"} onClick={() => setFinanceGoalView("goals")} />
                   <ChipButton label="Repayment due" active={financeGoalView === "repayments"} onClick={() => setFinanceGoalView("repayments")} />
                 </div>
               )}
-              {catTab === "finance" && financeGoalView === "repayments" ? (
+              {catTab === "finance" && financeGoalView === "expenses" ? (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <SectionLabel>Expenses</SectionLabel>
+                    <button onClick={() => setTab("daily")} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "5px 9px", fontSize: 14, cursor: "pointer" }}>
+                      <Plus size={14} /> Add Expense
+                    </button>
+                  </div>
+                  <div style={{ padding: "14px 12px", border: `1px dashed ${LINE}`, borderRadius: 10, color: INK_FAINT, fontSize: 14 }}>
+                    Tap <b style={{ color: BRASS }}>Add Expense</b> to add a new expense. Your existing expense system and saved records are not changed.
+                  </div>
+                </>
+              ) : {catTab === "finance" && financeGoalView === "repayments" ? (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <SectionLabel>Repayment due</SectionLabel>
