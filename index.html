@@ -1497,12 +1497,47 @@ function LifeTracker() {
           --card-shadow:0 1px 2px rgba(0,0,0,0.5), 0 1px 8px rgba(0,0,0,0.4);
           --nav-bg:rgba(28,28,30,0.92);
         }
-        .today-expand-enter { animation: todaySlideIn .28s ease both; overflow: hidden; }
-        @keyframes todaySlideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-        .today-focus-card { transition: all .25s ease; }
-        .today-focus-card.is-open { minHeight: 58px !important; padding: 6px 10px !important; gap: 8px !important; border-radius: 14px !important; }
-        .today-focus-card.is-open .today-focus-icon { width: 46px !important; height: 46px !important; border-radius: 12px !important; }
-        .today-focus-card.is-open .today-focus-text, .today-focus-card.is-open .today-focus-arrow { display: none !important; }
+        /* Today: full card → animated small icon at top-left → details below */
+        .today-expand-enter { animation: todaySlideIn .32s ease both; overflow: hidden; }
+        @keyframes todaySlideIn {
+          from { opacity: 0; transform: translateY(-10px); max-height: 0; }
+          to { opacity: 1; transform: translateY(0); max-height: 3000px; }
+        }
+        .today-focus-card {
+          transition: width .32s ease, min-height .32s ease, padding .32s ease,
+                      border-radius .32s ease, background .25s ease, border-color .25s ease;
+          transform-origin: top left;
+          overflow: hidden;
+        }
+        .today-focus-icon { transition: width .28s ease, height .28s ease, border-radius .28s ease, transform .28s ease; }
+        .today-focus-text, .today-focus-arrow { transition: opacity .18s ease, transform .25s ease, width .25s ease; }
+        .today-focus-card.is-open {
+          width: 58px !important;
+          min-height: 58px !important;
+          height: 58px !important;
+          padding: 6px !important;
+          gap: 0 !important;
+          border-radius: 16px !important;
+          justify-content: center !important;
+          align-self: flex-start !important;
+          margin-right: auto !important;
+        }
+        .today-focus-card.is-open .today-focus-icon {
+          width: 46px !important;
+          height: 46px !important;
+          border-radius: 12px !important;
+          transform: scale(.96);
+        }
+        .today-focus-card.is-open .today-focus-text,
+        .today-focus-card.is-open .today-focus-arrow {
+          opacity: 0 !important;
+          transform: translateX(-12px);
+          pointer-events: none;
+          width: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+        }
       `}</style>
 
       <div style={{ padding: "calc(16px + env(safe-area-inset-top)) 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
