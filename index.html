@@ -579,6 +579,8 @@ function LifeTracker() {
   const [activeTab, setActiveTab] = useState(null);
   const [expandedDailyCategory, setExpandedDailyCategory] = useState(null);
   const [catTab, setCatTab] = useState("finance");
+  const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [editingHistoryExpense, setEditingHistoryExpense] = useState(null);
   const [dailyItems, setDailyItems] = useState([]);
   const [dailyLogs, setDailyLogs] = useState({});
   const [goals, setGoals] = useState([]);
@@ -982,6 +984,19 @@ function LifeTracker() {
     setShoppingLists((prev) => prev.map((l) => (l.id !== list.id ? l : { ...l, status: "paid", paidAt: new Date().toISOString() })));
   };
 
+  const updateHistoryExpense = (date, expenseId, patch) => {
+    setDailyLogs((prev) => {
+      const log = prev[date] || defaultLog();
+      return { ...prev, [date]: { ...log, expenses: (log.expenses || []).map((e) => e.id === expenseId ? { ...e, ...patch } : e) } };
+    });
+  };
+
+  const financeHistoryExpenses = useMemo(() => Object.entries(dailyLogs)
+    .flatMap(([date, log]) => (log.expenses || []).map((e) => ({ ...e, date })))
+    .sort((a, b) => (b.time || b.date || "").localeCompare(a.time || a.date || "")), [dailyLogs]);
+  const financeHistoryRepayments = useMemo(() => repayments.filter((r) => r.paid).sort((a, b) => (b.paidAt || b.dueDate || "").localeCompare(a.paidAt || a.dueDate || "")), [repayments]);
+  const financeHistoryCount = financeHistoryExpenses.length + financeHistoryRepayments.length;
+
   const exportExpensesCSV = () => {
     const rows = Object.entries(dailyLogs).flatMap(([day, log]) =>
       (log.expenses || []).map((e) => ({ date: day, time: fmtTime(e.time), group: e.group, subcategory: e.subcategory, amount: e.amount, vendor: e.vendor || "", remarks: e.remarks || "" }))
@@ -1210,15 +1225,15 @@ function LifeTracker() {
     const cls = repaymentCategoryClass(r.category);
     if (cls === "simple" && r.frequency && !r.paid) {
       const nextRecord = { ...r, id: "r" + Date.now() + Math.random().toString(36).slice(2, 6), dueDate: advanceDueDate(r.dueDate, r.frequency, r.dueDayStart), paid: false };
-      return prev.map((x) => (x.id === id ? { ...x, paid: true } : x)).concat(nextRecord);
+      return prev.map((x) => (x.id === id ? { ...x, paid: true, paidAt: new Date().toISOString() } : x)).concat(nextRecord);
     }
     if (cls === "recharge" && !r.paid) {
       const newStart = r.dueDate || r.startDate;
       const { avgDailyCost, nextDate } = computeRechargePlan(r.planAmount, r.durationValue, r.durationUnit, newStart);
       const nextRecord = { ...r, id: "r" + Date.now() + Math.random().toString(36).slice(2, 6), startDate: newStart, dueDate: nextDate, avgDailyCost, paid: false };
-      return prev.map((x) => (x.id === id ? { ...x, paid: true } : x)).concat(nextRecord);
+      return prev.map((x) => (x.id === id ? { ...x, paid: true, paidAt: new Date().toISOString() } : x)).concat(nextRecord);
     }
-    return prev.map((x) => (x.id === id ? { ...x, paid: !x.paid } : x));
+    return prev.map((x) => (x.id === id ? { ...x, paid: !x.paid, paidAt: !x.paid ? new Date().toISOString() : null } : x));
   });
   const advanceMonth = (dateStr) => { if (!dateStr) return ""; const d = new Date(dateStr); d.setMonth(d.getMonth() + 1); return dateKey(d); };
   const payNextEmi = (id) => {
@@ -2013,7 +2028,7 @@ function LifeTracker() {
           <div style={{ display: "flex", gap: 5, marginBottom: 12, flexWrap: "wrap" }}>
             {CATEGORY_DEFS.map((c) => {
               const Icon = c.icon; const active = catTab === c.id;
-              return <button key={c.id} onClick={() => { setCatTab(c.id); closeItemForm(); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, height: 34, background: active ? "rgba(0,113,227,0.12)" : "transparent", border: `1px solid ${active ? BRASS_DIM : LINE}`, borderRadius: 7, padding: "0 9px", color: active ? BRASS : INK_DIM, fontSize: 14, fontWeight: active ? 600 : 500, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, boxSizing: "border-box" }}><Icon size={14} /> {c.label}</button>;
+              return <button key={c.id} onClick={() => { setCatTab(c.id); setHistoryExpanded(false); setEditingHistoryExpense(null); closeItemForm(); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, height: 34, background: active ? "rgba(0,113,227,0.12)" : "transparent", border: `1px solid ${active ? BRASS_DIM : LINE}`, borderRadius: 7, padding: "0 9px", color: active ? BRASS : INK_DIM, fontSize: 14, fontWeight: active ? 600 : 500, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, boxSizing: "border-box" }}><Icon size={14} /> {c.label}</button>;
             })}
           </div>
 
@@ -3047,6 +3062,99 @@ function LifeTracker() {
                 </>
               )}
             </>
+          )}
+
+          {(catTab === "finance" || catTab === "trip" || catTab === "career" || catTab === "health") && (
+            <Card style={{ marginTop: 12, marginBottom: 12, padding: 0, overflow: "hidden" }}>
+              <button
+                onClick={() => setHistoryExpanded((v) => !v)}
+                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "transparent", border: "none", padding: "14px 16px", color: INK, cursor: "pointer" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Clock size={16} />
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>History</span>
+                  <span style={{ fontSize: 12, color: INK_FAINT }}>
+                    {catTab === "finance" ? financeHistoryCount : catTab === "trip" ? travelPlans.filter((t) => t.completed).length : goals.filter((g) => g.category === catTab && g.done).length}
+                  </span>
+                </div>
+                {historyExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+              </button>
+
+              {historyExpanded && (
+                <div style={{ borderTop: `1px solid ${LINE}`, padding: "10px 12px 12px" }}>
+                  {catTab === "finance" && (
+                    <>
+                      {financeHistoryRepayments.map((r) => (
+                        <div key={`repay-history-${r.id}`} style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
+                          <Check size={15} color={TEAL} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600 }}>{r.name || r.category}</div>
+                            <div style={{ fontSize: 12, color: INK_FAINT }}>{r.category} · Paid {formatDMY(r.paidAt || r.dueDate)}</div>
+                          </div>
+                          <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(r.amount || 0)}</div>
+                          <IconAction onClick={() => openEditRepayment(r)} title="Edit finance record"><Pencil size={15} /></IconAction>
+                        </div>
+                      ))}
+                      {financeHistoryExpenses.map((e) => {
+                        const editing = editingHistoryExpense && editingHistoryExpense.id === e.id && editingHistoryExpense.date === e.date;
+                        return (
+                          <div key={`expense-history-${e.date}-${e.id}`} style={{ padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
+                            {editing ? (
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "end" }}>
+                                <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Amount</div><TextField type="number" value={editing.amount} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, amount: ev.target.value }))} /></div>
+                                <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Vendor / Remark</div><TextField value={editing.vendor || ""} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, vendor: ev.target.value }))} /></div>
+                                <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                                  <button onClick={() => setEditingHistoryExpense(null)} style={{ background: PANEL_2, border: "none", borderRadius: 8, padding: "8px 12px", color: INK_DIM, cursor: "pointer" }}>Cancel</button>
+                                  <button onClick={() => { updateHistoryExpense(e.date, e.id, { amount: Number(editing.amount) || 0, vendor: editing.vendor || "" }); setEditingHistoryExpense(null); }} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "8px 12px", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Save</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                                <Receipt size={15} color={BRASS} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 14, fontWeight: 600 }}>{e.subcategory || e.group || "Expense"}</div>
+                                  <div style={{ fontSize: 12, color: INK_FAINT }}>{formatDMY(e.date)} · {fmtTime(e.time)}{e.vendor ? ` · ${e.vendor}` : ""}</div>
+                                </div>
+                                <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(e.amount || 0)}</div>
+                                <IconAction onClick={() => setEditingHistoryExpense({ ...e })} title="Edit expense"><Pencil size={15} /></IconAction>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {financeHistoryCount === 0 && <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "14px 0" }}>No finance history yet.</div>}
+                      {financeHistoryCount > 0 && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 9 }}>Finance History is live and updates automatically when payments or expense records change.</div>}
+                    </>
+                  )}
+
+                  {catTab === "trip" && (
+                    <>
+                      {travelPlans.filter((t) => t.completed).map((t) => (
+                        <div key={`trip-history-${t.id}`} style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
+                          <Check size={15} color={TEAL} />
+                          <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{t.title}</div><div style={{ fontSize: 12, color: INK_FAINT }}>{formatDMY(t.travelDate)} · {t.fromLocation || ""} → {t.toLocation || ""}</div></div>
+                          <span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>Completed</span>
+                        </div>
+                      ))}
+                      {travelPlans.filter((t) => t.completed).length === 0 && <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "14px 0" }}>No completed trips yet.</div>}
+                    </>
+                  )}
+
+                  {(catTab === "career" || catTab === "health") && (
+                    <>
+                      {goals.filter((g) => g.category === catTab && g.done).map((g) => (
+                        <div key={`goal-history-${g.id}`} style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
+                          <Check size={15} color={TEAL} />
+                          <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{g.title}</div><div style={{ fontSize: 12, color: INK_FAINT }}>{g.goalType || "Goal"}{g.expectedYear ? ` · Expected ${g.expectedYear}` : ""}</div></div>
+                          <span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>Achieved</span>
+                        </div>
+                      ))}
+                      {goals.filter((g) => g.category === catTab && g.done).length === 0 && <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "14px 0" }}>No achieved goals yet.</div>}
+                    </>
+                  )}
+                </div>
+              )}
+            </Card>
           )}
         </div>
       )}
