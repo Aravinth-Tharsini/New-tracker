@@ -2057,7 +2057,33 @@ function LifeTracker() {
       {page === "categories" && (
         <div style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 8 }}>Choose what you want to plan</div>
+            {(() => {
+              const plannerHistoryCount = catTab === "finance"
+                ? financeHistoryCount
+                : catTab === "trip"
+                  ? travelPlans.filter((t) => t.completed).length
+                  : catTab === "shopping"
+                    ? shoppingLists.filter((l) => l.status === "done" || l.status === "paid").length
+                    : (catTab === "career" || catTab === "health")
+                      ? goals.filter((g) => g.category === catTab && g.done).length
+                      : 0;
+              return (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, color: INK_FAINT }}>Choose what you want to plan</div>
+                  {plannerHistoryCount > 0 && (
+                    <button
+                      onClick={() => setHistoryExpanded((v) => !v)}
+                      title={historyExpanded ? "Hide history" : "View history"}
+                      aria-label={historyExpanded ? "Hide history" : "View history"}
+                      style={{ width: 38, height: 38, borderRadius: 9, border: `1px solid ${historyExpanded ? TEAL : LINE}`, background: historyExpanded ? PANEL_2 : PANEL, color: historyExpanded ? TEAL : INK_DIM, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", position: "relative", flexShrink: 0 }}
+                    >
+                      <History size={19} />
+                      <span style={{ position: "absolute", top: -5, right: -5, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 999, background: TEAL, color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${BG}` }}>{plannerHistoryCount > 99 ? "99+" : plannerHistoryCount}</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
               {CATEGORY_DEFS.map((c) => {
                 const Icon = c.icon; const active = catTab === c.id;
@@ -3114,19 +3140,6 @@ function LifeTracker() {
             if (!hasHistory) return null;
             return (
               <div style={{ marginTop: 12, marginBottom: 12 }}>
-                {/* History is an icon button, similar to the action icons used in Goals and Repayment. */}
-                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginBottom: historyExpanded ? 8 : 0 }}>
-                  <button
-                    onClick={() => setHistoryExpanded((v) => !v)}
-                    title={historyExpanded ? "Hide history" : "View history"}
-                    aria-label={historyExpanded ? "Hide history" : "View history"}
-                    style={{ width: 38, height: 38, borderRadius: 9, border: `1px solid ${historyExpanded ? TEAL : LINE}`, background: historyExpanded ? PANEL_2 : PANEL, color: historyExpanded ? TEAL : INK_DIM, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", position: "relative", flexShrink: 0 }}
-                  >
-                    <History size={19} />
-                    {historyCount > 0 && <span style={{ position: "absolute", top: -5, right: -5, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 999, background: TEAL, color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: `2px solid ${BG}` }}>{historyCount > 99 ? "99+" : historyCount}</span>}
-                  </button>
-                </div>
-
                 {historyExpanded && (
                   <Card style={{ margin: 0 }}>
                   <div style={{ padding: "2px 0" }}>
