@@ -1744,8 +1744,8 @@ function LifeTracker() {
                 const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
                 return (
                   <div key={cat.id}>
-                    <button className={`today-focus-card ${expanded ? "is-open" : ""}`} onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", minHeight: 78, display: "flex", alignItems: "center", gap: 12, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS_DIM : LINE}`, borderRadius: 16, padding: "11px 13px", cursor: "pointer", transition: "background 0.28s ease, border-color 0.28s ease", boxShadow: CARD_SHADOW }}>
-                      <div className="today-focus-icon" style={{ position: "relative", width: 50, height: 50, borderRadius: 14, background: expanded ? "rgba(0,113,227,0.18)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <button className={`today-focus-card ${expanded ? "is-open" : ""}`} onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", minHeight: 78, display: "flex", alignItems: "center", gap: 12, background: expanded ? PANEL_2 : PANEL, border: `1px solid ${expanded ? BRASS_DIM : LINE}`, borderRadius: 16, padding: "11px 13px", cursor: "pointer", transition: "background 0.28s ease, border-color 0.28s ease", boxShadow: CARD_SHADOW }}>
+                      <div className="today-focus-icon" style={{ position: "relative", width: 50, height: 50, borderRadius: 14, background: expanded ? PANEL : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <CatIcon size={23} color={expanded ? BRASS : INK_DIM} />
                         {attentionCount > 0 && (
                           <div style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, borderRadius: 999, background: CORAL, color: "#FFFFFF", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", border: "2px solid " + BG, fontFamily: mono }}>
@@ -1762,7 +1762,7 @@ function LifeTracker() {
                       </div>
                     </button>
                     {expanded && cat.id === "trip" && (
-                      <div className="today-expand-enter" style={{ marginTop: 6 }}>
+                      <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
                         <Card>
                           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                             {visibleTrips.map((t) => {
@@ -1987,7 +1987,7 @@ function LifeTracker() {
                       );
                     })()}
                     {expanded && cat.id !== "trip" && cat.id !== "expense" && (
-                      <div className="today-expand-enter" style={{ marginTop: 6 }}>
+                      <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
               <div className="no-scrollbar" style={{ display: "flex", gap: 8, paddingBottom: 14, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                 {itemsForCat.map((item) => {
                   const active = activeTab === item.id;
@@ -2620,11 +2620,11 @@ function LifeTracker() {
                   <ChipButton label="Repayment due" active={financeGoalView === "repayments"} onClick={() => setFinanceGoalView("repayments")} />
                 </div>
               )}
-              {catTab === "finance" && financeGoalView === "expenses" ? (
+              {catTab === "finance" && financeGoalView === "expenses" && (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <SectionLabel>Expenses</SectionLabel>
-                    <button onClick={() => setTab("daily")} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "5px 9px", fontSize: 14, cursor: "pointer" }}>
+                    <button onClick={() => setActiveTab("daily")} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "5px 9px", fontSize: 14, cursor: "pointer" }}>
                       <Plus size={14} /> Add Expense
                     </button>
                   </div>
@@ -2632,7 +2632,8 @@ function LifeTracker() {
                     Tap <b style={{ color: BRASS }}>Add Expense</b> to add a new expense. Your existing expense system and saved records are not changed.
                   </div>
                 </>
-              ) : (catTab === "finance" && financeGoalView === "repayments" ? (
+              )}
+              {catTab === "finance" && financeGoalView === "repayments" ? (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <SectionLabel>Repayment due</SectionLabel>
@@ -2906,7 +2907,7 @@ function LifeTracker() {
                     );
                   })()}
                 </Card>
-              ))}
+              )}
               {showAddGoal && (
                 <Card style={{ marginBottom: 9 }}>
                   <SectionLabel>{editingGoalId ? "Edit goal" : "New goal"}</SectionLabel>
