@@ -2252,7 +2252,7 @@ function LifeTracker() {
                     {(itemForm.type === "instant" || itemForm.type === "duration") && (
                       <div>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Scheduled time (optional — used for reminders)</div>
-                        <TextField type="time" value={itemForm.scheduledTime} onChange={(e) => setItemForm((f) => ({ ...f, scheduledTime: e.target.value }))} style={{ width: "100%", fontFamily: mono }} />
+                        <Time12Input value={itemForm.scheduledTime} onChange={(v) => setItemForm((f) => ({ ...f, scheduledTime: v }))} style={{ fontFamily: mono }} />
                       </div>
                     )}
 
