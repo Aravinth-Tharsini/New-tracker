@@ -265,7 +265,7 @@ import {
   Plane, Train, Bus, Activity, Bike, Car, MapPin, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, History, Home as HomeIcon,
-  CheckCircle2, CreditCard, Rocket, ChevronRight,
+  CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -680,6 +680,17 @@ const CATEGORY_DEFS = [
   { id: "activity", label: "Routine", icon: Activity },
   { id: "shopping", label: "Shopping", icon: ShoppingBag },
 ];
+// Color + description used only for the Planner tab's category picker cards.
+const PLANNER_CATEGORY_META = {
+  myday: { desc: "Plan your day and track your activities", fg: "#5A20B8", bg: "rgba(90,32,184,0.10)" },
+  finance: { desc: "Manage income, expenses and budget", fg: "#159957", bg: "rgba(21,153,87,0.10)" },
+  financegoals: { desc: "Set goals and build your future", fg: "#E08A2E", bg: "rgba(224,138,46,0.14)" },
+  career: { desc: "Track skills, goals and your progress", fg: "#0071E3", bg: "rgba(0,113,227,0.10)" },
+  health: { desc: "Take care of your health and wellness", fg: "#E0356B", bg: "rgba(224,53,107,0.10)" },
+  trip: { desc: "Plan trips and manage your travel details", fg: "#0BA5A5", bg: "rgba(11,165,165,0.10)" },
+  activity: { desc: "Build habits and stick to your routine", fg: "#7C3AED", bg: "rgba(124,58,237,0.10)" },
+  shopping: { desc: "Plan shopping and manage your lists", fg: "#E08A2E", bg: "rgba(224,138,46,0.14)" },
+};
 // My Day: meetings and other special activities planned for a specific day, with an editable reminder.
 const MYDAY_TYPE_OPTIONS = [
   { value: "Meeting", label: "Meeting" },
@@ -2027,6 +2038,35 @@ function LifeTracker() {
         .cat-grid-item.is-collapsed {
           display: none !important;
         }
+        .planner-cat-grid {
+          display: grid !important;
+          grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+          gap: 9px !important;
+        }
+        @media(max-width:360px){ .planner-cat-grid{ gap:7px !important; } }
+        .planner-cat-card {
+          display: flex; flex-direction: column; align-items: center; text-align: center;
+          gap: 9px; padding: 16px 8px 14px; border-radius: 20px; border: none; cursor: pointer;
+          box-shadow: 0 3px 12px rgba(20,30,45,.045);
+          transition: transform .18s cubic-bezier(.22,.8,.25,1), box-shadow .18s ease;
+        }
+        .planner-cat-card:active { transform: scale(.96); }
+        .planner-cat-icon {
+          width: 52px; height: 52px; border-radius: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .planner-cat-title { font-size: 13.5px; font-weight: 750; line-height: 1.2; }
+        .planner-cat-desc { font-size: 11.5px; color: var(--ink-dim); line-height: 1.35; min-height: 30px; }
+        .planner-cat-arrow {
+          width: 30px; height: 30px; border-radius: 999px; background: var(--panel); box-shadow: 0 2px 6px rgba(20,30,45,.08);
+          display: flex; align-items: center; justify-content: center; margin-top: 1px;
+        }
+        @media(min-width:700px){
+          .planner-cat-card { padding: 20px 10px 16px; border-radius: 22px; gap: 11px; }
+          .planner-cat-icon { width: 64px; height: 64px; border-radius: 18px; }
+          .planner-cat-title { font-size: 15px; }
+          .planner-cat-desc { font-size: 12.5px; min-height: 34px; }
+          .planner-cat-arrow { width: 36px; height: 36px; }
+        }
       `}</style>
 
       <div style={{ padding: "calc(16px + env(safe-area-inset-top)) 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -2759,25 +2799,52 @@ function LifeTracker() {
 
       {page === "categories" && (
         <div key="categories-page" className="planner-page-content" style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
-          <div className="mobile-array-grid" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
-            <div style={{ width: "100%", fontSize: 13, color: INK_FAINT, marginBottom: 2 }}>Choose what you want to plan</div>
-            {CATEGORY_DEFS.map((c) => {
-              const Icon = c.icon; const active = catTab === c.id;
-              return (
-                <div key={c.id} className={`cat-grid-item ${active ? "is-open-row" : (catTab ? "is-collapsed" : "")}`}>
-                  <button
-                    className={`today-focus-card ${active ? "is-open" : ""}`}
-                    onClick={() => { setCatTab(active ? null : c.id); if (c.id === "financegoals") setFinanceGoalView("goals"); setHistoryExpanded(false); setEditingHistoryExpense(null); closeItemForm(); }}
-                    style={{ width: "100%", minHeight: 58, display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 9, background: active ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${active ? BRASS : LINE}`, borderRadius: 13, padding: "8px 10px", color: active ? BRASS : INK, fontSize: 15, fontWeight: active ? 700 : 600, cursor: "pointer", textAlign: "left", boxShadow: active ? CARD_SHADOW : "none" }}
-                  >
-                    <div className="today-focus-icon" style={{ width: 36, height: 36, borderRadius: 10, background: active ? "rgba(0,113,227,0.16)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon size={18} /></div>
-                    <span className="today-focus-text" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.label}</span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+          {!catTab && (
+            <>
+              <div style={{ fontSize: 13, color: INK_DIM, marginBottom: 14 }}>Plan smart. Stay focused. Achieve more.</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
+                <Sparkles size={16} color={BRASS} />
+                <span style={{ fontSize: 16, fontWeight: 750, color: INK, fontFamily: disp }}>What do you want to plan today?</span>
+              </div>
+              <div className="planner-cat-grid" style={{ marginBottom: 14 }}>
+                {CATEGORY_DEFS.map((c) => {
+                  const Icon = c.icon;
+                  const meta = PLANNER_CATEGORY_META[c.id] || { desc: "", fg: BRASS, bg: "rgba(0,113,227,0.10)" };
+                  return (
+                    <button
+                      key={c.id}
+                      className="planner-cat-card"
+                      onClick={() => { setCatTab(c.id); if (c.id === "financegoals") setFinanceGoalView("goals"); setHistoryExpanded(false); setEditingHistoryExpense(null); closeItemForm(); }}
+                      style={{ background: meta.bg }}
+                    >
+                      <div className="planner-cat-icon" style={{ background: PANEL }}>
+                        <Icon size={24} color={meta.fg} strokeWidth={2} />
+                      </div>
+                      <div className="planner-cat-title" style={{ color: meta.fg, fontFamily: disp }}>{c.label}</div>
+                      <div className="planner-cat-desc">{meta.desc}</div>
+                      <div className="planner-cat-arrow"><ArrowRight size={14} color={meta.fg} /></div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
           {catTab && (
+            <>
+              {(() => {
+                const activeCat = CATEGORY_DEFS.find((c) => c.id === catTab);
+                const ActiveIcon = activeCat?.icon;
+                const activeMeta = PLANNER_CATEGORY_META[catTab] || { fg: BRASS, bg: "rgba(0,113,227,0.10)" };
+                return (
+                  <button onClick={() => setCatTab(null)} style={{ display: "flex", alignItems: "center", gap: 9, background: "transparent", border: "none", padding: "2px 0 14px", cursor: "pointer", width: "100%" }}>
+                    <ChevronLeft size={18} color={INK_FAINT} style={{ flexShrink: 0 }} />
+                    <div style={{ width: 32, height: 32, borderRadius: 10, background: activeMeta.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {ActiveIcon && <ActiveIcon size={16} color={activeMeta.fg} />}
+                    </div>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: INK, fontFamily: disp }}>{activeCat?.label}</span>
+                  </button>
+                );
+              })()}
             <div className="today-expand-enter">
 
           {catTab === "finance" && (
@@ -4203,6 +4270,7 @@ function LifeTracker() {
             );
           })()}
             </div>
+            </>
           )}
         </div>
       )}
