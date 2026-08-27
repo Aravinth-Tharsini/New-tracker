@@ -1555,6 +1555,7 @@ function LifeTracker() {
 
   // ---- My Day: meetings and other special activities, with an editable reminder ----
   const [showAddMyDay, setShowAddMyDay] = useState(false);
+  const [showMyDayHistory, setShowMyDayHistory] = useState(false);
   const [editingMyDayId, setEditingMyDayId] = useState(null);
   const blankMyDayForm = () => ({ type: "Meeting", title: "", eventDate: dateKey(), eventTime: "", location: "", notes: "", repeatDays: [], reminderOffsets: ["none"], reminderEnabled: true, reminderMinutes: "15" });
   const [myDayForm, setMyDayForm] = useState(blankMyDayForm());
@@ -1587,7 +1588,7 @@ function LifeTracker() {
     cancelMyDayForm();
   };
   const deleteMyDayEvent = (id) => setMyDayEvents((prev) => prev.filter((e) => e.id !== id));
-  const toggleMyDayCompleted = (id) => setMyDayEvents((prev) => prev.map((e) => (e.id !== id ? e : { ...e, completed: !e.completed })));
+  const toggleMyDayCompleted = (id) => setMyDayEvents((prev) => prev.map((e) => (e.id !== id ? e : { ...e, completed: !e.completed, completedAt: !e.completed ? new Date().toISOString() : null })));
   const logTravelExpense = (plan) => {
     if (!plan || Number(plan.amount) <= 0) return;
     const alreadyLogged = Object.values(dailyLogs).some((log) => (log.expenses || []).some((e) => e.linkedTravelId === plan.id));
@@ -3005,7 +3006,7 @@ function LifeTracker() {
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <SectionLabel>My Day</SectionLabel>
-                <button onClick={() => (showAddMyDay ? cancelMyDayForm() : setShowAddMyDay(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add plan</button>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>{sortedMyDayEvents.some((e) => e.completed) && <button onClick={() => setShowMyDayHistory((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: showMyDayHistory ? TEAL : "transparent", border: `1px solid ${showMyDayHistory ? TEAL : BRASS_DIM}`, color: showMyDayHistory ? "#FFFFFF" : BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", transition: "all .25s ease" }}><History size={14} /> History</button>}<button onClick={() => (showAddMyDay ? cancelMyDayForm() : setShowAddMyDay(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add plan</button></div>
               </div>
               <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Meetings and any other special activity for a day. Set a reminder and edit the plan any time.</div>
               {showAddMyDay && (
@@ -3100,9 +3101,9 @@ function LifeTracker() {
                   );
                 })}
                 {sortedMyDayEvents.filter((e) => !e.completed).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{sortedMyDayEvents.some((e) => e.completed) ? "All plans are marked done \u2014 add a new one above." : "Nothing planned yet. Add a meeting or activity."}</div>}
-                {sortedMyDayEvents.some((e) => e.completed) && (
-                  <div style={{ marginTop: 4 }}>
-                    <SectionLabel>Done</SectionLabel>
+                {showMyDayHistory && sortedMyDayEvents.some((e) => e.completed) && (
+                  <div className="today-expand-enter" style={{ marginTop: 8 }}>
+                    <SectionLabel>History</SectionLabel>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {sortedMyDayEvents.filter((e) => e.completed).map((e) => (
                         <Card key={e.id} style={{ display: "flex", alignItems: "center", gap: 5, opacity: 0.7 }}>
