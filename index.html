@@ -818,6 +818,9 @@ function LifeTracker() {
     if (ad !== bd) return ad.localeCompare(bd);
     return (a.travelTime || "99:99").localeCompare(b.travelTime || "99:99");
   });
+  const travelHistoryPlans = useMemo(() => travelPlans
+    .filter((t) => t.completed || t.dismissed || t.status === "Completed" || t.status === "Cancelled")
+    .sort((a, b) => String(b.completedAt || b.dismissedAt || b.travelDate || "").localeCompare(String(a.completedAt || a.dismissedAt || a.travelDate || ""))), [travelPlans]);
   const todaysTravelPlans = useMemo(() => sortedTravelPlans.filter((t) => !t.dismissed && !t.completed && isTravelRelevantToday(t, today)), [sortedTravelPlans, today]);
   const sortedMyDayEvents = [...myDayEvents].sort((a, b) => {
     const ad = a.eventDate || "9999-12-31", bd = b.eventDate || "9999-12-31";
@@ -1482,6 +1485,7 @@ function LifeTracker() {
   const todaysRepaymentReminders = useMemo(() => sortedRepayments.filter((r) => isRepaymentRelevantToday(r, today)), [sortedRepayments, today]);
 
   const [showAddTravel, setShowAddTravel] = useState(false);
+  const [showTravelHistory, setShowTravelHistory] = useState(false);
   const [editingTravelId, setEditingTravelId] = useState(null);
   const [travelTimeInputMode, setTravelTimeInputMode] = useState("24h");
   const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", amount: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [] });
@@ -1522,8 +1526,9 @@ function LifeTracker() {
     cancelTravelForm();
   };
   const deleteTravelPlan = (id) => setTravelPlans((prev) => prev.filter((t) => t.id !== id));
-  const dismissTravelPlan = (id) => setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, dismissed: true, dismissedAt: new Date().toISOString() } : t)));
-  const completeTravelPlan = (id) => setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, completedAt: new Date().toISOString() } : t)));
+  // Dismiss does not delete the trip. It moves the trip to Travel History with Cancelled status.
+  const dismissTravelPlan = (id) => setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, dismissed: true, completed: false, status: "Cancelled", dismissedAt: new Date().toISOString() } : t)));
+  const completeTravelPlan = (id) => setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, dismissed: false, status: "Completed", completedAt: new Date().toISOString() } : t)));
   const toggleTravelNoteDone = (planId, noteId) => setTravelPlans((prev) => prev.map((t) => (t.id !== planId ? t : { ...t, notes: (t.notes || []).map((n) => (n.id !== noteId ? n : { ...n, done: !n.done })) })));
 
   // ---- My Day: meetings and other special activities, with an editable reminder ----
@@ -2515,12 +2520,15 @@ function LifeTracker() {
             <>
               {!itemForm && catTab === "trip" && (
                 <>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <SectionLabel>Travel</SectionLabel>
-                    <button onClick={() => (showAddTravel ? cancelTravelForm() : setShowAddTravel(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add trip</button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <button onClick={() => setShowTravelHistory((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: showTravelHistory ? PANEL_2 : "transparent", border: `1px solid ${showTravelHistory ? BRASS_DIM : LINE}`, color: showTravelHistory ? BRASS : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><History size={14} /> History{travelHistoryPlans.length ? ` (${travelHistoryPlans.length})` : ""}</button>
+                      <button onClick={() => { setShowTravelHistory(false); showAddTravel ? cancelTravelForm() : setShowAddTravel(true); }} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add trip</button>
+                    </div>
                   </div>
                   <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Train, bus, flight, or other trips. They'll appear on the Daily tab as soon as you add them, and highlight once your chosen reminder lead time kicks in.</div>
-                  {showAddTravel && (
+                  {showAddTravel && !showTravelHistory && (
                     <Card style={{ marginBottom: 9 }}>
                       <SectionLabel>{editingTravelId ? "Edit trip" : "New trip"}</SectionLabel>
                       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2616,7 +2624,32 @@ function LifeTracker() {
                       </div>
                     </Card>
                   )}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                  {showTravelHistory && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                      {travelHistoryPlans.length === 0 ? (
+                        <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>No travel history yet.</div>
+                      ) : travelHistoryPlans.map((t) => {
+                        const cancelled = t.status === "Cancelled" || t.dismissed;
+                        const status = cancelled ? "Cancelled" : "Completed";
+                        const statusColor = cancelled ? CORAL : TEAL;
+                        const statusAt = cancelled ? t.dismissedAt : t.completedAt;
+                        return (
+                          <Card key={`travel-history-${t.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                            <Plane size={18} color={statusColor} style={{ marginTop: 2, flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
+                              <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3 }}>{formatDMY(t.travelDate)}{t.travelTime ? ` · ${fmtTimeString12(t.travelTime)}` : ""}{t.amount ? ` · ${inr(t.amount)}` : ""}</div>
+                              <div style={{ fontSize: 13, color: statusColor, fontWeight: 700, marginTop: 5 }}>Status: {status}</div>
+                              {statusAt && <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>{status} on {formatDMY(statusAt)} · {fmtTime(statusAt)}</div>}
+                              {t.amount > 0 && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Payment: {t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}</div>}
+                            </div>
+                            <IconAction onClick={() => deleteHistoryTrip(t.id)} title="Delete permanently"><Trash2 size={15} /></IconAction>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {!showTravelHistory && <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                     {sortedTravelPlans.filter((t) => !t.completed && !t.dismissed).map((t) => {
                       const dayLabel = dayLabelFor(t.travelDate, today);
                       return (
@@ -2654,7 +2687,7 @@ function LifeTracker() {
                       );
                     })}
                     {sortedTravelPlans.filter((t) => !t.completed && !t.dismissed).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{sortedTravelPlans.some((t) => t.completed || t.dismissed) ? "All trips are completed or cancelled — check History." : "No trips added yet."}</div>}
-                  </div>
+                  </div>}
                 </>
               )}
               {catTab === "activity" && (!itemForm ? (
@@ -3820,9 +3853,9 @@ function LifeTracker() {
 
                     {catTab === "trip" && travelPlans.filter((t) => t.completed || t.dismissed).map((t) => (
                       <div key={`trip-history-${t.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
-                        <Plane size={18} color={t.completed ? TEAL : CORAL} />
-                        <div className="history-main" style={{ flex: 1, minWidth: 0 }}><div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{t.title}</div><div style={{ fontSize: 12, color: INK_FAINT }}>{t.fromLocation || ""} → {t.toLocation || ""}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>{t.completed ? `Completed: ${fmtTime(t.completedAt)}${t.completedAt ? ` · ${formatDMY(t.completedAt)}` : ""}` : `Cancelled: ${fmtTime(t.dismissedAt)}${t.dismissedAt ? ` · ${formatDMY(t.dismissedAt)}` : ""}`}</div></div>
-                        <div className="history-actions"><span style={{ fontSize: 12, color: t.completed ? TEAL : CORAL, fontWeight: 700 }}>{t.completed ? "Completed" : "Cancelled"}</span><IconAction className="history-delete-btn" onClick={() => deleteHistoryTrip(t.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
+                        <Plane size={18} color={(t.status === "Cancelled" || t.dismissed) ? CORAL : TEAL} />
+                        <div className="history-main" style={{ flex: 1, minWidth: 0 }}><div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{`${t.mode || "Trip"} · ${t.fromLocation || ""} → ${t.toLocation || ""}`}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>{(t.status === "Cancelled" || t.dismissed) ? `Cancelled: ${fmtTime(t.dismissedAt)}${t.dismissedAt ? ` · ${formatDMY(t.dismissedAt)}` : ""}` : `Completed: ${fmtTime(t.completedAt)}${t.completedAt ? ` · ${formatDMY(t.completedAt)}` : ""}`}</div></div>
+                        <div className="history-actions"><span style={{ fontSize: 12, color: (t.status === "Cancelled" || t.dismissed) ? CORAL : TEAL, fontWeight: 700 }}>{(t.status === "Cancelled" || t.dismissed) ? "Cancelled" : "Completed"}</span><IconAction className="history-delete-btn" onClick={() => deleteHistoryTrip(t.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
                       </div>
                     ))}
 
