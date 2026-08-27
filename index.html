@@ -95,6 +95,82 @@ button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
   }
 }
 
+/* ===== Tactile press feedback on every button ===== */
+button, [role="button"] {
+  transition: transform .12s cubic-bezier(.22,.8,.25,1), opacity .12s ease, box-shadow .15s ease;
+}
+button:active, [role="button"]:active {
+  transform: scale(0.95);
+  opacity: 0.85;
+}
+
+/* ===== Smooth color-scheme transition (dark/light mode) ===== */
+#root, #root * {
+  transition: background-color .28s ease, border-color .28s ease, color .28s ease;
+}
+
+/* ===== Card / list-row press feedback for tappable rows ===== */
+.tap-row {
+  transition: transform .12s cubic-bezier(.22,.8,.25,1), opacity .12s ease;
+}
+.tap-row:active {
+  transform: scale(0.98);
+  opacity: 0.9;
+}
+
+/* ===== Modal / dialog entrance ===== */
+.modal-backdrop-enter {
+  animation: modalBackdropFade .2s ease both;
+}
+.modal-pop-enter {
+  animation: modalPopIn .26s cubic-bezier(.22,1.1,.36,1) both;
+}
+@keyframes modalBackdropFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes modalPopIn {
+  from { opacity: 0; transform: scale(.92) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ===== Toast / undo bar entrance ===== */
+.toast-slide-enter {
+  animation: toastSlideUp .3s cubic-bezier(.22,.9,.3,1.2) both;
+}
+@keyframes toastSlideUp {
+  from { opacity: 0; transform: translate(-50%, 16px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ===== Spin animation for sync-in-progress icon ===== */
+.spin-icon {
+  animation: spinIcon .9s linear infinite;
+  transform-origin: 50% 50%;
+}
+@keyframes spinIcon {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ===== Gentle pop for checkmarks / completion states ===== */
+.pop-in {
+  animation: popIn .22s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes popIn {
+  from { opacity: 0; transform: scale(.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ===== Smooth height/opacity for expanding sections ===== */
+.expand-enter {
+  animation: expandFadeIn .22s ease both;
+}
+@keyframes expandFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 </style>
 
 </head>
@@ -630,8 +706,8 @@ function IconAction({ onClick, children, disabled, tone, style }) {
   );
 }
 function ProgressBar({ pct, color = BRASS }) { return <div style={{ height: 8, background: PANEL_2, borderRadius: 999, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.min(100, Math.max(0, pct))}%`, background: color, borderRadius: 999 }} /></div>; }
-function ActionButton({ onClick, label, icon: Icon, tone = BRASS, big }) {
-  return <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 5, background: tone, border: "none", color: "#FFFFFF", borderRadius: 980, padding: big ? "13px 24px" : "10px 17px", fontSize: big ? 16 : 14, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}><Icon size={big ? 17 : 15} /> {label}</button>;
+function ActionButton({ onClick, label, icon: Icon, tone = BRASS, big, spinning }) {
+  return <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 5, background: tone, border: "none", color: "#FFFFFF", borderRadius: 980, padding: big ? "13px 24px" : "10px 17px", fontSize: big ? 16 : 14, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}><Icon size={big ? 17 : 15} className={spinning ? "spin-icon" : undefined} /> {label}</button>;
 }
 function ChipButton({ onClick, label, active }) {
   return <button onClick={onClick} style={{ background: active ? BRASS : PANEL_2, border: "none", color: active ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "8px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{label}</button>;
@@ -1061,8 +1137,9 @@ function LifeTracker() {
   };
 
   const financeHistoryExpenses = useMemo(() => Object.entries(dailyLogs)
+    .filter(([date]) => date !== today)
     .flatMap(([date, log]) => (log.expenses || []).map((e) => ({ ...e, date })))
-    .sort((a, b) => (b.time || b.date || "").localeCompare(a.time || a.date || "")), [dailyLogs]);
+    .sort((a, b) => (b.time || b.date || "").localeCompare(a.time || a.date || "")), [dailyLogs, today]);
   const financeHistoryRepayments = useMemo(() => repayments.filter((r) => r.paid).sort((a, b) => (b.paidAt || b.dueDate || "").localeCompare(a.paidAt || a.dueDate || "")), [repayments]);
   const financeHistoryGoals = useMemo(() => goals.filter((g) => g.category === "finance" && g.done), [goals]);
   const financeHistoryCount = financeHistoryExpenses.length + financeHistoryRepayments.length + financeHistoryGoals.length;
@@ -1632,7 +1709,7 @@ function LifeTracker() {
           .filter((i) => i.type !== "interval" && field(i.id).status !== "done" && i.scheduledTime)
           .sort((a, b) => String(a.scheduledTime).localeCompare(String(b.scheduledTime)))
           .slice(0, 3);
-        return <div style={{ padding: "6px 16px 16px", flex: 1, width: "100%" }}>
+        return <div key="dashboard-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, width: "100%" }}>
           <div className="notificationStickyBar"><Card style={{ marginBottom: 10, background: `linear-gradient(135deg, ${PANEL}, ${PANEL_2})` }}>
             <div style={{ fontSize: 13, color: INK_FAINT }}>TODAY'S OVERVIEW</div>
             <div style={{ fontSize: 25, fontWeight: 700, marginTop: 4 }}>{greeting}!</div>
@@ -1714,7 +1791,7 @@ function LifeTracker() {
       })()}
 
       {page === "daily" && (
-        <div style={{ padding: "6px 0 12px", flex: 1, minHeight: 0, width: "100%" }}>
+        <div key="daily-page" className="page-smooth-enter" style={{ padding: "6px 0 12px", flex: 1, minHeight: 0, width: "100%" }}>
           {todayLog.wakeUpTime && (
             <div style={{ padding: "0 16px 9px", display: "flex", justifyContent: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(0,113,227,0.10)", border: `1px solid ${BRASS_DIM}`, borderRadius: 16, padding: "4px 9px", fontSize: 13, color: BRASS, fontFamily: mono }}>
@@ -2136,7 +2213,7 @@ function LifeTracker() {
       )}
 
       {page === "categories" && (
-        <div style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
+        <div key="categories-page" className="page-smooth-enter" style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
           <div style={{ marginBottom: 14 }}>
             {(() => {
               const plannerHistoryCount = catTab === "finance"
@@ -2144,7 +2221,7 @@ function LifeTracker() {
                 : catTab === "trip"
                   ? travelPlans.filter((t) => t.completed).length
                   : catTab === "shopping"
-                    ? shoppingLists.filter((l) => l.status === "done" || l.status === "paid").length
+                    ? shoppingLists.filter((l) => l.status === "paid").length
                     : (catTab === "career" || catTab === "health")
                       ? goals.filter((g) => g.category === catTab && g.done).length
                       : 0;
@@ -2299,7 +2376,7 @@ function LifeTracker() {
                     </Card>
                   )}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-                    {sortedTravelPlans.map((t) => {
+                    {sortedTravelPlans.filter((t) => !t.completed).map((t) => {
                       const dayLabel = dayLabelFor(t.travelDate, today);
                       return (
                       <Card key={t.id} style={{ display: "flex", alignItems: "flex-start", gap: 5 }}>
@@ -2335,7 +2412,7 @@ function LifeTracker() {
                       </Card>
                       );
                     })}
-                    {sortedTravelPlans.length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>No trips added yet.</div>}
+                    {sortedTravelPlans.filter((t) => !t.completed).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{sortedTravelPlans.some((t) => t.completed) ? "All trips are completed — check History." : "No trips added yet."}</div>}
                   </div>
                 </>
               )}
@@ -2461,7 +2538,7 @@ function LifeTracker() {
                     <button onClick={openNewShoppingForm} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> New list</button>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {[...shoppingLists].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).map((list) => {
+                    {shoppingLists.filter((l) => l.status !== "paid").sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).map((list) => {
                       const total = shoppingListTotal(list);
                       const statusColor = list.status === "paid" ? TEAL : list.status === "done" ? BRASS : INK_FAINT;
                       const statusLabel = list.status === "paid" ? "Paid" : list.status === "done" ? "Done \u2014 ready to pay" : "Planning";
@@ -2517,7 +2594,7 @@ function LifeTracker() {
                         </Card>
                       );
                     })}
-                    {shoppingLists.length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>No shopping lists yet.</div>}
+                    {shoppingLists.filter((l) => l.status !== "paid").length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{shoppingLists.some((l) => l.status === "paid") ? "All lists are paid — check History." : "No shopping lists yet."}</div>}
                   </div>
                 </>
               ) : (
@@ -2633,11 +2710,11 @@ function LifeTracker() {
               {catTab === "finance" && financeGoalView === "expenses" && (
                 <>
                   <div style={{ marginBottom: 12 }}>
-                    <SectionLabel>All Expenses</SectionLabel>
+                    <SectionLabel>Today's Expenses</SectionLabel>
                   </div>
 
                   {(() => {
-                    const expenseItems = financeHistoryExpenses;
+                    const expenseItems = [...todayLog.expenses].sort((a, b) => (b.time || "").localeCompare(a.time || "")).map((e) => ({ ...e, date: today }));
                     return expenseItems.length > 0 ? (
                       <div style={{ display: "grid", gap: 10 }}>
                         {expenseItems.map((item, index) => {
@@ -2692,7 +2769,7 @@ function LifeTracker() {
                     ) : (
                       <div style={{ padding: "18px 12px", border: `1px dashed ${LINE}`, borderRadius: 12, color: INK_FAINT, fontSize: 14, textAlign: "center" }}>
                         <Receipt size={20} style={{ marginBottom: 5 }} /><br />
-                        No expenses yet
+                        No expenses logged today
                       </div>
                     );
                   })()}
@@ -2839,7 +2916,7 @@ function LifeTracker() {
                     </Card>
                   )}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {sortedRepayments.map((r) => {
+                    {sortedRepayments.filter((r) => !r.paid).map((r) => {
                       const cls = repaymentCategoryClass(r.category);
                       const overdue = !r.paid && r.dueDate && r.dueDate < today;
                       return (
@@ -2904,7 +2981,7 @@ function LifeTracker() {
                         </Card>
                       );
                     })}
-                    {sortedRepayments.length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>No repayments added yet.</div>}
+                    {sortedRepayments.filter((r) => !r.paid).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{sortedRepayments.some((r) => r.paid) ? "All repayments are settled — check History." : "No repayments added yet."}</div>}
                   </div>
                 </>
               )}
@@ -3097,7 +3174,7 @@ function LifeTracker() {
                 </Card>
               )}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {categoryGoals.map((g) => {
+                {categoryGoals.filter((g) => !g.done).map((g) => {
                   const allocated = catTab === "finance" ? (financeAllocations[g.id] || 0) : null;
                   const pct = catTab === "finance" && g.targetAmount ? round((allocated / g.targetAmount) * 100) : null;
                   return (
@@ -3274,7 +3351,7 @@ function LifeTracker() {
                     </Card>
                   );
                 })}
-                {categoryGoals.length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>No goals yet in this category.</div>}
+                {categoryGoals.filter((g) => !g.done).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{categoryGoals.some((g) => g.done) ? "All goals in this category are completed — check History." : "No goals yet in this category."}</div>}
               </div>
                 </>
               )}
@@ -3287,7 +3364,7 @@ function LifeTracker() {
               : catTab === "trip"
                 ? travelPlans.filter((t) => t.completed).length
                 : catTab === "shopping"
-                  ? shoppingLists.filter((l) => l.status === "done" || l.status === "paid").length
+                  ? shoppingLists.filter((l) => l.status === "paid").length
                   : goals.filter((g) => g.category === catTab && g.done).length;
             const hasHistory = historyCount > 0;
             // Show the History button only when this section actually has history.
@@ -3317,6 +3394,9 @@ function LifeTracker() {
                       </>
                     )}
 
+                    {financeHistoryRepayments.length > 0 && (
+                      <div style={{ fontSize: 12, fontWeight: 800, color: INK_FAINT, letterSpacing: 1, margin: "10px 0 6px" }}>REPAYMENTS</div>
+                    )}
                     {financeHistoryRepayments.map((r) => (
                         <div key={`repay-history-${r.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
                           <Wallet size={18} color={BRASS} />
@@ -3329,6 +3409,9 @@ function LifeTracker() {
                           <IconAction onClick={() => openEditRepayment(r)} title="Edit finance record"><Pencil size={15} /></IconAction>
                         </div>
                       ))}
+                      {financeHistoryExpenses.length > 0 && (
+                        <div style={{ fontSize: 12, fontWeight: 800, color: INK_FAINT, letterSpacing: 1, margin: "10px 0 6px" }}>EXPENSES</div>
+                      )}
                       {financeHistoryExpenses.map((e) => {
                         const editing = editingHistoryExpense && editingHistoryExpense.id === e.id && editingHistoryExpense.date === e.date;
                         return (
@@ -3369,7 +3452,7 @@ function LifeTracker() {
                       </div>
                     ))}
 
-                    {catTab === "shopping" && shoppingLists.filter((l) => l.status === "done" || l.status === "paid").map((l) => (
+                    {catTab === "shopping" && shoppingLists.filter((l) => l.status === "paid").map((l) => (
                       <div key={`shopping-history-${l.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
                         <ShoppingBag size={18} color={TEAL} />
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -3425,7 +3508,7 @@ function LifeTracker() {
         const byGroup = [...new Set(periodExpenses.map((e)=>e.group||"Other"))].map((g)=>({g, amount:periodExpenses.filter((e)=>(e.group||"Other")===g).reduce((sum,e)=>sum+(Number(e.amount)||0),0)})).sort((a,b)=>b.amount-a.amount);
         const fmtPeriod = insightPeriod === "day" ? new Date(insightDate).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : insightPeriod === "month" ? monthLabel(insightMonth) : insightYear;
         return (
-        <div style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
+        <div key="analysis-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
           <Card style={{ marginBottom: 12 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}><div><div style={{fontSize:18,fontWeight:700}}>Your Insights</div><div style={{fontSize:12,color:INK_FAINT}}>Track your growth by day, month and year</div></div><TrendingUp size={22} color={BRASS}/></div>
             <div style={{display:"flex",gap:6,marginBottom:10}}>{["day","month","year"].map((x)=><ChipButton key={x} active={insightPeriod===x} onClick={()=>setInsightPeriod(x)} label={x[0].toUpperCase()+x.slice(1)}/>)}</div>
@@ -3459,7 +3542,7 @@ function LifeTracker() {
 
 
       {page === "datalink" && (
-        <div style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
+        <div key="datalink-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
           <SectionLabel>Storage mode</SectionLabel>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
             <button onClick={() => setDataMode("offline")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "11px 8px", borderRadius: 10, background: dataMode === "offline" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "offline" ? BRASS : LINE}`, cursor: "pointer" }}>
@@ -3512,7 +3595,7 @@ function LifeTracker() {
                   <IconBtn onClick={() => { setSheetUrl(sheetUrlDraft.trim()); didInitialPull.current = false; pullSettledRef.current = false; }}><Check size={15} /></IconBtn>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-                  <ActionButton onClick={pushToSheet} label="Sync now" icon={RefreshCw} tone={BRASS} />
+                  <ActionButton onClick={pushToSheet} label="Sync now" icon={RefreshCw} tone={BRASS} spinning={syncStatus === "syncing"} />
                   <button onClick={pullFromSheet} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>
                     <Cloud size={15} /> Load from sheet
                   </button>
@@ -3564,11 +3647,11 @@ function doPost(e) {
         </div>
       )}
 
-      {undoAction && <div style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: 74, zIndex: 20, width: "calc(100% - 32px)", maxWidth: 448, background: INK, color: "#fff", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: CARD_SHADOW }}><span style={{ flex: 1, fontSize: 14 }}>{undoAction.message}</span><button onClick={() => { undoAction.undo(); setUndoAction(null); }} style={{ background: "transparent", border: "none", color: BRASS_DIM, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Undo2 size={14} /> Undo</button></div>}
+      {undoAction && <div className="toast-slide-enter" style={{ position: "fixed", left: "50%", bottom: 74, zIndex: 20, width: "calc(100% - 32px)", maxWidth: 448, background: INK, color: "#fff", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: CARD_SHADOW }}><span style={{ flex: 1, fontSize: 14 }}>{undoAction.message}</span><button onClick={() => { undoAction.undo(); setUndoAction(null); }} style={{ background: "transparent", border: "none", color: BRASS_DIM, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Undo2 size={14} /> Undo</button></div>}
 
       {pendingImportData && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 10001, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <div style={{ background: PANEL, borderRadius: 14, padding: 18, width: "100%", maxWidth: 360, boxShadow: CARD_SHADOW }}>
+        <div className="modal-backdrop-enter" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 10001, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div className="modal-pop-enter" style={{ background: PANEL, borderRadius: 14, padding: 18, width: "100%", maxWidth: 360, boxShadow: CARD_SHADOW }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: INK, marginBottom: 6 }}>Replace current data?</div>
             <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.5, marginBottom: 16 }}>Importing this backup will replace all data currently in the app on this device. This can't be undone.</div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
