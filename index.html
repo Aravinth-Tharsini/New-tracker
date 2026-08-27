@@ -180,6 +180,10 @@ button:active, [role="button"]:active {
 .history-list-row .history-actions,.mobile-array-row .mobile-array-actions{flex:0 0 auto;display:flex;align-items:center;gap:5px;margin-left:4px}
 .history-list-row .history-amount,.mobile-array-row .mobile-array-amount{flex:0 0 auto;white-space:nowrap;max-width:34%;overflow:hidden;text-overflow:ellipsis}
 .history-delete-btn{min-width:42px!important;width:42px!important;height:42px!important;padding:0!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:0 0 42px!important}
+/* Shared History open/close animation for every section */
+.history-panel-enter{animation:historyPanelOpen .28s cubic-bezier(.22,.8,.25,1) both;transform-origin:top center}
+@keyframes historyPanelOpen{from{opacity:0;transform:translateY(-6px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+.history-toggle-active{box-shadow:0 4px 12px rgba(38,160,106,.16)}
 .mobile-array-grid{width:100%;min-width:0}
 @media(max-width:420px){.mobile-array-grid{gap:7px!important}.mobile-array-grid .today-focus-card{min-height:60px!important;padding:8px 9px!important;gap:9px!important}.mobile-array-grid .today-focus-icon{width:34px!important;height:34px!important;border-radius:9px!important}.history-list-row,.mobile-array-row{gap:8px;padding:9px 2px}.history-list-row .history-amount,.mobile-array-row .mobile-array-amount{max-width:30%;font-size:13px}.history-list-row .history-actions,.mobile-array-row .mobile-array-actions{gap:3px}}
 /* Shared Daily + Planner layout: compact, balanced and consistent */
@@ -2541,7 +2545,7 @@ function LifeTracker() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <SectionLabel>Travel</SectionLabel>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <button onClick={() => setShowTravelHistory((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: showTravelHistory ? PANEL_2 : "transparent", border: `1px solid ${showTravelHistory ? BRASS_DIM : LINE}`, color: showTravelHistory ? BRASS : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><History size={14} /> History{travelHistoryPlans.length ? ` (${travelHistoryPlans.length})` : ""}</button>
+                      {travelHistoryPlans.length > 0 && <button className={showTravelHistory ? "history-toggle-active" : ""} onClick={() => { setShowTravelHistory((v) => !v); setHistoryExpanded(false); }} style={{ display: "flex", alignItems: "center", gap: 4, background: showTravelHistory ? "rgba(38,160,106,0.10)" : "transparent", border: `1px solid ${showTravelHistory ? TEAL : LINE}`, color: showTravelHistory ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={14} /> History ({travelHistoryPlans.length})</button>}
                       <button onClick={() => { setShowTravelHistory(false); showAddTravel ? cancelTravelForm() : setShowAddTravel(true); }} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add trip</button>
                     </div>
                   </div>
@@ -2644,8 +2648,8 @@ function LifeTracker() {
                       </div>
                     </Card>
                   )}
-                  {showTravelHistory && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                  {showTravelHistory && travelHistoryPlans.length > 0 && (
+                    <div className="history-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                       {travelHistoryPlans.length === 0 ? (
                         <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>No travel history yet.</div>
                       ) : travelHistoryPlans.map((t) => {
@@ -2663,7 +2667,7 @@ function LifeTracker() {
                               {statusAt && <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>{status} on {formatDMY(statusAt)} · {fmtTime(statusAt)}</div>}
                               {t.amount > 0 && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Payment: {t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}</div>}
                             </div>
-                            <IconAction onClick={() => deleteHistoryTrip(t.id)} title="Delete permanently"><Trash2 size={15} /></IconAction>
+                            <IconAction onClick={() => { deleteHistoryTrip(t.id); if (travelHistoryPlans.length === 1) setShowTravelHistory(false); }} title="Delete permanently"><Trash2 size={15} /></IconAction>
                           </Card>
                         );
                       })}
@@ -2830,7 +2834,7 @@ function LifeTracker() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <SectionLabel>Shopping lists</SectionLabel>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <button onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide shopping history" : "View shopping history"} style={{ display: "flex", alignItems: "center", gap: 4, background: historyExpanded ? PANEL_2 : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={15} /> History</button>
+                      {shoppingHistoryLists.length > 0 && <button className={historyExpanded ? "history-toggle-active" : ""} onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide shopping history" : "View shopping history"} style={{ display: "flex", alignItems: "center", gap: 4, background: historyExpanded ? "rgba(38,160,106,0.10)" : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={15} /> History ({shoppingHistoryLists.length})</button>}
                       <button onClick={openNewShoppingForm} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> New list</button>
                     </div>
                   </div>
@@ -3795,17 +3799,16 @@ function LifeTracker() {
               : catTab === "financegoals"
                 ? financeHistoryGoals.length + financeHistoryRepayments.length
                 : catTab === "trip"
-                  ? travelPlans.filter((t) => t.completed).length
+                  ? travelHistoryPlans.length
                   : catTab === "shopping"
                     ? shoppingHistoryLists.length
                     : goals.filter((g) => g.category === catTab && g.done).length;
             const hasHistory = historyCount > 0;
-            // Shopping keeps its History button visible even when there are no records yet.
-            if (!hasHistory && catTab !== "shopping") return null;
+            if (!hasHistory) return null;
             return (
               <div style={{ marginTop: 12, marginBottom: 12 }}>
                 {historyExpanded && (
-                  <Card style={{ margin: 0 }}>
+                  <Card style={{ margin: 0 }}><div className="history-panel-enter">
                   <div style={{ padding: "2px 0" }}>
                     {!hasHistory && <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "14px 0" }}>No history yet.</div>}
 
@@ -3898,7 +3901,7 @@ function LifeTracker() {
                             <div style={{ fontSize: 12, color: INK_FAINT }}>{l.location || ""}{l.items?.length ? ` · ${l.items.length} item${l.items.length === 1 ? "" : "s"}` : ""}</div>
                             <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>{statusText}: {fmtTime(when)}{when ? ` · ${formatDMY(when)}` : ""}</div>
                           </div>
-                          <div className="history-actions"><span style={{ fontSize: 12, color: statusColor, fontWeight: 700 }}>{statusText}</span><div className="history-amount" style={{ fontFamily: mono, fontWeight: 700 }}>{inr(shoppingListTotal(l))}</div><IconAction className="history-delete-btn" onClick={() => deleteHistoryShopping(l.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
+                          <div className="history-actions"><span style={{ fontSize: 12, color: statusColor, fontWeight: 700 }}>{statusText}</span><div className="history-amount" style={{ fontFamily: mono, fontWeight: 700 }}>{inr(shoppingListTotal(l))}</div><IconAction className="history-delete-btn" onClick={() => { deleteHistoryShopping(l.id); if (shoppingHistoryLists.length === 1) setHistoryExpanded(false); }} title="Delete history"><Trash2 size={16} /></IconAction></div>
                         </div>
                       );
                     })}
@@ -3911,7 +3914,7 @@ function LifeTracker() {
                       </div>
                     ))}
                   </div>
-                  </Card>
+                  </div></Card>
                 )}
               </div>
             );
