@@ -701,10 +701,15 @@ function shoppingItemFinalAmount(it) {
 function shoppingListTotal(list) {
   return round((list.items || []).reduce((s, it) => s + (it.finalAmount != null ? it.finalAmount : shoppingItemFinalAmount(it)), 0));
 }
+function shoppingReminderOccursToday(list, todayStr) {
+  if (!list || list.status === "paid") return false;
+  return !!list.reminderDate && list.reminderDate === todayStr;
+}
 const GOAL_CATEGORY_DEFS = CATEGORY_DEFS.filter((c) => ["finance", "career", "health"].includes(c.id));
 const DAILY_TAB_CATEGORY_DEFS = [
   { id: "myday", label: "My Day", icon: Users },
   { id: "expense", label: "Expense", icon: Receipt },
+  { id: "shopping", label: "Shopping", icon: ShoppingBag },
   { id: "trip", label: "Trips", icon: Plane },
   { id: "career", label: "Career growth", icon: Briefcase },
   { id: "health", label: "Health", icon: HeartPulse },
@@ -820,6 +825,9 @@ function LifeTracker() {
     return (a.eventTime || "99:99").localeCompare(b.eventTime || "99:99");
   });
   const todaysMyDayEvents = useMemo(() => sortedMyDayEvents.filter((e) => !e.completed && myDayEventOccursOn(e, today)), [sortedMyDayEvents, today]);
+  const todaysShoppingLists = useMemo(() => [...shoppingLists]
+    .filter((l) => shoppingReminderOccursToday(l, today))
+    .sort((a, b) => String(a.reminderTime || "99:99").localeCompare(String(b.reminderTime || "99:99"))), [shoppingLists, today]);
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
@@ -1147,11 +1155,11 @@ function LifeTracker() {
   };
   // ---- Smart Shopping List ----
   const blankShoppingItem = () => ({ id: "si" + Date.now() + Math.random().toString(36).slice(2, 7), name: "", category: savedShoppingCategories[0] || "", unit: "each", price: "", discountPct: "", qty: "1" });
-  const blankShoppingForm = () => ({ id: null, shopName: "", location: "", shoppingDate: "", items: [blankShoppingItem()] });
+  const blankShoppingForm = () => ({ id: null, shopName: "", location: "", shoppingDate: "", reminderDate: "", reminderTime: "", items: [blankShoppingItem()] });
   const [shoppingForm, setShoppingForm] = useState(null);
   const [previewShoppingId, setPreviewShoppingId] = useState(null);
   const openNewShoppingForm = () => setShoppingForm(blankShoppingForm());
-  const openEditShoppingForm = (list) => setShoppingForm({ id: list.id, shopName: list.shopName, location: list.location || "", shoppingDate: list.shoppingDate || "", items: list.items.map((it) => ({ ...it })) });
+  const openEditShoppingForm = (list) => setShoppingForm({ id: list.id, shopName: list.shopName, location: list.location || "", shoppingDate: list.shoppingDate || "", reminderDate: list.reminderDate || list.shoppingDate || "", reminderTime: list.reminderTime || "", items: list.items.map((it) => ({ ...it })) });
   const closeShoppingForm = () => setShoppingForm(null);
   const updateShoppingItem = (itemId, patch) => setShoppingForm((f) => ({ ...f, items: f.items.map((it) => (it.id !== itemId ? it : { ...it, ...patch })) }));
   const addShoppingItem = () => setShoppingForm((f) => ({ ...f, items: [...f.items, blankShoppingItem()] }));
@@ -1167,14 +1175,14 @@ function LifeTracker() {
       if (cat && !savedShoppingCategories.some((c) => c.toLowerCase() === cat.toLowerCase())) setSavedShoppingCategories((prev) => (prev.some((c) => c.toLowerCase() === cat.toLowerCase()) ? prev : [...prev, cat]));
     });
     if (shoppingForm.id) {
-      setShoppingLists((prev) => prev.map((l) => (l.id !== shoppingForm.id ? l : { ...l, shopName, location: (shoppingForm.location || "").trim(), shoppingDate: shoppingForm.shoppingDate || "", items: cleanItems })));
+      setShoppingLists((prev) => prev.map((l) => (l.id !== shoppingForm.id ? l : { ...l, shopName, location: (shoppingForm.location || "").trim(), shoppingDate: shoppingForm.shoppingDate || "", reminderDate: shoppingForm.reminderDate || shoppingForm.shoppingDate || "", reminderTime: shoppingForm.reminderTime || "", items: cleanItems })));
     } else {
-      setShoppingLists((prev) => [...prev, { id: "sl" + Date.now(), shopName, location: (shoppingForm.location || "").trim(), shoppingDate: shoppingForm.shoppingDate || "", items: cleanItems, status: "planning", createdAt: new Date().toISOString(), paidAt: null }]);
+      setShoppingLists((prev) => [...prev, { id: "sl" + Date.now(), shopName, location: (shoppingForm.location || "").trim(), shoppingDate: shoppingForm.shoppingDate || "", reminderDate: shoppingForm.reminderDate || shoppingForm.shoppingDate || "", reminderTime: shoppingForm.reminderTime || "", items: cleanItems, status: "planning", createdAt: new Date().toISOString(), paidAt: null }]);
     }
     setShoppingForm(null);
   };
   const deleteShoppingList = (id) => setShoppingLists((prev) => prev.filter((l) => l.id !== id));
-  const markShoppingDone = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "done", completedAt: new Date().toISOString() })));
+  const markShoppingDone = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "paid", completedAt: new Date().toISOString(), paidAt: new Date().toISOString() })));
   const markShoppingPlanning = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "planning" })));
   const payShoppingList = (list) => {
     const total = shoppingListTotal(list);
@@ -1944,8 +1952,9 @@ function LifeTracker() {
 
           <SectionLabel>Upcoming attention</SectionLabel>
           <Card>
-            {dueRepayments === 0 && todaysTravelPlans.length === 0 && todaysMyDayEvents.length === 0 && pendingActivities === 0 ? <div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {dueRepayments === 0 && todaysTravelPlans.length === 0 && todaysMyDayEvents.length === 0 && todaysShoppingLists.length === 0 && pendingActivities === 0 ? <div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {todaysMyDayEvents.length > 0 && <button onClick={() => setPage("categories")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>📅 {todaysMyDayEvents.length} plan{todaysMyDayEvents.length > 1 ? "s" : ""} today{todaysMyDayEvents[0]?.title ? ` \u2014 ${todaysMyDayEvents[0].title}${todaysMyDayEvents[0].eventTime ? ` at ${fmtTimeString12(todaysMyDayEvents[0].eventTime)}` : ""}` : ""}</button>}
+              {todaysShoppingLists.length > 0 && <button onClick={() => { setPage("daily"); setExpandedDailyCategory("shopping"); }} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>🛍️ 🔔 {todaysShoppingLists.length} shopping reminder{todaysShoppingLists.length > 1 ? "s" : ""} today</button>}
               {dueRepayments > 0 && <button onClick={() => setPage("daily")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>🔔 {dueRepayments} repayment{dueRepayments > 1 ? "s" : ""} need attention</button>}
               {todaysTravelPlans.length > 0 && <button onClick={() => setPage("categories")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>{(() => {
   const mode = String(todaysTravelPlans[0]?.mode || todaysTravelPlans[0]?.travelMode || "").trim().toLowerCase();
@@ -1986,13 +1995,13 @@ function LifeTracker() {
                 const todaysExpenseTotal = todayLog.expenses.reduce((s, e) => s + e.amount, 0);
                 const visibleTrips = sortedTravelPlans.filter((t) => !t.dismissed && !t.completed);
                 const visibleMyDay = sortedMyDayEvents.filter((e) => !e.completed);
-                const shoppingDueCount = shoppingLists.filter((l) => l.status === "planning" && (!l.shoppingDate || l.shoppingDate <= today)).length;
-                const expenseDueCount = todaysRepaymentReminders.length + shoppingDueCount;
-                const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "myday" ? visibleMyDay.length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
-                const doneCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" ? 0 : itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
-                const countLabel = cat.id === "trip" ? `${totalCount} upcoming${todaysTravelPlans.length ? ` \u00b7 ${todaysTravelPlans.length} due` : ""}` : cat.id === "myday" ? `${totalCount} planned${todaysMyDayEvents.length ? ` \u00b7 ${todaysMyDayEvents.length} today` : ""}` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}${expenseDueCount ? ` \u00b7 ${expenseDueCount} due` : ""}` : `${doneCount}/${totalCount} done`;
-                const trackableCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" ? 0 : itemsForCat.filter((i) => i.type !== "interval").length;
-                const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "myday" ? todaysMyDayEvents.length : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
+                const shoppingDueCount = todaysShoppingLists.length;
+                const expenseDueCount = todaysRepaymentReminders.length;
+                const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "myday" ? visibleMyDay.length : cat.id === "shopping" ? shoppingLists.filter((l) => l.status !== "paid").length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
+                const doneCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
+                const countLabel = cat.id === "trip" ? `${totalCount} upcoming${todaysTravelPlans.length ? ` \u00b7 ${todaysTravelPlans.length} due` : ""}` : cat.id === "myday" ? `${totalCount} planned${todaysMyDayEvents.length ? ` \u00b7 ${todaysMyDayEvents.length} today` : ""}` : cat.id === "shopping" ? `${totalCount} planned${shoppingDueCount ? ` \u00b7 ${shoppingDueCount} reminder today` : ""}` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}${expenseDueCount ? ` \u00b7 ${expenseDueCount} due` : ""}` : `${doneCount}/${totalCount} done`;
+                const trackableCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval").length;
+                const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "myday" ? todaysMyDayEvents.length : cat.id === "shopping" ? shoppingDueCount : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
                 return (
                   <div key={cat.id} className={`cat-grid-item ${expanded ? "is-open-row" : (expandedDailyCategory ? "is-collapsed" : "")}`}>
                     <button className={`today-focus-card ${expanded ? "is-open" : ""}`} onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", minHeight: 58, display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 9, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS : LINE}`, borderRadius: 13, padding: "8px 10px", cursor: "pointer", transition: "background 0.28s ease, border-color 0.28s ease", boxShadow: expanded ? CARD_SHADOW : "none" }}>
@@ -2130,6 +2139,31 @@ function LifeTracker() {
                             })}
                             {visibleMyDay.length === 0 && <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "10px 0" }}>Nothing planned. Add a meeting or activity from Planner.</div>}
                           </div>
+                        </Card>
+                      </div>
+                    )}
+                    {expanded && cat.id === "shopping" && (
+                      <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
+                        <Card>
+                          <SectionLabel>Today's shopping reminders</SectionLabel>
+                          {todaysShoppingLists.length === 0 ? (
+                            <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "12px 0" }}>No shopping reminder for today.</div>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                              {todaysShoppingLists.map((l) => (
+                                <div key={l.id} style={{ background: PANEL_2, border: `1px solid ${BRASS_DIM}`, borderRadius: 10, padding: "10px 11px" }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ fontWeight: 700, color: INK }}>{l.shopName}</div>
+                                      <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}><Bell size={13} color={BRASS} /> Reminder today{l.reminderTime ? ` · ${fmtTimeString12(l.reminderTime)}` : ""}</div>
+                                      <div style={{ fontSize: 12, color: INK_DIM, marginTop: 4 }}>{(l.items || []).length} item{(l.items || []).length === 1 ? "" : "s"}{l.location ? ` · ${l.location}` : ""}</div>
+                                    </div>
+                                    <button onClick={() => markShoppingDone(l.id)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "7px 10px", color: "#FFFFFF", cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}><Check size={14} /> Done</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </Card>
                       </div>
                     )}
@@ -2821,6 +2855,14 @@ function LifeTracker() {
                       <div style={{ flex: "1 1 160px" }}>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Planned shopping date</div>
                         <TextField type="date" value={shoppingForm.shoppingDate} onChange={(e) => setShoppingForm((f) => ({ ...f, shoppingDate: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                      </div>
+                      <div style={{ flex: "1 1 160px" }}>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Reminder date</div>
+                        <TextField type="date" value={shoppingForm.reminderDate || ""} onChange={(e) => setShoppingForm((f) => ({ ...f, reminderDate: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                      </div>
+                      <div style={{ flex: "1 1 140px" }}>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Reminder time</div>
+                        <TextField type="time" value={shoppingForm.reminderTime || ""} onChange={(e) => setShoppingForm((f) => ({ ...f, reminderTime: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
                       </div>
                     </div>
 
