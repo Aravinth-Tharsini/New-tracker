@@ -211,6 +211,7 @@ body{padding-bottom:calc(76px + env(safe-area-inset-bottom));}
 </style>
 
 <div id="root"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
   <script type="text/babel" data-type="module" data-presets="react">
 import React from "react";
@@ -3558,11 +3559,58 @@ function LifeTracker() {
         const incomeGrowth = growth(thisYearStats.income, prevYearStats.income);
         const activityGrowth = growth(thisYearStats.done, prevYearStats.done);
         const byGroup = [...new Set(periodExpenses.map((e)=>e.group||"Other"))].map((g)=>({g, amount:periodExpenses.filter((e)=>(e.group||"Other")===g).reduce((sum,e)=>sum+(Number(e.amount)||0),0)})).sort((a,b)=>b.amount-a.amount);
+        // Travel and Shopping are included in the same selected Day / Month / Year progress report.
+        const itemMatchesPeriod = (value) => {
+          if (!value) return false;
+          const key = String(value).slice(0, 10);
+          return matchesPeriod(key);
+        };
+        const periodTravel = (travelPlans || []).filter((t) => itemMatchesPeriod(t.travelDate || t.completedAt || t.createdAt));
+        const travelTotal = periodTravel.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        const periodShopping = (shoppingLists || []).filter((l) => itemMatchesPeriod(l.shoppingDate || l.paidAt || l.completedAt || l.createdAt));
+        const shoppingTotal = periodShopping.reduce((sum, l) => sum + shoppingListTotal(l), 0);
+        const fmtTravel = (t) => `${t.fromLocation || ""}${t.fromLocation && t.toLocation ? " → " : ""}${t.toLocation || t.title || "Trip"}`;
+        const fmtShopping = (l) => `${l.shopName || "Shopping"}${l.location ? ` (${l.location})` : ""}`;
         const fmtPeriod = insightPeriod === "day" ? new Date(insightDate).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : insightPeriod === "month" ? monthLabel(insightMonth) : insightYear;
         return (
         <div key="analysis-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
           <Card style={{ marginBottom: 12 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}><div><div style={{fontSize:18,fontWeight:700}}>Your Insights</div><div style={{fontSize:12,color:INK_FAINT}}>Track your growth by day, month and year</div></div><TrendingUp size={22} color={BRASS}/></div>
+            <button onClick={() => {
+              if (!window.jspdf || !window.jspdf.jsPDF) { alert("PDF generator is still loading. Please try again in a moment."); return; }
+              const { jsPDF } = window.jspdf;
+              const pdf = new jsPDF({ unit: "pt", format: "a4" });
+              const lines = [
+                "Life Tracker - Progress Report",
+                `Period: ${fmtPeriod}`,
+                "",
+                `Income: ${inr(periodIncome)}`,
+                `Expense: ${inr(periodExpense)}`,
+                `Savings: ${inr(periodSavings)}`,
+                `Completion: ${completionPct}%`,
+                "",
+                "Expense Breakdown",
+                ...(byGroup.length ? byGroup.map(({g, amount}) => `${g}: ${inr(amount)}`) : ["No expense data for this period."]),
+                "",
+                `Travel Summary (${periodTravel.length})`,
+                `Total Travel Amount: ${inr(travelTotal)}`,
+                ...(periodTravel.length ? periodTravel.map((t) => `${t.travelDate || "No date"} - ${fmtTravel(t)} - ${inr(Number(t.amount) || 0)}`) : ["No travel data for this period."]),
+                "",
+                `Shopping Summary (${periodShopping.length})`,
+                `Total Shopping Amount: ${inr(shoppingTotal)}`,
+                ...(periodShopping.length ? periodShopping.map((l) => `${l.shoppingDate || String(l.paidAt || l.createdAt || "").slice(0,10) || "No date"} - ${fmtShopping(l)} - ${inr(shoppingListTotal(l))}`) : ["No shopping data for this period."]),
+                ...(insightPeriod === "year" ? ["", `Yearly Comparison: ${insightYear} vs ${previousYear}`, `Income growth: ${incomeGrowth === null ? "No comparison data" : `${incomeGrowth >= 0 ? "↑" : "↓"} ${Math.abs(incomeGrowth)}%`}`, `Savings growth: ${savingsGrowth === null ? "No comparison data" : `${savingsGrowth >= 0 ? "↑" : "↓"} ${Math.abs(savingsGrowth)}%`}`, `Activity growth: ${activityGrowth === null ? "No comparison data" : `${activityGrowth >= 0 ? "↑" : "↓"} ${Math.abs(activityGrowth)}%`}`] : [])
+              ];
+              pdf.setFont("helvetica", "bold");
+              pdf.setFontSize(18);
+              pdf.text(lines[0], 40, 48);
+              pdf.setFont("helvetica", "normal");
+              pdf.setFontSize(11);
+              const wrapped = pdf.splitTextToSize(lines.slice(1), 515);
+              let y = 76;
+              wrapped.forEach((line) => { if (y > 790) { pdf.addPage(); y = 48; } pdf.text(line, 40, y); y += 18; });
+              pdf.save(`life-tracker-progress-${String(fmtPeriod).replace(/[^a-z0-9]+/gi, "-")}.pdf`);
+            }} style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:7, background:BRASS, border:"none", color:"#fff", borderRadius:9, padding:"10px 12px", fontSize:15, fontFamily:disp, fontWeight:700, cursor:"pointer", marginBottom:10 }}><Download size={16}/> Download Progress PDF</button>
             <div style={{display:"flex",gap:6,marginBottom:10}}>{["day","month","year"].map((x)=><ChipButton key={x} active={insightPeriod===x} onClick={()=>setInsightPeriod(x)} label={x[0].toUpperCase()+x.slice(1)}/>)}</div>
             {insightPeriod === "day" && <TextField type="date" value={insightDate} onChange={(e)=>setInsightDate(e.target.value)} />}
             {insightPeriod === "month" && <TextField type="month" value={insightMonth} onChange={(e)=>setInsightMonth(e.target.value)} />}
