@@ -1196,6 +1196,10 @@ function LifeTracker() {
   const [shoppingForm, setShoppingForm] = useState(null);
   const [previewShoppingId, setPreviewShoppingId] = useState(null);
   const [expandedDailyShoppingId, setExpandedDailyShoppingId] = useState(null);
+  // Keep Today → Shopping compact by default. The full item list opens only after the user taps that shopping card.
+  useEffect(() => {
+    if (page !== "dashboard" || expandedDailyCategory !== "shopping") setExpandedDailyShoppingId(null);
+  }, [page, expandedDailyCategory]);
   const openNewShoppingForm = () => setShoppingForm(blankShoppingForm());
   const openEditShoppingForm = (list) => setShoppingForm({ id: list.id, shopName: list.shopName, location: list.location || "", shoppingDate: list.shoppingDate || "", reminderDate: list.reminderDate || list.shoppingDate || "", reminderTime: list.reminderTime || "", items: list.items.map((it) => ({ ...it })) });
   // Daily Shopping edit should always take the user back to Planner → Shopping, not open a second editor inside Today.
