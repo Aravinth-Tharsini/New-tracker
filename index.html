@@ -1023,9 +1023,14 @@ function LifeTracker() {
   const todayLog = dailyLogs[today] || defaultLog();
   const field = (id) => todayLog[id] || {};
 
+  // Daily tab shows Planner items only when they need attention today: today action or an active reminder.
   const availableDailyCategories = useMemo(() => DAILY_TAB_CATEGORY_DEFS.filter((c) => (
-    c.id === "expense" ? true : c.id === "trip" ? sortedTravelPlans.some((t) => !t.dismissed) : c.id === "myday" ? sortedMyDayEvents.some((e) => !e.completed) : validItems.some((i) => i.category === c.id)
-  )), [validItems, sortedTravelPlans, sortedMyDayEvents]);
+    c.id === "expense" ? true
+      : c.id === "trip" ? todaysTravelPlans.length > 0
+      : c.id === "myday" ? todaysMyDayEvents.length > 0
+      : c.id === "shopping" ? todaysShoppingLists.length > 0
+      : validItems.some((i) => i.category === c.id)
+  )), [validItems, todaysTravelPlans, todaysMyDayEvents, todaysShoppingLists]);
 
   useEffect(() => {
     if (expandedDailyCategory && !availableDailyCategories.some((c) => c.id === expandedDailyCategory)) {
@@ -2021,11 +2026,11 @@ function LifeTracker() {
                 const itemsForCat = validItems.filter((i) => i.category === cat.id);
                 const todaysExpenseCount = todayLog.expenses.length;
                 const todaysExpenseTotal = todayLog.expenses.reduce((s, e) => s + e.amount, 0);
-                const visibleTrips = sortedTravelPlans.filter((t) => !t.dismissed && !t.completed);
-                const visibleMyDay = sortedMyDayEvents.filter((e) => !e.completed);
+                const visibleTrips = todaysTravelPlans;
+                const visibleMyDay = todaysMyDayEvents;
                 const shoppingDueCount = todaysShoppingLists.length;
                 const expenseDueCount = todaysRepaymentReminders.length;
-                const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "myday" ? visibleMyDay.length : cat.id === "shopping" ? shoppingLists.filter((l) => !["paid", "completed", "cancelled"].includes(l.status) && !l.dismissed).length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
+                const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "myday" ? visibleMyDay.length : cat.id === "shopping" ? todaysShoppingLists.length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
                 const doneCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
                 const countLabel = cat.id === "trip" ? `${totalCount} upcoming${todaysTravelPlans.length ? ` \u00b7 ${todaysTravelPlans.length} due` : ""}` : cat.id === "myday" ? `${totalCount} planned${todaysMyDayEvents.length ? ` \u00b7 ${todaysMyDayEvents.length} today` : ""}` : cat.id === "shopping" ? `${totalCount} planned${shoppingDueCount ? ` \u00b7 ${shoppingDueCount} reminder today` : ""}` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}${expenseDueCount ? ` \u00b7 ${expenseDueCount} due` : ""}` : `${doneCount}/${totalCount} done`;
                 const trackableCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval").length;
