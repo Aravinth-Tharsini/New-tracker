@@ -706,8 +706,13 @@ function shoppingListTotal(list) {
   return round((list.items || []).reduce((s, it) => s + (it.finalAmount != null ? it.finalAmount : shoppingItemFinalAmount(it)), 0));
 }
 function shoppingReminderOccursToday(list, todayStr) {
-  if (!list || ["paid", "completed", "cancelled"].includes(list.status)) return false;
-  return !!list.reminderDate && list.reminderDate === todayStr;
+  if (!list || ["paid", "completed", "cancelled"].includes(list.status) || list.dismissed) return false;
+  // A shopping list belongs on Today when the planned shopping date is today
+  // OR when the user selected today as its reminder date. Older saved lists may
+  // not have reminderDate, so shoppingDate is always checked independently.
+  const plannedToday = !!list.shoppingDate && list.shoppingDate === todayStr;
+  const reminderToday = !!list.reminderDate && list.reminderDate === todayStr;
+  return plannedToday || reminderToday;
 }
 const GOAL_CATEGORY_DEFS = CATEGORY_DEFS.filter((c) => ["finance", "career", "health"].includes(c.id));
 const DAILY_TAB_CATEGORY_DEFS = [
