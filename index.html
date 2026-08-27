@@ -1130,9 +1130,12 @@ function LifeTracker() {
     if (!amt || amt <= 0 || !group || !sub) return;
     setDailyLogs((prev) => {
       const log = prev[today] || defaultLog();
-      const entry = { id: "e" + Date.now(), itemId: item.id, amount: amt, group, subcategory: sub, vendor: (flow.vendor || "").trim(), remarks: (flow.remarks || "").trim(), time: new Date().toISOString(), linkedRepaymentId: flow.linkedRepaymentId || null };
+      const entry = { id: "e" + Date.now(), itemId: item.id, amount: amt, group, subcategory: sub, vendor: (flow.vendor || "").trim(), remarks: (flow.remarks || "").trim(), time: new Date().toISOString(), linkedRepaymentId: flow.linkedRepaymentId || null, linkedShoppingListId: flow.linkedShoppingListId || null };
       return { ...prev, [today]: { ...log, expenses: [...log.expenses, entry] } };
     });
+    if (flow.linkedShoppingListId) {
+      setShoppingLists((prev) => prev.map((l) => l.id === flow.linkedShoppingListId ? { ...l, status: "paid", paidAt: new Date().toISOString() } : l));
+    }
     if (flow.linkedRepaymentId) {
       const linked = repayments.find((r) => r.id === flow.linkedRepaymentId);
       if (linked) {
@@ -1140,7 +1143,7 @@ function LifeTracker() {
         else toggleRepaymentPaid(linked.id);
       }
     }
-    setFlow(item.id, { amount: "", vendor: "", remarks: "", linkedRepaymentId: null, sub: null });
+    setFlow(item.id, { amount: "", vendor: "", remarks: "", linkedRepaymentId: null, linkedShoppingListId: null, sub: null });
   };
   const payRepayment = (r) => {
     const group = REPAYMENT_CATEGORY_TO_EXPENSE_GROUP[r.category] || "Other";
@@ -1186,6 +1189,7 @@ function LifeTracker() {
   const blankShoppingForm = () => ({ id: null, shopName: "", location: "", shoppingDate: "", reminderDate: "", reminderTime: "", items: [blankShoppingItem()] });
   const [shoppingForm, setShoppingForm] = useState(null);
   const [previewShoppingId, setPreviewShoppingId] = useState(null);
+  const [expandedDailyShoppingId, setExpandedDailyShoppingId] = useState(null);
   const openNewShoppingForm = () => setShoppingForm(blankShoppingForm());
   const openEditShoppingForm = (list) => setShoppingForm({ id: list.id, shopName: list.shopName, location: list.location || "", shoppingDate: list.shoppingDate || "", reminderDate: list.reminderDate || list.shoppingDate || "", reminderTime: list.reminderTime || "", items: list.items.map((it) => ({ ...it })) });
   const closeShoppingForm = () => setShoppingForm(null);
@@ -1214,6 +1218,19 @@ function LifeTracker() {
   const markShoppingDone = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "completed", completedAt: new Date().toISOString() })));
   const dismissShoppingList = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "cancelled", dismissed: true, dismissedAt: new Date().toISOString() })));
   const markShoppingPlanning = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "planning", completedAt: null, dismissedAt: null, dismissed: false })));
+  // From Daily Shopping, Pay only opens the normal Expense input with the shopping details prefilled.
+  // The shopping list is marked Paid only after the user saves the expense.
+  const openShoppingExpense = (list) => {
+    setFlow("dailyExpense", {
+      group: "Shopping",
+      sub: list.shopName || "Shopping",
+      amount: String(shoppingListTotal(list)),
+      vendor: list.shopName || "",
+      remarks: list.location || "",
+      linkedShoppingListId: list.id,
+    });
+    setExpandedDailyCategory("expense");
+  };
   const payShoppingList = (list) => {
     const total = shoppingListTotal(list);
     if (total <= 0) return;
@@ -2183,18 +2200,32 @@ function LifeTracker() {
                             <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "12px 0" }}>No shopping reminder for today.</div>
                           ) : (
                             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                              {todaysShoppingLists.map((l) => (
-                                <div key={l.id} style={{ background: PANEL_2, border: `1px solid ${BRASS_DIM}`, borderRadius: 10, padding: "10px 11px" }}>
-                                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-                                    <div style={{ minWidth: 0 }}>
-                                      <div style={{ fontWeight: 700, color: INK }}>{l.shopName}</div>
-                                      <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}><Bell size={13} color={BRASS} /> Reminder today{l.reminderTime ? ` · ${fmtTimeString12(l.reminderTime)}` : ""}</div>
-                                      <div style={{ fontSize: 12, color: INK_DIM, marginTop: 4 }}>{(l.items || []).length} item{(l.items || []).length === 1 ? "" : "s"}{l.location ? ` · ${l.location}` : ""}</div>
+                              {todaysShoppingLists.map((l) => {
+                                const open = expandedDailyShoppingId === l.id;
+                                return (
+                                  <div key={l.id} onClick={() => setExpandedDailyShoppingId(open ? null : l.id)} style={{ background: PANEL_2, border: `1px solid ${open ? BRASS : BRASS_DIM}`, borderRadius: 10, padding: "10px 11px", cursor: "pointer", transition: "all .2s ease" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                                      <div style={{ minWidth: 0 }}>
+                                        <div style={{ fontWeight: 700, color: INK }}>{l.shopName}</div>
+                                        <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}><Bell size={13} color={BRASS} /> Reminder today{l.reminderTime ? ` · ${fmtTimeString12(l.reminderTime)}` : ""}</div>
+                                        <div style={{ fontSize: 12, color: INK_DIM, marginTop: 4 }}>{(l.items || []).length} item{(l.items || []).length === 1 ? "" : "s"}{l.location ? ` · ${l.location}` : ""}</div>
+                                      </div>
+                                      <div style={{ fontFamily: mono, fontWeight: 700, color: BRASS }}>{inr(shoppingListTotal(l))}</div>
                                     </div>
-                                    <button onClick={() => markShoppingDone(l.id)} style={{ background: TEAL, border: "none", borderRadius: 8, padding: "7px 10px", color: "#FFFFFF", cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}><Check size={14} /> Done</button>
+                                    {open && (
+                                      <div className="today-expand-enter" style={{ marginTop: 9, paddingTop: 9, borderTop: `1px solid ${LINE}` }}>
+                                        {(l.items || []).map((it) => (
+                                          <div key={it.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", fontSize: 13 }}>
+                                            <span style={{ color: INK }}>{it.name}{it.qty ? ` · ${it.qty} ${it.unit || ""}` : ""}</span>
+                                            <span style={{ color: INK_DIM, fontFamily: mono }}>{inr(it.finalAmount != null ? it.finalAmount : shoppingItemFinalAmount(it))}</span>
+                                          </div>
+                                        ))}
+                                        <button onClick={(e) => { e.stopPropagation(); openShoppingExpense(l); }} style={{ width: "100%", marginTop: 8, background: TEAL, border: "none", borderRadius: 8, padding: "8px 0", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Pay</button>
+                                      </div>
+                                    )}
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </Card>
@@ -2866,18 +2897,6 @@ function LifeTracker() {
                           <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                             <button onClick={() => setPreviewShoppingId(previewing ? null : list.id)} style={{ display: "flex", alignItems: "center", gap: 4, background: previewing ? "rgba(0,113,227,0.10)" : "transparent", border: `1px solid ${previewing ? BRASS : LINE}`, color: previewing ? BRASS : INK_DIM, borderRadius: 7, padding: "5px 9px", fontSize: 14, cursor: "pointer" }}><Eye size={13} /> Preview</button>
                             <button onClick={() => openEditShoppingForm(list)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${LINE}`, color: INK_DIM, borderRadius: 7, padding: "5px 9px", fontSize: 14, cursor: "pointer" }}><Pencil size={13} /> Edit</button>
-                            {list.status === "planning" && (
-                              <>
-                                <button onClick={() => markShoppingDone(list.id)} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "5px 9px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>Mark done</button>
-                                <button onClick={() => dismissShoppingList(list.id)} style={{ background: "transparent", border: `1px solid ${CORAL}`, borderRadius: 7, padding: "5px 9px", color: CORAL, cursor: "pointer", fontSize: 14, fontWeight: 600 }}>Cancel</button>
-                              </>
-                            )}
-                            {list.status === "done" && (
-                              <>
-                                <button onClick={() => payShoppingList(list)} style={{ background: TEAL, border: "none", borderRadius: 7, padding: "5px 9px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>Mark paid</button>
-                                <button onClick={() => markShoppingPlanning(list.id)} style={{ background: "transparent", border: `1px solid ${LINE}`, color: INK_DIM, borderRadius: 7, padding: "5px 9px", fontSize: 14, cursor: "pointer" }}>Reopen</button>
-                              </>
-                            )}
                             <IconAction onClick={() => deleteShoppingList(list.id)} style={{ marginLeft: "auto" }}><Trash2 size={15} /></IconAction>
                           </div>
                           {previewing && (
