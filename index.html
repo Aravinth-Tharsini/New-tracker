@@ -78,7 +78,7 @@ button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
 }
 
 .page-smooth-enter {
-  animation: pageSmoothEnter .28s cubic-bezier(.22,.8,.25,1) both;
+  animation: pageSmoothEnter .42s cubic-bezier(.22,.8,.25,1) both;
 }
 
 @keyframes pageSmoothEnter {
@@ -183,12 +183,12 @@ button:active, [role="button"]:active {
 .mobile-array-grid{width:100%;min-width:0}
 @media(max-width:420px){.mobile-array-grid{gap:7px!important}.mobile-array-grid .today-focus-card{min-height:60px!important;padding:8px 9px!important;gap:9px!important}.mobile-array-grid .today-focus-icon{width:34px!important;height:34px!important;border-radius:9px!important}.history-list-row,.mobile-array-row{gap:8px;padding:9px 2px}.history-list-row .history-amount,.mobile-array-row .mobile-array-amount{max-width:30%;font-size:13px}.history-list-row .history-actions,.mobile-array-row .mobile-array-actions{gap:3px}}
 /* Shared Daily + Planner layout: compact, balanced and consistent */
-.daily-page-content,.planner-page-content{animation:contentFadeIn .24s cubic-bezier(.22,.8,.25,1) both}
+.daily-page-content,.planner-page-content{animation:contentFadeIn .42s cubic-bezier(.22,.8,.25,1) both}
 @keyframes contentFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 .daily-page-content .mobile-array-grid,.planner-page-content .mobile-array-grid{gap:8px!important}
 .daily-page-content .today-focus-card,.planner-page-content .today-focus-card{min-height:58px!important;padding:8px 10px!important;gap:9px!important}
 .daily-page-content .today-focus-icon,.planner-page-content .today-focus-icon{width:34px!important;height:34px!important;border-radius:9px!important}
-.daily-page-content .cat-grid-item,.planner-page-content .cat-grid-item{transition:flex-basis .28s cubic-bezier(.22,.8,.25,1),max-width .28s cubic-bezier(.22,.8,.25,1),opacity .2s ease!important}
+.daily-page-content .cat-grid-item,.planner-page-content .cat-grid-item{transition:flex-basis .48s cubic-bezier(.22,.8,.25,1),max-width .48s cubic-bezier(.22,.8,.25,1),opacity .36s ease!important}
 @media(max-width:420px){.daily-page-content .mobile-array-grid,.planner-page-content .mobile-array-grid{gap:7px!important}.daily-page-content .today-focus-card,.planner-page-content .today-focus-card{min-height:56px!important;padding:8px 9px!important}}
 </style>
 
@@ -1655,19 +1655,19 @@ function LifeTracker() {
           --nav-bg:rgba(28,28,30,0.92);
         }
         /* Today: full card → animated small icon at top-left → details below */
-        .today-expand-enter { animation: todaySlideIn .48s cubic-bezier(.22,.8,.25,1) both; overflow: hidden; }
+        .today-expand-enter { animation: todaySlideIn .62s cubic-bezier(.22,.8,.25,1) both; overflow: hidden; }
         @keyframes todaySlideIn {
           from { opacity: 0; transform: translateY(-10px); max-height: 0; }
           to { opacity: 1; transform: translateY(0); max-height: 3000px; }
         }
         .today-focus-card {
-          transition: width .48s cubic-bezier(.22,.8,.25,1), min-height .48s cubic-bezier(.22,.8,.25,1), padding .48s cubic-bezier(.22,.8,.25,1),
+          transition: width .62s cubic-bezier(.22,.8,.25,1), min-height .62s cubic-bezier(.22,.8,.25,1), padding .62s cubic-bezier(.22,.8,.25,1),
                       border-radius .48s cubic-bezier(.22,.8,.25,1), background .28s ease, border-color .28s ease;
           transform-origin: top left;
           overflow: hidden;
         }
-        .today-focus-icon { transition: width .42s cubic-bezier(.22,.8,.25,1), height .42s cubic-bezier(.22,.8,.25,1), border-radius .42s cubic-bezier(.22,.8,.25,1), transform .42s cubic-bezier(.22,.8,.25,1); }
-        .today-focus-text, .today-focus-arrow { transition: opacity .24s ease, transform .36s cubic-bezier(.22,.8,.25,1), width .36s cubic-bezier(.22,.8,.25,1); }
+        .today-focus-icon { transition: width .56s cubic-bezier(.22,.8,.25,1), height .56s cubic-bezier(.22,.8,.25,1), border-radius .56s cubic-bezier(.22,.8,.25,1), transform .56s cubic-bezier(.22,.8,.25,1); }
+        .today-focus-text, .today-focus-arrow { transition: opacity .36s ease, transform .52s cubic-bezier(.22,.8,.25,1), width .52s cubic-bezier(.22,.8,.25,1); }
         .today-focus-card.is-open {
           width: 58px !important;
           min-height: 58px !important;
