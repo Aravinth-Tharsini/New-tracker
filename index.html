@@ -706,22 +706,78 @@ function shoppingListTotal(list) {
   return round((list.items || []).reduce((s, it) => s + (it.finalAmount != null ? it.finalAmount : shoppingItemFinalAmount(it)), 0));
 }
 function shoppingItemVisual(item) {
-  const text = `${item?.name || ""} ${item?.category || ""}`.toLowerCase();
-  if (/tomato/.test(text)) return "🍅";
-  if (/onion/.test(text)) return "🧅";
-  if (/potato/.test(text)) return "🥔";
-  if (/carrot/.test(text)) return "🥕";
-  if (/cucumber/.test(text)) return "🥒";
-  if (/chilli|chili|pepper/.test(text)) return "🌶️";
-  if (/brinjal|eggplant/.test(text)) return "🍆";
-  if (/cabbage|greens|vegetable|spinach/.test(text)) return "🥬";
-  if (/fruit|apple|banana|orange|mango/.test(text)) return "🍎";
-  if (/milk|dairy/.test(text)) return "🥛";
-  if (/rice|grain/.test(text)) return "🍚";
-  if (/snack|chips|biscuit|cookie|popcorn|mixture|murukku/.test(text)) return "🍿";
-  if (/bread|bakery/.test(text)) return "🍞";
-  if (/meat|chicken/.test(text)) return "🍗";
-  if (/fish|seafood/.test(text)) return "🐟";
+  // First try the exact item name. If it is unknown, fall back to the category.
+  // This keeps the Today shopping list visual even for new/custom item names.
+  const name = String(item?.name || "").toLowerCase().trim();
+  const category = String(item?.category || "").toLowerCase().trim();
+  const has = (source, pattern) => pattern.test(source);
+
+  // Specific item-name matches
+  if (has(name, /tomato/)) return "🍅";
+  if (has(name, /onion/)) return "🧅";
+  if (has(name, /potato/)) return "🥔";
+  if (has(name, /carrot/)) return "🥕";
+  if (has(name, /cucumber/)) return "🥒";
+  if (has(name, /chilli|chili|capsicum|bell pepper|pepper/)) return "🌶️";
+  if (has(name, /brinjal|eggplant/)) return "🍆";
+  if (has(name, /cabbage|cauliflower|broccoli|spinach|greens|lettuce/)) return "🥬";
+  if (has(name, /okra|ladies finger|bhindi/)) return "🥗";
+  if (has(name, /ginger/)) return "🫚";
+  if (has(name, /garlic/)) return "🧄";
+  if (has(name, /corn|maize/)) return "🌽";
+  if (has(name, /mushroom/)) return "🍄";
+  if (has(name, /pea|beans/)) return "🫛";
+  if (has(name, /apple/)) return "🍎";
+  if (has(name, /banana/)) return "🍌";
+  if (has(name, /orange/)) return "🍊";
+  if (has(name, /mango/)) return "🥭";
+  if (has(name, /grape/)) return "🍇";
+  if (has(name, /watermelon/)) return "🍉";
+  if (has(name, /lemon|lime/)) return "🍋";
+  if (has(name, /coconut/)) return "🥥";
+  if (has(name, /milk/)) return "🥛";
+  if (has(name, /curd|yogurt|yoghurt/)) return "🥣";
+  if (has(name, /cheese|paneer|butter|ghee/)) return "🧈";
+  if (has(name, /egg/)) return "🥚";
+  if (has(name, /rice/)) return "🍚";
+  if (has(name, /wheat|flour|atta|maida/)) return "🌾";
+  if (has(name, /bread/)) return "🍞";
+  if (has(name, /cake/)) return "🍰";
+  if (has(name, /biscuit|cookie/)) return "🍪";
+  if (has(name, /popcorn/)) return "🍿";
+  if (has(name, /chips|fries/)) return "🍟";
+  if (has(name, /mixture|murukku|namkeen|snack/)) return "🍿";
+  if (has(name, /chocolate|candy|sweet/)) return "🍫";
+  if (has(name, /tea/)) return "🍵";
+  if (has(name, /coffee/)) return "☕";
+  if (has(name, /juice|drink|beverage|soft drink/)) return "🥤";
+  if (has(name, /water/)) return "💧";
+  if (has(name, /chicken|meat|mutton/)) return "🍗";
+  if (has(name, /fish|seafood|prawn/)) return "🐟";
+  if (has(name, /spice|masala|turmeric|chilly powder|pepper powder/)) return "🧂";
+  if (has(name, /oil/)) return "🫗";
+  if (has(name, /soap|detergent|cleaner|cleaning/)) return "🧼";
+  if (has(name, /shampoo|toothpaste|brush|grooming/)) return "🧴";
+  if (has(name, /medicine|tablet|pharmacy/)) return "💊";
+  if (has(name, /stationery|pen|pencil|notebook/)) return "📝";
+
+  // Category fallback when the item name has no known match.
+  if (has(category, /snack|chips|biscuit|cookie|mixture|murukku|namkeen/)) return "🍿";
+  if (has(category, /vegetable|grocery vegetable|greens/)) return "🥬";
+  if (has(category, /fruit/)) return "🍎";
+  if (has(category, /dairy|milk/)) return "🥛";
+  if (has(category, /bakery/)) return "🍞";
+  if (has(category, /rice|grain|cereal/)) return "🍚";
+  if (has(category, /beverage|drink|juice/)) return "🥤";
+  if (has(category, /tea|coffee/)) return "☕";
+  if (has(category, /meat|chicken|non.?veg/)) return "🍗";
+  if (has(category, /fish|seafood/)) return "🐟";
+  if (has(category, /spice|masala/)) return "🧂";
+  if (has(category, /clean|household/)) return "🧼";
+  if (has(category, /personal care|grooming|toiletr/)) return "🧴";
+  if (has(category, /medicine|health|pharmacy/)) return "💊";
+  if (has(category, /stationery|office|school/)) return "📝";
+
   return "🛍️";
 }
 function shoppingReminderOccursToday(list, todayStr) {
@@ -1879,9 +1935,9 @@ function LifeTracker() {
         .today-focus-icon { transition: width .56s cubic-bezier(.22,.8,.25,1), height .56s cubic-bezier(.22,.8,.25,1), border-radius .56s cubic-bezier(.22,.8,.25,1), transform .56s cubic-bezier(.22,.8,.25,1); }
         .today-focus-text, .today-focus-arrow { transition: opacity .36s ease, transform .52s cubic-bezier(.22,.8,.25,1), width .52s cubic-bezier(.22,.8,.25,1); }
         .today-focus-card.is-open {
-          width: 58px !important;
-          min-height: 58px !important;
-          height: 58px !important;
+          width: 54px !important;
+          min-height: 54px !important;
+          height: 54px !important;
           padding: 6px !important;
           gap: 0 !important;
           border-radius: 16px !important;
@@ -1890,8 +1946,8 @@ function LifeTracker() {
           margin-right: auto !important;
         }
         .today-focus-card.is-open .today-focus-icon {
-          width: 46px !important;
-          height: 46px !important;
+          width: 42px !important;
+          height: 42px !important;
           border-radius: 12px !important;
           transform: scale(.96);
         }
