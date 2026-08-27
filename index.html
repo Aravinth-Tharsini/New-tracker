@@ -1197,6 +1197,14 @@ function LifeTracker() {
   const [expandedDailyShoppingId, setExpandedDailyShoppingId] = useState(null);
   const openNewShoppingForm = () => setShoppingForm(blankShoppingForm());
   const openEditShoppingForm = (list) => setShoppingForm({ id: list.id, shopName: list.shopName, location: list.location || "", shoppingDate: list.shoppingDate || "", reminderDate: list.reminderDate || list.shoppingDate || "", reminderTime: list.reminderTime || "", items: list.items.map((it) => ({ ...it })) });
+  // Daily Shopping edit should always take the user back to Planner → Shopping, not open a second editor inside Today.
+  const openShoppingEditorFromDaily = (list) => {
+    openEditShoppingForm(list);
+    setPreviewShoppingId(null);
+    setExpandedDailyShoppingId(null);
+    setCatTab("shopping");
+    setPage("categories");
+  };
   const closeShoppingForm = () => setShoppingForm(null);
   const updateShoppingItem = (itemId, patch) => setShoppingForm((f) => ({ ...f, items: f.items.map((it) => (it.id !== itemId ? it : { ...it, ...patch })) }));
   const addShoppingItem = () => setShoppingForm((f) => ({ ...f, items: [...f.items, blankShoppingItem()] }));
@@ -2207,25 +2215,40 @@ function LifeTracker() {
                             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                               {todaysShoppingLists.map((l) => {
                                 const open = expandedDailyShoppingId === l.id;
+                                const items = l.items || [];
+                                const total = shoppingListTotal(l);
                                 return (
-                                  <div key={l.id} onClick={() => setExpandedDailyShoppingId(open ? null : l.id)} style={{ background: PANEL_2, border: `1px solid ${open ? BRASS : BRASS_DIM}`, borderRadius: 10, padding: "10px 11px", cursor: "pointer", transition: "all .2s ease" }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-                                      <div style={{ minWidth: 0 }}>
-                                        <div style={{ fontWeight: 700, color: INK }}>{l.shopName}</div>
-                                        <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}><Bell size={13} color={BRASS} /> Reminder today{l.reminderTime ? ` · ${fmtTimeString12(l.reminderTime)}` : ""}</div>
-                                        <div style={{ fontSize: 12, color: INK_DIM, marginTop: 4 }}>{(l.items || []).length} item{(l.items || []).length === 1 ? "" : "s"}{l.location ? ` · ${l.location}` : ""}</div>
+                                  <div key={l.id} onClick={() => setExpandedDailyShoppingId(open ? null : l.id)} style={{ background: PANEL, border: `1px solid ${open ? BRASS : LINE}`, borderRadius: 18, padding: "14px", cursor: "pointer", boxShadow: open ? "0 8px 22px rgba(0,0,0,.08)" : "0 3px 12px rgba(0,0,0,.04)", transition: "all .24s ease" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                                      <div style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
+                                        <div style={{ width: 58, height: 58, flexShrink: 0, borderRadius: 16, background: "rgba(0,113,227,.09)", border: `1px solid ${BRASS_DIM}`, display: "flex", alignItems: "center", justifyContent: "center" }}><ShoppingBag size={30} color={BRASS} /></div>
+                                        <div style={{ minWidth: 0 }}>
+                                          <div style={{ fontSize: 20, fontWeight: 700, color: INK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.shopName || "Shopping"}</div>
+                                          <div style={{ fontSize: 13, color: BRASS, marginTop: 6, display: "flex", alignItems: "center", gap: 5 }}><Bell size={15} /> Today{l.reminderTime ? ` · ${fmtTimeString12(l.reminderTime)}` : ""}</div>
+                                        </div>
                                       </div>
-                                      <div style={{ fontFamily: mono, fontWeight: 700, color: BRASS }}>{inr(shoppingListTotal(l))}</div>
+                                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                        <div style={{ fontFamily: mono, fontSize: 24, fontWeight: 800, color: BRASS }}>{inr(total)}</div>
+                                        <div style={{ marginTop: 5, fontSize: 12, color: INK_DIM, background: "rgba(0,113,227,.08)", borderRadius: 980, padding: "5px 8px", whiteSpace: "nowrap" }}>{items.length} item{items.length === 1 ? "" : "s"}{l.location ? ` · ${l.location}` : ""}</div>
+                                      </div>
                                     </div>
                                     {open && (
-                                      <div className="today-expand-enter" style={{ marginTop: 9, paddingTop: 9, borderTop: `1px solid ${LINE}` }}>
-                                        {(l.items || []).map((it) => (
-                                          <div key={it.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", fontSize: 13 }}>
-                                            <span style={{ color: INK }}>{it.name}{it.qty ? ` · ${it.qty} ${it.unit || ""}` : ""}</span>
-                                            <span style={{ color: INK_DIM, fontFamily: mono }}>{inr(it.finalAmount != null ? it.finalAmount : shoppingItemFinalAmount(it))}</span>
-                                          </div>
-                                        ))}
-                                        <button onClick={(e) => { e.stopPropagation(); openShoppingExpense(l); }} style={{ width: "100%", marginTop: 8, background: TEAL, border: "none", borderRadius: 8, padding: "8px 0", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Pay</button>
+                                      <div className="today-expand-enter" style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${LINE}` }}>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                                          {items.length ? items.map((it) => (
+                                            <div key={it.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 11px", background: PANEL_2, borderRadius: 12 }}>
+                                              <div style={{ minWidth: 0 }}>
+                                                <div style={{ color: INK, fontSize: 16, fontWeight: 600 }}>{it.name}</div>
+                                                <div style={{ color: INK_FAINT, fontSize: 12, marginTop: 2 }}>{it.category ? `${it.category} · ` : ""}{it.qty || 0} {it.unit || "each"}</div>
+                                              </div>
+                                              <div style={{ color: INK, fontFamily: mono, fontSize: 16, fontWeight: 700 }}>{inr(it.finalAmount != null ? it.finalAmount : shoppingItemFinalAmount(it))}</div>
+                                            </div>
+                                          )) : <div style={{ color: INK_FAINT, fontSize: 13, textAlign: "center", padding: "8px 0" }}>No items added yet.</div>}
+                                        </div>
+                                        <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+                                          <button onClick={(e) => { e.stopPropagation(); openShoppingEditorFromDaily(l); }} style={{ flex: 1, background: "transparent", border: `1px solid ${BRASS_DIM}`, borderRadius: 12, padding: "12px 8px", color: BRASS, cursor: "pointer", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Pencil size={19} /> Edit</button>
+                                          <button onClick={(e) => { e.stopPropagation(); openShoppingExpense(l); }} style={{ flex: 1, background: TEAL, border: "none", borderRadius: 12, padding: "12px 8px", color: "#FFFFFF", cursor: "pointer", fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Wallet size={19} /> Pay {inr(total)}</button>
+                                        </div>
                                       </div>
                                     )}
                                   </div>
