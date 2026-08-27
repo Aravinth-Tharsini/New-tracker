@@ -258,7 +258,7 @@ import {
   CalendarDays, LayoutGrid, TrendingUp, Plus, Trash2, Check, Wallet, Briefcase, HeartPulse,
   Settings2, Play, Square, ArrowUp, ArrowDown, Sun, Building2, Dumbbell, Moon, Droplet, Receipt,
   Target, Clock, Pencil, ChevronUp, ChevronDown, Bell, BellOff, Flame, Download, FileJson,
-  Plane, Activity, Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
+  Plane, Train, Bus, Activity, Bike, Car, MapPin, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, History, Home as HomeIcon,
 } from "lucide-react";
@@ -719,6 +719,19 @@ const DAILY_TAB_CATEGORY_DEFS = [
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
 const DAILY_EXPENSE_GROUPS = Object.fromEntries(Object.entries(DEFAULT_EXPENSE_GROUPS).filter(([g]) => !REPAYMENT_LINKED_EXPENSE_GROUPS.includes(g)));
 const EXPENSE_GROUP_ICON = { Food: UtensilsCrossed, Grocery: ShoppingBag, Fuel: Car, "Health Care": HeartPulse, Travel: Plane, Shopping: ShoppingBag, Other: Receipt };
+
+// Travel cards use the icon selected for that trip mode.
+function TravelModeIcon({ mode, size = 18, color = BRASS, style }) {
+  const normalized = String(mode || "").trim().toLowerCase();
+  const Icon =
+    normalized === "train" ? Train :
+    normalized === "bus" ? Bus :
+    normalized === "car" ? Car :
+    normalized === "bike" || normalized === "bicycle" ? Bike :
+    normalized === "flight" || normalized === "plane" || normalized === "airplane" ? Plane :
+    MapPin;
+  return <Icon size={size} color={color} style={style} />;
+}
 
 function Card({ children, style }) { return <div style={{ background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 14, padding: "14px 16px", ...style }}>{children}</div>; }
 function SectionLabel({ children }) { return <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: INK_FAINT, marginBottom: 8, fontWeight: 700 }}>{children}</div>; }
@@ -1571,7 +1584,7 @@ function LifeTracker() {
     const alreadyLogged = Object.values(dailyLogs).some((log) => (log.expenses || []).some((e) => e.linkedTravelId === plan.id));
     if (alreadyLogged) return;
     const group = "Travel";
-    const sub = ["Car", "Train", "Bus", "Flight", "Other"].includes(plan.mode) ? plan.mode : "Other";
+    const sub = ["Car", "Train", "Bus", "Bike", "Flight", "Other"].includes(plan.mode) ? plan.mode : "Other";
     setDailyLogs((prev) => {
       const log = prev[today] || defaultLog();
       if ((log.expenses || []).some((e) => e.linkedTravelId === plan.id)) return prev;
@@ -2031,7 +2044,7 @@ function LifeTracker() {
                               const dayLabel = dayLabelFor(t.travelDate, today);
                               return (
                                 <div key={t.id} style={{ background: PANEL_2, border: `1px solid ${due ? BRASS_DIM : LINE}`, borderRadius: 10, padding: "9px 11px" }}>
-                                  <div style={{ fontSize: 16, color: INK, fontWeight: 700, marginBottom: 6 }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 16, color: INK, fontWeight: 700, marginBottom: 6 }}><TravelModeIcon mode={t.mode} size={19} color={BRASS} style={{ flexShrink: 0 }} /><span>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</span></div>
 
                                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
                                     {dayLabel && (
@@ -2527,7 +2540,7 @@ function LifeTracker() {
                       <button onClick={() => { setShowTravelHistory(false); showAddTravel ? cancelTravelForm() : setShowAddTravel(true); }} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add trip</button>
                     </div>
                   </div>
-                  <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Train, bus, flight, or other trips. They'll appear on the Daily tab as soon as you add them, and highlight once your chosen reminder lead time kicks in.</div>
+                  <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Train, bus, car, bike, flight, or other trips. They'll appear on the Daily tab as soon as you add them, and highlight once your chosen reminder lead time kicks in.</div>
                   {showAddTravel && !showTravelHistory && (
                     <Card style={{ marginBottom: 9 }}>
                       <SectionLabel>{editingTravelId ? "Edit trip" : "New trip"}</SectionLabel>
@@ -2535,6 +2548,8 @@ function LifeTracker() {
                         <Select value={travelForm.mode} onChange={(e) => setTravelForm({ ...travelForm, mode: e.target.value })}>
                           <option value="Train">Train</option>
                           <option value="Bus">Bus</option>
+                          <option value="Car">Car</option>
+                          <option value="Bike">Bike</option>
                           <option value="Flight">Flight</option>
                           <option value="Other">Other</option>
                         </Select>
@@ -2635,9 +2650,9 @@ function LifeTracker() {
                         const statusAt = cancelled ? t.dismissedAt : t.completedAt;
                         return (
                           <Card key={`travel-history-${t.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                            <Plane size={18} color={statusColor} style={{ marginTop: 2, flexShrink: 0 }} />
+                            <TravelModeIcon mode={t.mode} size={18} color={statusColor} style={{ marginTop: 2, flexShrink: 0 }} />
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 15, fontWeight: 600, color: INK }}><TravelModeIcon mode={t.mode} size={18} color={BRASS} style={{ flexShrink: 0 }} /><span>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</span></div>
                               <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3 }}>{formatDMY(t.travelDate)}{t.travelTime ? ` · ${fmtTimeString12(t.travelTime)}` : ""}{t.amount ? ` · ${inr(t.amount)}` : ""}</div>
                               <div style={{ fontSize: 13, color: statusColor, fontWeight: 700, marginTop: 5 }}>Status: {status}</div>
                               {statusAt && <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>{status} on {formatDMY(statusAt)} · {fmtTime(statusAt)}</div>}
@@ -2655,7 +2670,7 @@ function LifeTracker() {
                       return (
                       <Card key={t.id} style={{ display: "flex", alignItems: "flex-start", gap: 5 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 15, fontWeight: 600, color: INK }}><TravelModeIcon mode={t.mode} size={18} color={BRASS} style={{ flexShrink: 0 }} /><span>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</span></div>
                           <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3, display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
                             {dayLabel && <span style={{ fontWeight: 700, color: BRASS }}>{dayLabel}</span>}
                             <span>{formatDMY(t.travelDate)}</span>
@@ -3853,7 +3868,7 @@ function LifeTracker() {
 
                     {catTab === "trip" && travelPlans.filter((t) => t.completed || t.dismissed).map((t) => (
                       <div key={`trip-history-${t.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
-                        <Plane size={18} color={(t.status === "Cancelled" || t.dismissed) ? CORAL : TEAL} />
+                        <TravelModeIcon mode={t.mode} size={18} color={(t.status === "Cancelled" || t.dismissed) ? CORAL : TEAL} />
                         <div className="history-main" style={{ flex: 1, minWidth: 0 }}><div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{`${t.mode || "Trip"} · ${t.fromLocation || ""} → ${t.toLocation || ""}`}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>{(t.status === "Cancelled" || t.dismissed) ? `Cancelled: ${fmtTime(t.dismissedAt)}${t.dismissedAt ? ` · ${formatDMY(t.dismissedAt)}` : ""}` : `Completed: ${fmtTime(t.completedAt)}${t.completedAt ? ` · ${formatDMY(t.completedAt)}` : ""}`}</div></div>
                         <div className="history-actions"><span style={{ fontSize: 12, color: (t.status === "Cancelled" || t.dismissed) ? CORAL : TEAL, fontWeight: 700 }}>{(t.status === "Cancelled" || t.dismissed) ? "Cancelled" : "Completed"}</span><IconAction className="history-delete-btn" onClick={() => deleteHistoryTrip(t.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
                       </div>
