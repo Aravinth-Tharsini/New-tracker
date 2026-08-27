@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
   <title>Life Tracker</title>
-  <!-- Today routine UI v2: reference-style Done card -->
 
   <!-- Home screen icon + full-screen app behavior -->
   <link rel="manifest" href="manifest.json" />
@@ -801,15 +800,6 @@ const DAILY_TAB_CATEGORY_DEFS = [
   { id: "health", label: "Health", icon: HeartPulse },
   { id: "activity", label: "Routine", icon: Activity },
 ];
-const TODAY_CARD_META = {
-  myday: { desc: "Plan your day & stay focused", bg: "#EEF5FF" },
-  expense: { desc: "Track spending & manage bills", bg: "#EEF6FF" },
-  shopping: { desc: "Keep your shopping list ready", bg: "#F2EEFF" },
-  trip: { desc: "Plan trips & set reminders", bg: "#F5EEFF" },
-  career: { desc: "Build skills & grow your career", bg: "#F2F9F4" },
-  health: { desc: "Track health & wellness", bg: "#ECFAF4" },
-  activity: { desc: "Track daily routines & habits", bg: "#F0FAF5" },
-};
 // Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
 const DAILY_EXPENSE_GROUPS = Object.fromEntries(Object.entries(DEFAULT_EXPENSE_GROUPS).filter(([g]) => !REPAYMENT_LINKED_EXPENSE_GROUPS.includes(g)));
@@ -869,7 +859,7 @@ function IconAction({ onClick, children, disabled, tone, style }) {
 }
 function ProgressBar({ pct, color = BRASS }) { return <div style={{ height: 8, background: PANEL_2, borderRadius: 999, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.min(100, Math.max(0, pct))}%`, background: color, borderRadius: 999 }} /></div>; }
 function ActionButton({ onClick, label, icon: Icon, tone = BRASS, big, spinning }) {
-  return <button onClick={onClick} style={{ display: "flex", width: big ? "100%" : "auto", minHeight: big ? 62 : 42, alignItems: "center", justifyContent: "center", gap: 10, background: tone, border: "none", color: "#FFFFFF", borderRadius: 999, padding: big ? "15px 28px" : "10px 17px", fontSize: big ? 20 : 14, cursor: "pointer", fontFamily: disp, fontWeight: 700, boxShadow: big ? "0 6px 18px rgba(40,190,80,.16)" : "none" }}><Icon size={big ? 24 : 15} className={spinning ? "spin-icon" : undefined} /> {label}</button>;
+  return <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 5, background: tone, border: "none", color: "#FFFFFF", borderRadius: 980, padding: big ? "13px 24px" : "10px 17px", fontSize: big ? 16 : 14, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}><Icon size={big ? 17 : 15} className={spinning ? "spin-icon" : undefined} /> {label}</button>;
 }
 function ChipButton({ onClick, label, active }) {
   return <button onClick={onClick} style={{ background: active ? BRASS : PANEL_2, border: "none", color: active ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "8px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{label}</button>;
@@ -1930,99 +1920,59 @@ function LifeTracker() {
           --card-shadow:0 1px 2px rgba(0,0,0,0.5), 0 1px 8px rgba(0,0,0,0.4);
           --nav-bg:rgba(28,28,30,0.92);
         }
-        /* Today category cards: clean, visual-first UI */
-        .today-expand-enter { animation: todaySlideIn .48s cubic-bezier(.22,.8,.25,1) both; overflow: hidden; }
+        /* Today: full card → animated small icon at top-left → details below */
+        .today-expand-enter { animation: todaySlideIn .62s cubic-bezier(.22,.8,.25,1) both; overflow: hidden; }
         @keyframes todaySlideIn {
-          from { opacity: 0; transform: translateY(-8px); max-height: 0; }
+          from { opacity: 0; transform: translateY(-10px); max-height: 0; }
           to { opacity: 1; transform: translateY(0); max-height: 3000px; }
         }
         .today-focus-card {
-          position: relative;
-          min-height: 150px !important;
-          flex-direction: column !important;
-          align-items: center !important;
-          justify-content: center !important;
-          text-align: center !important;
-          gap: 9px !important;
-          padding: 14px 10px 12px !important;
-          border-radius: 22px !important;
-          border: 1px solid rgba(0,0,0,.035) !important;
-          box-shadow: 0 3px 12px rgba(20,30,45,.045) !important;
-          overflow: visible !important;
-          transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease, background .22s ease !important;
+          transition: width .62s cubic-bezier(.22,.8,.25,1), min-height .62s cubic-bezier(.22,.8,.25,1), padding .62s cubic-bezier(.22,.8,.25,1),
+                      border-radius .48s cubic-bezier(.22,.8,.25,1), background .28s ease, border-color .28s ease;
+          transform-origin: top left;
+          overflow: hidden;
         }
-        .today-focus-card:active { transform: scale(.975); }
+        .today-focus-icon { transition: width .56s cubic-bezier(.22,.8,.25,1), height .56s cubic-bezier(.22,.8,.25,1), border-radius .56s cubic-bezier(.22,.8,.25,1), transform .56s cubic-bezier(.22,.8,.25,1); }
+        .today-focus-text, .today-focus-arrow { transition: opacity .36s ease, transform .52s cubic-bezier(.22,.8,.25,1), width .52s cubic-bezier(.22,.8,.25,1); }
         .today-focus-card.is-open {
-          min-height: 58px !important;
-          height: 58px !important;
-          width: 58px !important;
+          width: 54px !important;
+          min-height: 54px !important;
+          height: 54px !important;
           padding: 6px !important;
           gap: 0 !important;
-          border-radius: 17px !important;
+          border-radius: 16px !important;
           justify-content: center !important;
-          align-items: center !important;
           align-self: flex-start !important;
           margin-right: auto !important;
         }
-        .today-focus-icon {
-          width: 68px !important;
-          height: 68px !important;
-          border-radius: 20px !important;
-          background: rgba(255,255,255,.62) !important;
-          border: 1px solid rgba(255,255,255,.82);
-          box-shadow: 0 2px 7px rgba(20,30,45,.045);
-          transition: width .42s cubic-bezier(.22,.8,.25,1), height .42s cubic-bezier(.22,.8,.25,1),
-                      border-radius .42s cubic-bezier(.22,.8,.25,1), transform .42s cubic-bezier(.22,.8,.25,1);
-        }
         .today-focus-card.is-open .today-focus-icon {
-          width: 44px !important;
-          height: 44px !important;
-          border-radius: 13px !important;
+          width: 42px !important;
+          height: 42px !important;
+          border-radius: 12px !important;
           transform: scale(.96);
         }
-        .today-focus-text {
-          width: 100%;
-          transition: opacity .28s ease, transform .38s cubic-bezier(.22,.8,.25,1), width .38s ease;
-        }
         .today-focus-card.is-open .today-focus-text,
-        .today-focus-card.is-open .today-focus-arrow,
-        .today-focus-card.is-open .today-focus-description {
+        .today-focus-card.is-open .today-focus-arrow {
           opacity: 0 !important;
-          transform: translateY(-8px);
+          transform: translateX(-12px);
           pointer-events: none;
           width: 0 !important;
           margin: 0 !important;
           padding: 0 !important;
           overflow: hidden !important;
         }
-        .today-focus-description {
-          min-height: 34px;
-          transition: opacity .28s ease, transform .38s ease;
-        }
-        .today-focus-arrow {
-          width: 40px;
-          height: 40px;
-          border-radius: 999px;
-          display: grid;
-          place-items: center;
-          margin-top: 1px;
-          transition: opacity .28s ease, transform .38s cubic-bezier(.22,.8,.25,1);
-        }
-        .today-category-grid { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px !important; }
-        @media(min-width:700px){
-          .today-category-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px !important; }
-          .today-focus-card { min-height:210px !important; padding:20px 14px 16px !important; }
-          .today-focus-icon { width:86px !important; height:86px !important; }
-        }
         /* Shared 2-column grid item: collapses to 0 (siblings hidden) or expands to a full row
            (selected item, whose button then shrinks into a small icon via .today-focus-card/.is-open) */
         /* Keep Daily and Planner category cards stable: no layout realignment animation */
         .cat-grid-item {
           transition: none;
+          flex: 1 1 calc(50% - 5px);
+          max-width: calc(50% - 5px);
           min-width: 0;
         }
         .cat-grid-item.is-open-row {
-          grid-column: 1 / -1 !important;
+          flex: 1 1 100% !important;
+          max-width: 100% !important;
         }
         .cat-grid-item.is-collapsed {
           display: none !important;
@@ -2178,11 +2128,8 @@ function LifeTracker() {
               Nothing to track yet. Go to <span style={{ color: BRASS }}>Planner</span> to add a My Day plan or Trip, or set up Daily Routine, Career growth, or Healthcare goals.
             </div>
           ) : (
-            <div className="today-category-grid" style={{ padding: "0 16px" }}>
-              <div style={{ gridColumn: "1 / -1", padding: "2px 2px 2px", marginBottom: 2 }}>
-                <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.035em", color: INK }}>Today</div>
-                <div style={{ fontSize: 13, color: INK_DIM, marginTop: 3 }}>Plan your day. Stay focused. Get things done.</div>
-              </div>
+            <div className="mobile-array-grid" style={{ padding: "0 16px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ width: "100%", fontSize: 13, color: INK_FAINT, padding: "2px 2px 0" }}>Choose what you want to update today</div>
               {availableDailyCategories.map((cat) => {
                 const CatIcon = cat.icon;
                 const expanded = expandedDailyCategory === cat.id;
@@ -2200,21 +2147,17 @@ function LifeTracker() {
                 const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "myday" ? todaysMyDayEvents.length : cat.id === "shopping" ? shoppingDueCount : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
                 return (
                   <div key={cat.id} className={`cat-grid-item ${expanded ? "is-open-row" : (expandedDailyCategory ? "is-collapsed" : "")}`}>
-                    <button className={`today-focus-card ${expanded ? "is-open" : ""}`} onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ background: expanded ? "rgba(0,113,227,0.10)" : (TODAY_CARD_META[cat.id]?.bg || PANEL), cursor: "pointer" }}>
-                      <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        <CatIcon size={34} color={expanded ? BRASS : (cat.id === "trip" || cat.id === "career" ? "#5A20B8" : cat.id === "activity" || cat.id === "health" ? "#159957" : BRASS)} strokeWidth={2.2} />
+                    <button className={`today-focus-card ${expanded ? "is-open" : ""}`} onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", minHeight: 58, display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 9, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS : LINE}`, borderRadius: 13, padding: "8px 10px", cursor: "pointer", transition: "background 0.28s ease, border-color 0.28s ease", boxShadow: expanded ? CARD_SHADOW : "none" }}>
+                      <div className="today-focus-icon" style={{ position: "relative", width: 36, height: 36, borderRadius: 10, background: expanded ? "rgba(0,113,227,0.16)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <CatIcon size={18} color={expanded ? BRASS : INK} />
                         {attentionCount > 0 && (
-                          <div style={{ position: "absolute", top: -8, right: -8, minWidth: 26, height: 26, borderRadius: 999, background: CORAL, color: "#FFFFFF", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px", border: "2px solid " + BG, fontFamily: mono }}>
+                          <div style={{ position: "absolute", top: -5, right: -5, minWidth: 16, height: 16, borderRadius: 999, background: CORAL, color: "#FFFFFF", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", border: "2px solid " + BG, fontFamily: mono }}>
                             {attentionCount > 9 ? "9+" : attentionCount}
                           </div>
                         )}
                       </div>
-                      <div className="today-focus-text">
-                        <div style={{ fontSize: 18, color: expanded ? BRASS : INK, fontWeight: 750, lineHeight: 1.15 }}>{cat.label}</div>
-                        <div className="today-focus-description" style={{ fontSize: 13, lineHeight: 1.35, color: INK_DIM, marginTop: 7 }}>{TODAY_CARD_META[cat.id]?.desc}</div>
-                      </div>
-                      <div className="today-focus-arrow" style={{ background: expanded ? "rgba(0,113,227,.14)" : "rgba(0,113,227,.10)", color: BRASS }}>
-                        <ArrowRight size={22} strokeWidth={2.4} />
+                      <div className="today-focus-text" style={{ flex: 1, minWidth: 0, textAlign: "left", overflow: "hidden" }}>
+                        <span style={{ fontSize: 15, color: expanded ? BRASS : INK, fontWeight: expanded ? 700 : 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>{cat.label}</span>
                       </div>
                     </button>
                     {expanded && cat.id === "trip" && (
@@ -2372,9 +2315,9 @@ function LifeTracker() {
                                     {open && (
                                       <div className="today-expand-enter" style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${LINE}` }}>
                                         {(l.items || []).map((it) => (
-                                          <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 13, padding: "11px 0", borderBottom: `1px solid ${LINE}` }}>
-                                            <div style={{ flex: 1, minWidth: 0, fontSize: 18, color: INK }}>{it.name || "Item"}{it.qty ? ` · ${it.qty} ${it.unit || ""}` : ""}</div>
-                                            <div style={{ color: INK_DIM, fontFamily: mono, fontSize: 17, fontWeight: 600, flexShrink: 0 }}>{inr(it.finalAmount != null ? it.finalAmount : shoppingItemFinalAmount(it))}</div>
+                                          <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${LINE}` }}>
+                                            <div style={{ flex: 1, minWidth: 0, fontSize: 16, color: INK, lineHeight: 1.3 }}>{it.name || "Item"}{it.qty ? ` · ${it.qty} ${it.unit || ""}` : ""}</div>
+                                            <div style={{ color: INK_DIM, fontFamily: mono, fontSize: 15, fontWeight: 600, flexShrink: 0 }}>{inr(it.finalAmount != null ? it.finalAmount : shoppingItemFinalAmount(it))}</div>
                                           </div>
                                         ))}
                                         <div style={{ display: "flex", gap: 9, marginTop: 10 }}>
@@ -2566,7 +2509,7 @@ function LifeTracker() {
 
                   if (item.type === "instant") {
                     return (
-                      <Card key={item.id} style={{ textAlign: "center", padding: "30px 18px 28px", borderRadius: 28, boxShadow: "0 8px 28px rgba(20,30,45,.06)" }}>
+                      <Card key={item.id} style={{ textAlign: "center", padding: "19px 12px" }}>
                         {rec.status === "done" ? (
                           <>
                             <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 5 }}>{item.name} recorded</div>
@@ -2585,37 +2528,33 @@ function LifeTracker() {
                         ) : (
                           <>
                             <div style={{
-                              width: 88, height: 88, borderRadius: "50%", background: PANEL_2,
+                              width: 56, height: 56, borderRadius: "50%", background: PANEL_2,
                               display: "flex", alignItems: "center", justifyContent: "center",
-                              margin: "0 auto 18px",
+                              margin: "0 auto 12px",
                             }}>
-                              <RoutineActivityIcon icon={item.icon} size={44} title={item.name} />
+                              <RoutineActivityIcon icon={item.icon} size={28} title={item.name} />
                             </div>
-                            <div style={{ fontSize: 24, fontWeight: 700, color: INK, marginBottom: 7 }}>{item.name}</div>
-                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 24 }}>Tap {`"Done"`} the moment it happens</div>
+                            <div style={{ fontSize: 16, fontWeight: 600, color: INK, marginBottom: 3 }}>{item.name}</div>
+                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 16 }}>Tap {`"Done"`} the moment it happens</div>
                             {item.scheduledTime && (() => {
                               return (
                                 <div style={{
                                   display: "flex", alignItems: "stretch", justifyContent: "center",
-                                  background: PANEL_2, borderRadius: 18, padding: "16px 8px", marginBottom: 22,
+                                  background: PANEL_2, borderRadius: 12, padding: "10px 6px", marginBottom: 14,
                                 }}>
                                   <div style={{ flex: 1, textAlign: "center" }}>
-                                    <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 5, fontWeight: 700 }}>Planned</div>
-                                    <div style={{ fontFamily: mono, fontSize: 23, fontWeight: 700, color: INK }}>{fmtTimeString12(item.scheduledTime)}</div>
+                                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 3, fontWeight: 700 }}>Planned</div>
+                                    <div style={{ fontFamily: mono, fontSize: 17, fontWeight: 700, color: INK }}>{fmtTimeString12(item.scheduledTime)}</div>
                                   </div>
                                   <div style={{ width: 1, background: LINE, margin: "2px 4px" }} />
                                   <div style={{ flex: 1, textAlign: "center" }}>
-                                    <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 5, fontWeight: 700 }}>Live now</div>
-                                    <div style={{ fontFamily: mono, fontSize: 23, fontWeight: 700, color: BRASS }}>{fmtClock12(now)}</div>
+                                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 3, fontWeight: 700 }}>Live now</div>
+                                    <div style={{ fontFamily: mono, fontSize: 17, fontWeight: 700, color: BRASS }}>{fmtClock12(now)}</div>
                                   </div>
                                 </div>
                               );
                             })()}
-                            <div style={{ width: "100%", display: "flex", justifyContent: "center", marginTop: 2 }}>
-                              <div style={{ width: "100%", maxWidth: 520 }}>
-                                <ActionButton onClick={() => pressInstant(item.id, hhmm(now))} label="Done" icon={Check} tone={TEAL} big />
-                              </div>
-                            </div>
+                            <ActionButton onClick={() => pressInstant(item.id, hhmm(now))} label="Done" icon={Check} tone={TEAL} big />
                           </>
                         )}
                         {streaks[item.id] > 0 && (
