@@ -86,6 +86,33 @@ button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ===== Extra-smooth icon buttons / touch feedback ===== */
+.icon-action, button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.icon-action {
+  min-width: 38px !important;
+  min-height: 38px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 10px !important;
+  transition: transform .16s cubic-bezier(.2,.8,.2,1), background-color .16s ease, color .16s ease, opacity .16s ease;
+  will-change: transform;
+}
+.icon-action:active {
+  transform: scale(.88);
+  opacity: .72;
+}
+.icon-action svg {
+  pointer-events: none;
+  transition: transform .16s cubic-bezier(.2,.8,.2,1);
+}
+.icon-action:active svg { transform: scale(.92); }
+
 /* Respect users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -690,7 +717,7 @@ function Time12Input({ value, onChange, style }) {
 function IconBtn({ onClick, children }) { return <button onClick={onClick} style={{ background: PANEL_2, border: "none", borderRadius: 10, padding: "0 11px", height: 38, color: BRASS, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>{children}</button>; }
 function IconAction({ onClick, children, disabled, tone, style }) {
   return (
-    <button
+    <button className="icon-action"
       onClick={onClick}
       disabled={disabled}
       style={{
@@ -1135,6 +1162,38 @@ function LifeTracker() {
       const log = prev[date] || defaultLog();
       return { ...prev, [date]: { ...log, expenses: (log.expenses || []).map((e) => e.id === expenseId ? { ...e, ...patch } : e) } };
     });
+  };
+  // Delete records directly from History, with a 6-second Undo option.
+  const deleteHistoryExpense = (date, id) => {
+    const log = dailyLogs[date] || defaultLog();
+    const removed = (log.expenses || []).find((e) => e.id === id);
+    if (!removed) return;
+    setDailyLogs((prev) => ({ ...prev, [date]: { ...(prev[date] || defaultLog()), expenses: (prev[date]?.expenses || []).filter((e) => e.id !== id) } }));
+    showUndo("History expense deleted", () => setDailyLogs((prev) => ({ ...prev, [date]: { ...(prev[date] || defaultLog()), expenses: [...(prev[date]?.expenses || []), removed] } })));
+  };
+  const deleteHistoryRepayment = (id) => {
+    const removed = repayments.find((r) => r.id === id);
+    if (!removed) return;
+    setRepayments((prev) => prev.filter((r) => r.id !== id));
+    showUndo("History payment deleted", () => setRepayments((prev) => [...prev, removed]));
+  };
+  const deleteHistoryTrip = (id) => {
+    const removed = travelPlans.find((t) => t.id === id);
+    if (!removed) return;
+    setTravelPlans((prev) => prev.filter((t) => t.id !== id));
+    showUndo("History trip deleted", () => setTravelPlans((prev) => [...prev, removed]));
+  };
+  const deleteHistoryShopping = (id) => {
+    const removed = shoppingLists.find((l) => l.id === id);
+    if (!removed) return;
+    setShoppingLists((prev) => prev.filter((l) => l.id !== id));
+    showUndo("History shopping list deleted", () => setShoppingLists((prev) => [...prev, removed]));
+  };
+  const deleteHistoryGoal = (id) => {
+    const removed = goals.find((g) => g.id === id);
+    if (!removed) return;
+    setGoals((prev) => prev.filter((g) => g.id !== id));
+    showUndo("History goal deleted", () => setGoals((prev) => [...prev, removed]));
   };
 
   const financeHistoryExpenses = useMemo(() => Object.entries(dailyLogs)
@@ -3420,6 +3479,7 @@ function LifeTracker() {
                           </div>
                           <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(r.amount || 0)}</div>
                           <IconAction onClick={() => openEditRepayment(r)} title="Edit finance record"><Pencil size={15} /></IconAction>
+                          <IconAction onClick={() => deleteHistoryRepayment(r.id)} title="Delete history record" aria-label="Delete history record"><Trash2 size={15} /></IconAction>
                         </div>
                       ))}
                     </>}
@@ -3450,6 +3510,7 @@ function LifeTracker() {
                                 </div>
                                 <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(e.amount || 0)}</div>
                                 <IconAction onClick={() => setEditingHistoryExpense({ ...e })} title="Edit expense"><Pencil size={15} /></IconAction>
+                                 <IconAction onClick={() => deleteHistoryExpense(e.date, e.id)} title="Delete history expense" aria-label="Delete history expense"><Trash2 size={15} /></IconAction>
                               </div>
                             )}
                           </div>
@@ -3462,6 +3523,7 @@ function LifeTracker() {
                         <Plane size={18} color={TEAL} />
                         <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{t.title}</div><div style={{ fontSize: 12, color: INK_FAINT }}>{t.fromLocation || ""} → {t.toLocation || ""}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Completed: {fmtTime(t.completedAt)} {t.completedAt ? `· ${formatDMY(t.completedAt)}` : ""}</div></div>
                         <span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>Completed</span>
+                         <IconAction onClick={() => deleteHistoryTrip(t.id)} title="Delete history trip" aria-label="Delete history trip"><Trash2 size={15} /></IconAction>
                       </div>
                     ))}
 
@@ -3474,6 +3536,7 @@ function LifeTracker() {
                           <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>{l.status === "paid" ? "Paid" : "Completed"} · {fmtTime(l.paidAt || l.completedAt || l.createdAt)}</div>
                         </div>
                         <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(shoppingListTotal(l))}</div>
+                         <IconAction onClick={() => deleteHistoryShopping(l.id)} title="Delete history shopping list" aria-label="Delete history shopping list"><Trash2 size={15} /></IconAction>
                       </div>
                     ))}
 
@@ -3482,6 +3545,7 @@ function LifeTracker() {
                         <RoutineActivityIcon icon={GOAL_TRACK_ICON[catTab]} size={18} title={g.title} />
                         <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{g.title}</div><div style={{ fontSize: 12, color: INK_FAINT }}>{g.goalType || "Goal"}{g.expectedYear ? ` · Expected ${g.expectedYear}` : ""}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Achieved: {g.completedAt ? `${fmtTime(g.completedAt)} · ${formatDMY(g.completedAt)}` : (g.completedDate || "")}</div></div>
                         <span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>Achieved</span>
+                         <IconAction onClick={() => deleteHistoryGoal(g.id)} title="Delete history goal" aria-label="Delete history goal"><Trash2 size={15} /></IconAction>
                       </div>
                     ))}
                   </div>
