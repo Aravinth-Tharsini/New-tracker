@@ -188,7 +188,7 @@ button:active, [role="button"]:active {
 .daily-page-content .mobile-array-grid,.planner-page-content .mobile-array-grid{gap:8px!important}
 .daily-page-content .today-focus-card,.planner-page-content .today-focus-card{min-height:58px!important;padding:8px 10px!important;gap:9px!important}
 .daily-page-content .today-focus-icon,.planner-page-content .today-focus-icon{width:34px!important;height:34px!important;border-radius:9px!important}
-.daily-page-content .cat-grid-item,.planner-page-content .cat-grid-item{transition:flex-basis .48s cubic-bezier(.22,.8,.25,1),max-width .48s cubic-bezier(.22,.8,.25,1),opacity .36s ease!important}
+.daily-page-content .cat-grid-item,.planner-page-content .cat-grid-item{transition:none!important}
 @media(max-width:420px){.daily-page-content .mobile-array-grid,.planner-page-content .mobile-array-grid{gap:7px!important}.daily-page-content .today-focus-card,.planner-page-content .today-focus-card{min-height:56px!important;padding:8px 9px!important}}
 </style>
 
@@ -1697,9 +1697,9 @@ function LifeTracker() {
         }
         /* Shared 2-column grid item: collapses to 0 (siblings hidden) or expands to a full row
            (selected item, whose button then shrinks into a small icon via .today-focus-card/.is-open) */
+        /* Keep Daily and Planner category cards stable: no layout realignment animation */
         .cat-grid-item {
-          transition: flex-basis .42s cubic-bezier(.22,.8,.25,1), max-width .42s cubic-bezier(.22,.8,.25,1),
-                      opacity .26s ease, margin .3s ease;
+          transition: none;
           flex: 1 1 calc(50% - 5px);
           max-width: calc(50% - 5px);
           min-width: 0;
@@ -1847,7 +1847,7 @@ function LifeTracker() {
       })()}
 
       {page === "daily" && (
-        <div key="daily-page" className="page-smooth-enter daily-page-content" style={{ padding: "6px 0 12px", flex: 1, minHeight: 0, width: "100%" }}>
+        <div key="daily-page" className="daily-page-content" style={{ padding: "6px 0 12px", flex: 1, minHeight: 0, width: "100%" }}>
           {todayLog.wakeUpTime && (
             <div style={{ padding: "0 16px 9px", display: "flex", justifyContent: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(0,113,227,0.10)", border: `1px solid ${BRASS_DIM}`, borderRadius: 16, padding: "4px 9px", fontSize: 13, color: BRASS, fontFamily: mono }}>
@@ -2265,7 +2265,7 @@ function LifeTracker() {
       )}
 
       {page === "categories" && (
-        <div key="categories-page" className="page-smooth-enter planner-page-content" style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
+        <div key="categories-page" className="planner-page-content" style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
           <div className="mobile-array-grid" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
             <div style={{ width: "100%", fontSize: 13, color: INK_FAINT, marginBottom: 2 }}>Choose what you want to plan</div>
             {CATEGORY_DEFS.map((c) => {
