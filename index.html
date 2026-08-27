@@ -2077,10 +2077,13 @@ function LifeTracker() {
         const currentHour = new Date().getHours();
         const greeting = currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
         const remainingActivities = Math.max(0, totalActivities - completedActivities);
-        const nextActivities = validItems
+        const nowHHMM = buildHHMM(new Date().getHours(), new Date().getMinutes());
+        const incompleteScheduled = validItems
           .filter((i) => i.type !== "interval" && field(i.id).status !== "done" && i.scheduledTime)
-          .sort((a, b) => String(a.scheduledTime).localeCompare(String(b.scheduledTime)))
-          .slice(0, 3);
+          .sort((a, b) => String(a.scheduledTime).localeCompare(String(b.scheduledTime)));
+        const upcomingToday = incompleteScheduled.filter((i) => String(i.scheduledTime) >= nowHHMM);
+        const overdueToday = incompleteScheduled.filter((i) => String(i.scheduledTime) < nowHHMM).reverse();
+        const nextActivity = upcomingToday[0] || overdueToday[0] || null;
         const statCards = [
           { key: "completed", label: "Completed", sub: "activities", value: `${completedActivities}/${totalActivities}`, icon: CheckCircle2, fg: TEAL, bg: "rgba(52,199,89,0.14)" },
           { key: "expenses", label: "Expenses", sub: "today", value: inr(todayExpenses), icon: Wallet, fg: "#8B5CF6", bg: "rgba(139,92,246,0.14)" },
@@ -2152,45 +2155,35 @@ function LifeTracker() {
             </Card>
           )}
 
-          <SectionLabel>Quick Actions</SectionLabel>
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            <button onClick={() => setPage("daily")} style={{ flex: 1.3, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 12, padding: "12px 10px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: disp }}>
-              <CalendarDays size={16} /> Open Today
-            </button>
-            <button onClick={() => setPage("categories")} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(0,113,227,0.10)", border: "none", color: BRASS, borderRadius: 12, padding: "12px 8px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: disp }}>
-              <Plus size={16} /> Add Plan
-            </button>
-            <button onClick={() => setPage("analysis")} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(52,199,89,0.12)", border: "none", color: TEAL, borderRadius: 12, padding: "12px 8px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: disp }}>
-              <TrendingUp size={16} /> View Insights
-            </button>
-          </div>
-
-          {nextActivities.length > 0 && (
+          {nextActivity && (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
                 <SectionLabel style={{ marginBottom: 0 }}>Next Up</SectionLabel>
                 <button onClick={() => setPage("daily")} style={{ background: "transparent", border: "none", padding: 0, fontSize: 13, fontWeight: 700, color: BRASS, cursor: "pointer" }}>View all</button>
               </div>
               <Card style={{ marginBottom: 16, padding: "4px 14px" }}>
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  {nextActivities.map((item, idx) => (
+                {(() => {
+                  const catTone = (nextActivity.category === "career" || nextActivity.category === "trip") ? { fg: "#5A20B8", bg: "rgba(90,32,184,0.12)" }
+                    : (nextActivity.category === "activity" || nextActivity.category === "health") ? { fg: "#159957", bg: "rgba(21,153,87,0.12)" }
+                    : { fg: BRASS, bg: "rgba(0,113,227,0.10)" };
+                  const NextIcon = ICON_MAP[nextActivity.icon] || Clock;
+                  return (
                     <button
-                      key={item.id}
-                      onClick={() => { setActiveTab(item.id); setPage("daily"); }}
-                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", background: "transparent", border: "none", borderTop: idx > 0 ? `1px solid ${LINE}` : "none", color: INK, textAlign: "left", cursor: "pointer", width: "100%" }}
+                      onClick={() => { setExpandedDailyCategory(nextActivity.category); setActiveTab(nextActivity.id); setPage("daily"); }}
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", background: "transparent", border: "none", color: INK, textAlign: "left", cursor: "pointer", width: "100%" }}
                     >
-                      <div style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 10, background: "rgba(0,113,227,0.10)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <Clock size={17} color={BRASS} />
+                      <div style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 10, background: catTone.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <NextIcon size={19} color={catTone.fg} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 15, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                        <div style={{ fontSize: 15, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nextActivity.name}</div>
                         <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Tap to open in Today</div>
                       </div>
-                      <div style={{ flexShrink: 0, fontSize: 14, color: BRASS, fontFamily: mono, fontWeight: 700 }}>{fmtTimeString12(item.scheduledTime)}</div>
+                      <div style={{ flexShrink: 0, fontSize: 14, color: BRASS, fontFamily: mono, fontWeight: 700 }}>{fmtTimeString12(nextActivity.scheduledTime)}</div>
                       <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
                     </button>
-                  ))}
-                </div>
+                  );
+                })()}
               </Card>
             </>
           )}
