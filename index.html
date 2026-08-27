@@ -182,6 +182,14 @@ button:active, [role="button"]:active {
 .history-delete-btn{min-width:42px!important;width:42px!important;height:42px!important;padding:0!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:0 0 42px!important}
 .mobile-array-grid{width:100%;min-width:0}
 @media(max-width:420px){.mobile-array-grid{gap:7px!important}.mobile-array-grid .today-focus-card{min-height:60px!important;padding:8px 9px!important;gap:9px!important}.mobile-array-grid .today-focus-icon{width:34px!important;height:34px!important;border-radius:9px!important}.history-list-row,.mobile-array-row{gap:8px;padding:9px 2px}.history-list-row .history-amount,.mobile-array-row .mobile-array-amount{max-width:30%;font-size:13px}.history-list-row .history-actions,.mobile-array-row .mobile-array-actions{gap:3px}}
+/* Shared Daily + Planner layout: compact, balanced and consistent */
+.daily-page-content,.planner-page-content{animation:contentFadeIn .24s cubic-bezier(.22,.8,.25,1) both}
+@keyframes contentFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.daily-page-content .mobile-array-grid,.planner-page-content .mobile-array-grid{gap:8px!important}
+.daily-page-content .today-focus-card,.planner-page-content .today-focus-card{min-height:58px!important;padding:8px 10px!important;gap:9px!important}
+.daily-page-content .today-focus-icon,.planner-page-content .today-focus-icon{width:34px!important;height:34px!important;border-radius:9px!important}
+.daily-page-content .cat-grid-item,.planner-page-content .cat-grid-item{transition:flex-basis .28s cubic-bezier(.22,.8,.25,1),max-width .28s cubic-bezier(.22,.8,.25,1),opacity .2s ease!important}
+@media(max-width:420px){.daily-page-content .mobile-array-grid,.planner-page-content .mobile-array-grid{gap:7px!important}.daily-page-content .today-focus-card,.planner-page-content .today-focus-card{min-height:56px!important;padding:8px 9px!important}}
 </style>
 
 </head>
@@ -755,7 +763,7 @@ function LifeTracker() {
   const [syncStatus, setSyncStatus] = useState("idle");
   const [lastSyncedAt, setLastSyncedAt] = useState("");
   const [importMessage, setImportMessage] = useState("");
-  const [autoExportEnabled, setAutoExportEnabled] = useState(false);
+  const [autoExportEnabled, setAutoExportEnabled] = useState(true);
   const [lastAutoExportAt, setLastAutoExportAt] = useState("");
   const [pendingImportData, setPendingImportData] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
@@ -1839,7 +1847,7 @@ function LifeTracker() {
       })()}
 
       {page === "daily" && (
-        <div key="daily-page" className="page-smooth-enter" style={{ padding: "6px 0 12px", flex: 1, minHeight: 0, width: "100%" }}>
+        <div key="daily-page" className="page-smooth-enter daily-page-content" style={{ padding: "6px 0 12px", flex: 1, minHeight: 0, width: "100%" }}>
           {todayLog.wakeUpTime && (
             <div style={{ padding: "0 16px 9px", display: "flex", justifyContent: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(0,113,227,0.10)", border: `1px solid ${BRASS_DIM}`, borderRadius: 16, padding: "4px 9px", fontSize: 13, color: BRASS, fontFamily: mono }}>
@@ -1852,7 +1860,7 @@ function LifeTracker() {
               Nothing to track yet. Go to <span style={{ color: BRASS }}>Planner</span> to add a Trip, or set up Daily Routine, Career growth, or Healthcare goals.
             </div>
           ) : (
-            <div className="mobile-array-grid" style={{ padding: "0 16px", display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <div className="mobile-array-grid" style={{ padding: "0 16px", display: "flex", flexWrap: "wrap", gap: 8 }}>
               <div style={{ width: "100%", fontSize: 13, color: INK_FAINT, padding: "2px 2px 0" }}>Choose what you want to update today</div>
               {availableDailyCategories.map((cat) => {
                 const CatIcon = cat.icon;
@@ -1870,7 +1878,7 @@ function LifeTracker() {
                 const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
                 return (
                   <div key={cat.id} className={`cat-grid-item ${expanded ? "is-open-row" : (expandedDailyCategory ? "is-collapsed" : "")}`}>
-                    <button className={`today-focus-card ${expanded ? "is-open" : ""}`} onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", minHeight: 64, display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 10, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS : LINE}`, borderRadius: 13, padding: "9px 10px", cursor: "pointer", transition: "background 0.28s ease, border-color 0.28s ease", boxShadow: expanded ? CARD_SHADOW : "none" }}>
+                    <button className={`today-focus-card ${expanded ? "is-open" : ""}`} onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ width: "100%", minHeight: 58, display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 9, background: expanded ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${expanded ? BRASS : LINE}`, borderRadius: 13, padding: "8px 10px", cursor: "pointer", transition: "background 0.28s ease, border-color 0.28s ease", boxShadow: expanded ? CARD_SHADOW : "none" }}>
                       <div className="today-focus-icon" style={{ position: "relative", width: 36, height: 36, borderRadius: 10, background: expanded ? "rgba(0,113,227,0.16)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <CatIcon size={18} color={expanded ? BRASS : INK} />
                         {attentionCount > 0 && (
@@ -2257,7 +2265,7 @@ function LifeTracker() {
       )}
 
       {page === "categories" && (
-        <div key="categories-page" className="page-smooth-enter" style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
+        <div key="categories-page" className="page-smooth-enter planner-page-content" style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
           <div className="mobile-array-grid" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
             <div style={{ width: "100%", fontSize: 13, color: INK_FAINT, marginBottom: 2 }}>Choose what you want to plan</div>
             {CATEGORY_DEFS.map((c) => {
@@ -2267,7 +2275,7 @@ function LifeTracker() {
                   <button
                     className={`today-focus-card ${active ? "is-open" : ""}`}
                     onClick={() => { setCatTab(active ? null : c.id); if (c.id === "financegoals") setFinanceGoalView("goals"); setHistoryExpanded(false); setEditingHistoryExpense(null); closeItemForm(); }}
-                    style={{ width: "100%", minHeight: 64, display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 10, background: active ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${active ? BRASS : LINE}`, borderRadius: 13, padding: "9px 10px", color: active ? BRASS : INK, fontSize: 15, fontWeight: active ? 700 : 600, cursor: "pointer", textAlign: "left", boxShadow: active ? CARD_SHADOW : "none" }}
+                    style={{ width: "100%", minHeight: 58, display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 9, background: active ? "rgba(0,113,227,0.10)" : PANEL, border: `1px solid ${active ? BRASS : LINE}`, borderRadius: 13, padding: "8px 10px", color: active ? BRASS : INK, fontSize: 15, fontWeight: active ? 700 : 600, cursor: "pointer", textAlign: "left", boxShadow: active ? CARD_SHADOW : "none" }}
                   >
                     <div className="today-focus-icon" style={{ width: 36, height: 36, borderRadius: 10, background: active ? "rgba(0,113,227,0.16)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon size={18} /></div>
                     <span className="today-focus-text" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.label}</span>
