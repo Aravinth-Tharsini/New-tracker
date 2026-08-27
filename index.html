@@ -171,6 +171,17 @@ button:active, [role="button"]:active {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+
+/* Consistent mobile arrays, history rows and smooth touch feedback */
+.history-list-row,.mobile-array-row{width:100%;min-width:0;box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line);overflow:hidden;transition:transform .16s cubic-bezier(.22,.8,.25,1),opacity .16s ease,background-color .2s ease}
+.history-list-row:active,.mobile-array-row:active{transform:scale(.985);opacity:.88}
+.history-list-row .history-main,.mobile-array-row .mobile-array-main{flex:1 1 auto;min-width:0;overflow:hidden}
+.history-list-row .history-title,.mobile-array-row .mobile-array-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-list-row .history-actions,.mobile-array-row .mobile-array-actions{flex:0 0 auto;display:flex;align-items:center;gap:5px;margin-left:4px}
+.history-list-row .history-amount,.mobile-array-row .mobile-array-amount{flex:0 0 auto;white-space:nowrap;max-width:34%;overflow:hidden;text-overflow:ellipsis}
+.history-delete-btn{min-width:42px!important;width:42px!important;height:42px!important;padding:0!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:0 0 42px!important}
+.mobile-array-grid{width:100%;min-width:0}
+@media(max-width:420px){.mobile-array-grid{gap:7px!important}.mobile-array-grid .today-focus-card{min-height:60px!important;padding:8px 9px!important;gap:9px!important}.mobile-array-grid .today-focus-icon{width:34px!important;height:34px!important;border-radius:9px!important}.history-list-row,.mobile-array-row{gap:8px;padding:9px 2px}.history-list-row .history-amount,.mobile-array-row .mobile-array-amount{max-width:30%;font-size:13px}.history-list-row .history-actions,.mobile-array-row .mobile-array-actions{gap:3px}}
 </style>
 
 </head>
@@ -1136,6 +1147,24 @@ function LifeTracker() {
       return { ...prev, [date]: { ...log, expenses: (log.expenses || []).map((e) => e.id === expenseId ? { ...e, ...patch } : e) } };
     });
   };
+  // Permanent history deletion helpers. No undo and no changes to unrelated data.
+  const deleteHistoryExpense = (date, expenseId) => {
+    setDailyLogs((prev) => {
+      const log = prev[date] || defaultLog();
+      const expenses = (log.expenses || []).filter((e) => e.id !== expenseId);
+      const next = { ...prev, [date]: { ...log, expenses } };
+      if (expenses.length === 0 && !(log.intervals || []).length) delete next[date];
+      return next;
+    });
+    setEditingHistoryExpense(null);
+  };
+  const deleteHistoryRepayment = (id) => {
+    setRepayments((prev) => prev.filter((r) => r.id !== id));
+    if (editingRepaymentId === id) cancelRepaymentForm();
+  };
+  const deleteHistoryGoal = (id) => setGoals((prev) => prev.filter((g) => g.id !== id));
+  const deleteHistoryTrip = (id) => setTravelPlans((prev) => prev.filter((t) => t.id !== id));
+  const deleteHistoryShopping = (id) => setShoppingLists((prev) => prev.filter((l) => l.id !== id));
 
   const financeHistoryExpenses = useMemo(() => Object.entries(dailyLogs)
     .filter(([date]) => date !== today)
@@ -1823,7 +1852,7 @@ function LifeTracker() {
               Nothing to track yet. Go to <span style={{ color: BRASS }}>Planner</span> to add a Trip, or set up Daily Routine, Career growth, or Healthcare goals.
             </div>
           ) : (
-            <div style={{ padding: "0 16px", display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <div className="mobile-array-grid" style={{ padding: "0 16px", display: "flex", flexWrap: "wrap", gap: 10 }}>
               <div style={{ width: "100%", fontSize: 13, color: INK_FAINT, padding: "2px 2px 0" }}>Choose what you want to update today</div>
               {availableDailyCategories.map((cat) => {
                 const CatIcon = cat.icon;
@@ -2229,7 +2258,7 @@ function LifeTracker() {
 
       {page === "categories" && (
         <div key="categories-page" className="page-smooth-enter" style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+          <div className="mobile-array-grid" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
             <div style={{ width: "100%", fontSize: 13, color: INK_FAINT, marginBottom: 2 }}>Choose what you want to plan</div>
             {CATEGORY_DEFS.map((c) => {
               const Icon = c.icon; const active = catTab === c.id;
@@ -3400,7 +3429,7 @@ function LifeTracker() {
                                 <div style={{ fontWeight: 700, color: INK }}>{g.title || "Goal"}</div>
                                 <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 3 }}>Goal completed</div>
                               </div>
-                              <div style={{ color: TEAL, fontWeight: 800 }}>✓ Done</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}><div style={{ color: TEAL, fontWeight: 800 }}>✓ Done</div><IconAction className="history-delete-btn" onClick={() => deleteHistoryGoal(g.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
                             </div>
                           </div>
                         ))}
@@ -3411,15 +3440,15 @@ function LifeTracker() {
                       <div style={{ fontSize: 12, fontWeight: 800, color: INK_FAINT, letterSpacing: 1, margin: "10px 0 6px" }}>REPAYMENTS</div>
                     )}
                     {financeHistoryRepayments.map((r) => (
-                        <div key={`repay-history-${r.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
+                        <div key={`repay-history-${r.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
                           <Wallet size={18} color={BRASS} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 14, fontWeight: 600 }}>{r.name || r.category}</div>
+                          <div className="history-main" style={{ flex: 1, minWidth: 0 }}>
+                            <div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{r.name || r.category}</div>
                             <div style={{ fontSize: 12, color: INK_FAINT }}>{r.category} · Paid {formatDMY(r.paidAt || r.dueDate)} · {fmtTime(r.paidAt || r.dueDate)}</div>
                             {r.remarks && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 3 }}>Remark: {r.remarks}</div>}
                           </div>
                           <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(r.amount || 0)}</div>
-                          <IconAction onClick={() => openEditRepayment(r)} title="Edit finance record"><Pencil size={15} /></IconAction>
+                          <IconAction onClick={() => openEditRepayment(r)} title="Edit finance record"><Pencil size={15} /></IconAction><IconAction className="history-delete-btn" onClick={() => deleteHistoryRepayment(r.id)} title="Delete history"><Trash2 size={16} /></IconAction>
                         </div>
                       ))}
                     </>}
@@ -3428,7 +3457,7 @@ function LifeTracker() {
                       {financeHistoryExpenses.map((e) => {
                         const editing = editingHistoryExpense && editingHistoryExpense.id === e.id && editingHistoryExpense.date === e.date;
                         return (
-                          <div key={`expense-history-${e.date}-${e.id}`} style={{ padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
+                          <div key={`expense-history-${e.date}-${e.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
                             {editing ? (
                               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "end" }}>
                                 <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Amount</div><TextField type="number" value={editing.amount} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, amount: ev.target.value }))} /></div>
@@ -3442,14 +3471,14 @@ function LifeTracker() {
                             ) : (
                               <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
                                 {(() => { const Icon = EXPENSE_GROUP_ICON[e.group] || Receipt; return <Icon size={18} color={BRASS} />; })()}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 14, fontWeight: 600 }}>{e.subcategory || e.group || "Expense"}</div>
+                                <div className="history-main" style={{ flex: 1, minWidth: 0 }}>
+                                  <div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{e.subcategory || e.group || "Expense"}</div>
                                   <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>{formatDMY(e.date)} · {fmtTime(e.time)}</div>
                                   {e.vendor && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 3 }}>Vendor: {e.vendor}</div>}
                                   {e.remarks && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Remark: {e.remarks}</div>}
                                 </div>
                                 <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(e.amount || 0)}</div>
-                                <IconAction onClick={() => setEditingHistoryExpense({ ...e })} title="Edit expense"><Pencil size={15} /></IconAction>
+                                <IconAction onClick={() => setEditingHistoryExpense({ ...e })} title="Edit expense"><Pencil size={15} /></IconAction><IconAction className="history-delete-btn" onClick={() => deleteHistoryExpense(e.date, e.id)} title="Delete history"><Trash2 size={16} /></IconAction>
                               </div>
                             )}
                           </div>
@@ -3458,30 +3487,30 @@ function LifeTracker() {
                     </>}
 
                     {catTab === "trip" && travelPlans.filter((t) => t.completed).map((t) => (
-                      <div key={`trip-history-${t.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
+                      <div key={`trip-history-${t.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
                         <Plane size={18} color={TEAL} />
-                        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{t.title}</div><div style={{ fontSize: 12, color: INK_FAINT }}>{t.fromLocation || ""} → {t.toLocation || ""}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Completed: {fmtTime(t.completedAt)} {t.completedAt ? `· ${formatDMY(t.completedAt)}` : ""}</div></div>
-                        <span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>Completed</span>
+                        <div className="history-main" style={{ flex: 1, minWidth: 0 }}><div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{t.title}</div><div style={{ fontSize: 12, color: INK_FAINT }}>{t.fromLocation || ""} → {t.toLocation || ""}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Completed: {fmtTime(t.completedAt)} {t.completedAt ? `· ${formatDMY(t.completedAt)}` : ""}</div></div>
+                        <div className="history-actions"><span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>Completed</span><IconAction className="history-delete-btn" onClick={() => deleteHistoryTrip(t.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
                       </div>
                     ))}
 
                     {catTab === "shopping" && shoppingLists.filter((l) => l.status === "paid").map((l) => (
-                      <div key={`shopping-history-${l.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
+                      <div key={`shopping-history-${l.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
                         <ShoppingBag size={18} color={TEAL} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600 }}>{l.shopName || "Shopping"}</div>
+                        <div className="history-main" style={{ flex: 1, minWidth: 0 }}>
+                          <div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{l.shopName || "Shopping"}</div>
                           <div style={{ fontSize: 12, color: INK_FAINT }}>{l.location || ""}{l.items?.length ? ` · ${l.items.length} item${l.items.length === 1 ? "" : "s"}` : ""}</div>
                           <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>{l.status === "paid" ? "Paid" : "Completed"} · {fmtTime(l.paidAt || l.completedAt || l.createdAt)}</div>
                         </div>
-                        <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(shoppingListTotal(l))}</div>
+                        <div className="history-actions"><div className="history-amount" style={{ fontFamily: mono, fontWeight: 700 }}>{inr(shoppingListTotal(l))}</div><IconAction className="history-delete-btn" onClick={() => deleteHistoryShopping(l.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
                       </div>
                     ))}
 
                     {(catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).map((g) => (
-                      <div key={`goal-history-${g.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 4px", borderBottom: `1px solid ${LINE}` }}>
+                      <div key={`goal-history-${g.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
                         <RoutineActivityIcon icon={GOAL_TRACK_ICON[catTab]} size={18} title={g.title} />
-                        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{g.title}</div><div style={{ fontSize: 12, color: INK_FAINT }}>{g.goalType || "Goal"}{g.expectedYear ? ` · Expected ${g.expectedYear}` : ""}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Achieved: {g.completedAt ? `${fmtTime(g.completedAt)} · ${formatDMY(g.completedAt)}` : (g.completedDate || "")}</div></div>
-                        <span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>Achieved</span>
+                        <div className="history-main" style={{ flex: 1, minWidth: 0 }}><div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{g.title}</div><div style={{ fontSize: 12, color: INK_FAINT }}>{g.goalType || "Goal"}{g.expectedYear ? ` · Expected ${g.expectedYear}` : ""}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Achieved: {g.completedAt ? `${fmtTime(g.completedAt)} · ${formatDMY(g.completedAt)}` : (g.completedDate || "")}</div></div>
+                        <div className="history-actions"><span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>Achieved</span><IconAction className="history-delete-btn" onClick={() => deleteHistoryGoal(g.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
                       </div>
                     ))}
                   </div>
