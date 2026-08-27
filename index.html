@@ -657,6 +657,7 @@ function planSpan(startDate, endDate) {
   return { totalDays, reversed: totalDays < 0, ...daysToYMD(totalDays) };
 }
 const CATEGORY_DEFS = [
+  { id: "myday", label: "My Day", icon: Users },
   { id: "finance", label: "Finance", icon: Wallet },
   { id: "financegoals", label: "Financial Goals", icon: Target },
   { id: "career", label: "Career growth", icon: Briefcase },
@@ -664,6 +665,12 @@ const CATEGORY_DEFS = [
   { id: "trip", label: "Trips", icon: Plane },
   { id: "activity", label: "Routine", icon: Activity },
   { id: "shopping", label: "Shopping", icon: ShoppingBag },
+];
+// My Day: meetings and other special activities planned for a specific day, with an editable reminder.
+const MYDAY_TYPE_OPTIONS = [
+  { value: "Meeting", label: "Meeting" },
+  { value: "Activity", label: "Special activity" },
+  { value: "Reminder", label: "Other reminder" },
 ];
 function shoppingItemFinalAmount(it) {
   const price = Number(it.price) || 0;
@@ -752,6 +759,7 @@ function LifeTracker() {
   const [goals, setGoals] = useState([]);
   const [repayments, setRepayments] = useState([]);
   const [travelPlans, setTravelPlans] = useState([]);
+  const [myDayEvents, setMyDayEvents] = useState([]);
   const [financeMonthly, setFinanceMonthly] = useState({});
   const [shoppingLists, setShoppingLists] = useState([]);
   const [savedShopNames, setSavedShopNames] = useState([]);
@@ -785,13 +793,19 @@ function LifeTracker() {
     return (a.travelTime || "99:99").localeCompare(b.travelTime || "99:99");
   });
   const todaysTravelPlans = useMemo(() => sortedTravelPlans.filter((t) => !t.dismissed && !t.completed && isTravelRelevantToday(t, today)), [sortedTravelPlans, today]);
+  const sortedMyDayEvents = [...myDayEvents].sort((a, b) => {
+    const ad = a.eventDate || "9999-12-31", bd = b.eventDate || "9999-12-31";
+    if (ad !== bd) return ad.localeCompare(bd);
+    return (a.eventTime || "99:99").localeCompare(b.eventTime || "99:99");
+  });
+  const todaysMyDayEvents = useMemo(() => sortedMyDayEvents.filter((e) => !e.completed && e.eventDate === today), [sortedMyDayEvents, today]);
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
   useEffect(() => {
     (async () => {
-      const keys = ["dailyItems", "dailyLogs", "goals", "repayments", "travelPlans", "financeMonthly", "shoppingLists", "savedShopNames", "savedShoppingCategories", "remindersEnabled", "dataMode", "sheetUrl", "lastSyncedAt", "autoExportEnabled", "lastAutoExportAt", "darkMode"];
-      const setters = [setDailyItems, setDailyLogs, setGoals, setRepayments, setTravelPlans, setFinanceMonthly, setShoppingLists, setSavedShopNames, setSavedShoppingCategories, setRemindersEnabled, setDataMode, setSheetUrl, setLastSyncedAt, setAutoExportEnabled, setLastAutoExportAt, setDarkMode];
+      const keys = ["dailyItems", "dailyLogs", "goals", "repayments", "travelPlans", "myDayEvents", "financeMonthly", "shoppingLists", "savedShopNames", "savedShoppingCategories", "remindersEnabled", "dataMode", "sheetUrl", "lastSyncedAt", "autoExportEnabled", "lastAutoExportAt", "darkMode"];
+      const setters = [setDailyItems, setDailyLogs, setGoals, setRepayments, setTravelPlans, setMyDayEvents, setFinanceMonthly, setShoppingLists, setSavedShopNames, setSavedShoppingCategories, setRemindersEnabled, setDataMode, setSheetUrl, setLastSyncedAt, setAutoExportEnabled, setLastAutoExportAt, setDarkMode];
       for (let i = 0; i < keys.length; i++) {
         try { const r = await window.storage.get(keys[i], false); if (r && r.value) setters[i](JSON.parse(r.value)); } catch (e) {}
       }
@@ -803,6 +817,7 @@ function LifeTracker() {
   useEffect(() => { if (loaded) window.storage.set("goals", JSON.stringify(goals), false).catch(() => {}); }, [goals, loaded]);
   useEffect(() => { if (loaded) window.storage.set("repayments", JSON.stringify(repayments), false).catch(() => {}); }, [repayments, loaded]);
   useEffect(() => { if (loaded) window.storage.set("travelPlans", JSON.stringify(travelPlans), false).catch(() => {}); }, [travelPlans, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("myDayEvents", JSON.stringify(myDayEvents), false).catch(() => {}); }, [myDayEvents, loaded]);
   useEffect(() => { if (loaded) window.storage.set("financeMonthly", JSON.stringify(financeMonthly), false).catch(() => {}); }, [financeMonthly, loaded]);
   useEffect(() => { if (loaded) window.storage.set("shoppingLists", JSON.stringify(shoppingLists), false).catch(() => {}); }, [shoppingLists, loaded]);
   useEffect(() => { if (loaded) window.storage.set("savedShopNames", JSON.stringify(savedShopNames), false).catch(() => {}); }, [savedShopNames, loaded]);
@@ -818,7 +833,7 @@ function LifeTracker() {
 
   // ---- Data Link: export / import (offline backup) ----
   const exportData = () => {
-    const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, exportedAt: new Date().toISOString() };
+    const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -838,7 +853,7 @@ function LifeTracker() {
     }, 2500);
     return () => clearTimeout(autoExportTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, loaded, autoExportEnabled, dataMode, lastAutoExportAt, today]);
+  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, loaded, autoExportEnabled, dataMode, lastAutoExportAt, today]);
   const applyImportedData = (data) => {
     if (!data || typeof data !== "object") return false;
     if (data.dailyItems) setDailyItems(data.dailyItems);
@@ -846,6 +861,7 @@ function LifeTracker() {
     if (data.goals) setGoals(data.goals);
     if (data.repayments) setRepayments(data.repayments);
     if (data.travelPlans) setTravelPlans(data.travelPlans);
+    if (data.myDayEvents) setMyDayEvents(data.myDayEvents);
     if (data.financeMonthly) setFinanceMonthly(data.financeMonthly);
     if (data.shoppingLists) setShoppingLists(data.shoppingLists);
     if (data.savedShopNames) setSavedShopNames(data.savedShopNames);
@@ -874,7 +890,7 @@ function LifeTracker() {
   const cancelImport = () => setPendingImportData(null);
 
   // ---- Data Link: online sync (Google Sheet via Apps Script Web App URL) ----
-  const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, syncedAt: new Date().toISOString() });
+  const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, syncedAt: new Date().toISOString() });
   const pushToSheet = async () => {
     if (!sheetUrl) return;
     setSyncStatus("syncing");
@@ -905,7 +921,7 @@ function LifeTracker() {
   useEffect(() => {
     if (!loaded || dataMode !== "online" || !sheetUrl || didInitialPull.current) return;
     didInitialPull.current = true;
-    const hasLocalData = dailyItems.length || Object.keys(dailyLogs).length || goals.length || repayments.length || travelPlans.length || Object.keys(financeMonthly).length || shoppingLists.length;
+    const hasLocalData = dailyItems.length || Object.keys(dailyLogs).length || goals.length || repayments.length || travelPlans.length || myDayEvents.length || Object.keys(financeMonthly).length || shoppingLists.length;
     if (hasLocalData) {
       pullSettledRef.current = true;
       pushToSheet();
@@ -920,7 +936,7 @@ function LifeTracker() {
     syncTimerRef.current = setTimeout(() => { pushToSheet(); }, 2500);
     return () => clearTimeout(syncTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled]);
+  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -1480,6 +1496,37 @@ function LifeTracker() {
   const dismissTravelPlan = (id) => setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, dismissed: true } : t)));
   const completeTravelPlan = (id) => setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, completedAt: new Date().toISOString() } : t)));
   const toggleTravelNoteDone = (planId, noteId) => setTravelPlans((prev) => prev.map((t) => (t.id !== planId ? t : { ...t, notes: (t.notes || []).map((n) => (n.id !== noteId ? n : { ...n, done: !n.done })) })));
+
+  // ---- My Day: meetings and other special activities, with an editable reminder ----
+  const [showAddMyDay, setShowAddMyDay] = useState(false);
+  const [editingMyDayId, setEditingMyDayId] = useState(null);
+  const blankMyDayForm = () => ({ type: "Meeting", title: "", eventDate: dateKey(), eventTime: "", location: "", notes: "", reminderEnabled: true, reminderMinutes: "15" });
+  const [myDayForm, setMyDayForm] = useState(blankMyDayForm());
+  const openEditMyDay = (ev) => {
+    setMyDayForm({
+      type: ev.type || "Meeting", title: ev.title || "", eventDate: ev.eventDate || dateKey(), eventTime: ev.eventTime || "",
+      location: ev.location || "", notes: ev.notes || "", reminderEnabled: ev.reminderEnabled !== false, reminderMinutes: ev.reminderMinutes != null ? String(ev.reminderMinutes) : "15",
+    });
+    setEditingMyDayId(ev.id);
+    setShowAddMyDay(true);
+  };
+  const cancelMyDayForm = () => { setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm()); };
+  const addMyDayEvent = () => {
+    if (!myDayForm.title.trim()) return;
+    const base = {
+      type: myDayForm.type, title: myDayForm.title.trim(), eventDate: myDayForm.eventDate || dateKey(), eventTime: myDayForm.eventTime,
+      location: myDayForm.location.trim(), notes: myDayForm.notes.trim(), reminderEnabled: !!myDayForm.reminderEnabled,
+      reminderMinutes: parseInt(myDayForm.reminderMinutes) || 15,
+    };
+    if (editingMyDayId) {
+      setMyDayEvents((prev) => prev.map((e) => (e.id !== editingMyDayId ? e : { ...e, ...base })));
+    } else {
+      setMyDayEvents((prev) => [...prev, { id: "md" + Date.now(), completed: false, ...base }]);
+    }
+    cancelMyDayForm();
+  };
+  const deleteMyDayEvent = (id) => setMyDayEvents((prev) => prev.filter((e) => e.id !== id));
+  const toggleMyDayCompleted = (id) => setMyDayEvents((prev) => prev.map((e) => (e.id !== id ? e : { ...e, completed: !e.completed })));
   const logTravelExpense = (plan) => {
     if (!plan || Number(plan.amount) <= 0) return;
     const alreadyLogged = Object.values(dailyLogs).some((log) => (log.expenses || []).some((e) => e.linkedTravelId === plan.id));
@@ -1603,6 +1650,26 @@ function LifeTracker() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, remindersEnabled, travelPlans, today]);
+
+  useEffect(() => {
+    if (!remindersEnabled) return;
+    myDayEvents.forEach((ev) => {
+      if (ev.completed || !ev.reminderEnabled || !ev.eventDate || !ev.eventTime) return;
+      if (ev.eventDate !== today) return;
+      const [h, m] = ev.eventTime.split(":").map(Number);
+      if (isNaN(h)) return;
+      const eventDT = new Date(now); eventDT.setHours(h, m, 0, 0);
+      const remindAt = new Date(eventDT.getTime() - (Number(ev.reminderMinutes) || 15) * 60000);
+      const notifyKey = `${today}:${ev.eventTime}:${ev.reminderMinutes}`;
+      if (now >= remindAt && now < eventDT && notifiedRef.current[`myday:${ev.id}`] !== notifyKey) {
+        notifiedRef.current[`myday:${ev.id}`] = notifyKey;
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          try { new Notification(`${ev.type}: ${ev.title}`, { body: `Starts at ${fmtTimeString12(ev.eventTime)}${ev.location ? ` \u00b7 ${ev.location}` : ""}` }); } catch (e) {}
+        }
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, remindersEnabled, myDayEvents, today]);
 
   const doneRecordsFor = (id) => monthDayLogs.map(([, log]) => log[id]).filter((r) => r && r.status === "done");
   const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
@@ -1830,7 +1897,8 @@ function LifeTracker() {
 
           <SectionLabel>Upcoming attention</SectionLabel>
           <Card>
-            {dueRepayments === 0 && todaysTravelPlans.length === 0 && pendingActivities === 0 ? <div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {dueRepayments === 0 && todaysTravelPlans.length === 0 && todaysMyDayEvents.length === 0 && pendingActivities === 0 ? <div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {todaysMyDayEvents.length > 0 && <button onClick={() => setPage("categories")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>📅 {todaysMyDayEvents.length} plan{todaysMyDayEvents.length > 1 ? "s" : ""} today{todaysMyDayEvents[0]?.title ? ` \u2014 ${todaysMyDayEvents[0].title}${todaysMyDayEvents[0].eventTime ? ` at ${fmtTimeString12(todaysMyDayEvents[0].eventTime)}` : ""}` : ""}</button>}
               {dueRepayments > 0 && <button onClick={() => setPage("daily")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>🔔 {dueRepayments} repayment{dueRepayments > 1 ? "s" : ""} need attention</button>}
               {todaysTravelPlans.length > 0 && <button onClick={() => setPage("categories")} style={{ fontSize: 14, padding: 0, border: "none", background: "transparent", color: INK, textAlign: "left", cursor: "pointer" }}>{(() => {
   const mode = String(todaysTravelPlans[0]?.mode || todaysTravelPlans[0]?.travelMode || "").trim().toLowerCase();
@@ -2734,6 +2802,96 @@ function LifeTracker() {
                   </div>
                 </Card>
               )}
+            </>
+          ) : catTab === "myday" ? (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <SectionLabel>My Day</SectionLabel>
+                <button onClick={() => (showAddMyDay ? cancelMyDayForm() : setShowAddMyDay(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add plan</button>
+              </div>
+              <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Meetings and any other special activity for a day. Set a reminder and edit the plan any time.</div>
+              {showAddMyDay && (
+                <Card style={{ marginBottom: 9 }}>
+                  <SectionLabel>{editingMyDayId ? "Edit plan" : "New plan"}</SectionLabel>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <Select value={myDayForm.type} onChange={(e) => setMyDayForm({ ...myDayForm, type: e.target.value })}>
+                      {MYDAY_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </Select>
+                    <TextField placeholder="Title (e.g. Team standup, Doctor visit)" value={myDayForm.title} onChange={(e) => setMyDayForm({ ...myDayForm, title: e.target.value })} />
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <div style={{ flex: "1 1 140px" }}>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Date</div>
+                        <TextField type="date" value={myDayForm.eventDate} onChange={(e) => setMyDayForm({ ...myDayForm, eventDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                      </div>
+                      <div style={{ flex: "1 1 160px" }}>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Time (optional)</div>
+                        <Time12Input value={myDayForm.eventTime} onChange={(v) => setMyDayForm({ ...myDayForm, eventTime: v })} style={{ fontFamily: mono }} />
+                      </div>
+                    </div>
+                    <TextField placeholder="Location / link (optional)" value={myDayForm.location} onChange={(e) => setMyDayForm({ ...myDayForm, location: e.target.value })} />
+                    <TextField placeholder="Notes (optional)" value={myDayForm.notes} onChange={(e) => setMyDayForm({ ...myDayForm, notes: e.target.value })} />
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ fontSize: 13, color: INK_FAINT }}>Reminder before it starts</div>
+                      <button type="button" onClick={() => setMyDayForm({ ...myDayForm, reminderEnabled: !myDayForm.reminderEnabled })} style={{ background: myDayForm.reminderEnabled ? "rgba(0,113,227,0.12)" : PANEL_2, border: `1px solid ${myDayForm.reminderEnabled ? BRASS : LINE}`, borderRadius: 7, padding: "5px 8px", color: myDayForm.reminderEnabled ? BRASS : INK_DIM, cursor: "pointer", fontSize: 13 }}>{myDayForm.reminderEnabled ? "On" : "Off"}</button>
+                    </div>
+                    {myDayForm.reminderEnabled && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <TextField type="number" min="1" value={myDayForm.reminderMinutes} onChange={(e) => setMyDayForm({ ...myDayForm, reminderMinutes: e.target.value })} style={{ width: 90, fontFamily: mono }} />
+                        <span style={{ fontSize: 13, color: INK_FAINT }}>minutes before start time{myDayForm.eventTime ? "" : " (set a time above for this to work)"}</span>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+                      <button onClick={addMyDayEvent} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{editingMyDayId ? "Save changes" : "Save plan"}</button>
+                      <button onClick={cancelMyDayForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
+                    </div>
+                  </div>
+                </Card>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                {sortedMyDayEvents.filter((e) => !e.completed).map((e) => {
+                  const dayLabel = dayLabelFor(e.eventDate, today);
+                  return (
+                    <Card key={e.id} style={{ display: "flex", alignItems: "flex-start", gap: 5 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{e.type} &middot; {e.title}</div>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3, display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
+                          {dayLabel && <span style={{ fontWeight: 700, color: BRASS }}>{dayLabel}</span>}
+                          <span>{formatDMY(e.eventDate)}</span>
+                          {e.eventTime && <><span>&middot;</span><span style={{ fontWeight: 700, color: INK_DIM }}>{fmtTimeString12(e.eventTime)}</span></>}
+                          {e.location ? <span>&middot; {e.location}</span> : null}
+                        </div>
+                        {e.notes && <div style={{ fontSize: 13, color: INK_DIM, marginTop: 4 }}>{e.notes}</div>}
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3 }}>{e.reminderEnabled ? `Reminder ${e.reminderMinutes || 15}m before` : "No reminder"}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                        <IconAction onClick={() => toggleMyDayCompleted(e.id)}><Check size={15} /></IconAction>
+                        <IconAction onClick={() => openEditMyDay(e)}><Pencil size={15} /></IconAction>
+                        <IconAction onClick={() => deleteMyDayEvent(e.id)}><Trash2 size={15} /></IconAction>
+                      </div>
+                    </Card>
+                  );
+                })}
+                {sortedMyDayEvents.filter((e) => !e.completed).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{sortedMyDayEvents.some((e) => e.completed) ? "All plans are marked done \u2014 add a new one above." : "Nothing planned yet. Add a meeting or activity."}</div>}
+                {sortedMyDayEvents.some((e) => e.completed) && (
+                  <div style={{ marginTop: 4 }}>
+                    <SectionLabel>Done</SectionLabel>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {sortedMyDayEvents.filter((e) => e.completed).map((e) => (
+                        <Card key={e.id} style={{ display: "flex", alignItems: "center", gap: 5, opacity: 0.7 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: INK, textDecoration: "line-through" }}>{e.type} &middot; {e.title}</div>
+                            <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>{formatDMY(e.eventDate)}</div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                            <IconAction onClick={() => toggleMyDayCompleted(e.id)}><Undo2 size={14} /></IconAction>
+                            <IconAction onClick={() => deleteMyDayEvent(e.id)}><Trash2 size={15} /></IconAction>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <>
