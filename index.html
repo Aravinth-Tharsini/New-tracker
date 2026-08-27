@@ -702,7 +702,7 @@ function shoppingListTotal(list) {
   return round((list.items || []).reduce((s, it) => s + (it.finalAmount != null ? it.finalAmount : shoppingItemFinalAmount(it)), 0));
 }
 function shoppingReminderOccursToday(list, todayStr) {
-  if (!list || list.status === "paid") return false;
+  if (!list || ["paid", "completed", "cancelled"].includes(list.status)) return false;
   return !!list.reminderDate && list.reminderDate === todayStr;
 }
 const GOAL_CATEGORY_DEFS = CATEGORY_DEFS.filter((c) => ["finance", "career", "health"].includes(c.id));
@@ -844,6 +844,9 @@ function LifeTracker() {
   const todaysShoppingLists = useMemo(() => [...shoppingLists]
     .filter((l) => shoppingReminderOccursToday(l, today))
     .sort((a, b) => String(a.reminderTime || "99:99").localeCompare(String(b.reminderTime || "99:99"))), [shoppingLists, today]);
+  const shoppingHistoryLists = useMemo(() => [...shoppingLists]
+    .filter((l) => ["paid", "completed", "cancelled"].includes(l.status) || l.dismissed)
+    .sort((a, b) => String(b.paidAt || b.completedAt || b.dismissedAt || b.createdAt || "").localeCompare(String(a.paidAt || a.completedAt || a.dismissedAt || a.createdAt || ""))), [shoppingLists]);
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
@@ -1197,9 +1200,11 @@ function LifeTracker() {
     }
     setShoppingForm(null);
   };
+  // Delete permanently removes a list. Done/Cancel keep the list in Shopping History.
   const deleteShoppingList = (id) => setShoppingLists((prev) => prev.filter((l) => l.id !== id));
-  const markShoppingDone = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "paid", completedAt: new Date().toISOString(), paidAt: new Date().toISOString() })));
-  const markShoppingPlanning = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "planning" })));
+  const markShoppingDone = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "completed", completedAt: new Date().toISOString() })));
+  const dismissShoppingList = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "cancelled", dismissed: true, dismissedAt: new Date().toISOString() })));
+  const markShoppingPlanning = (id) => setShoppingLists((prev) => prev.map((l) => (l.id !== id ? l : { ...l, status: "planning", completedAt: null, dismissedAt: null, dismissed: false })));
   const payShoppingList = (list) => {
     const total = shoppingListTotal(list);
     if (total <= 0) return;
@@ -2015,7 +2020,7 @@ function LifeTracker() {
                 const visibleMyDay = sortedMyDayEvents.filter((e) => !e.completed);
                 const shoppingDueCount = todaysShoppingLists.length;
                 const expenseDueCount = todaysRepaymentReminders.length;
-                const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "myday" ? visibleMyDay.length : cat.id === "shopping" ? shoppingLists.filter((l) => l.status !== "paid").length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
+                const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "myday" ? visibleMyDay.length : cat.id === "shopping" ? shoppingLists.filter((l) => !["paid", "completed", "cancelled"].includes(l.status) && !l.dismissed).length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
                 const doneCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
                 const countLabel = cat.id === "trip" ? `${totalCount} upcoming${todaysTravelPlans.length ? ` \u00b7 ${todaysTravelPlans.length} due` : ""}` : cat.id === "myday" ? `${totalCount} planned${todaysMyDayEvents.length ? ` \u00b7 ${todaysMyDayEvents.length} today` : ""}` : cat.id === "shopping" ? `${totalCount} planned${shoppingDueCount ? ` \u00b7 ${shoppingDueCount} reminder today` : ""}` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}${expenseDueCount ? ` \u00b7 ${expenseDueCount} due` : ""}` : `${doneCount}/${totalCount} done`;
                 const trackableCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval").length;
@@ -2822,14 +2827,17 @@ function LifeTracker() {
             <>
               {!shoppingForm ? (
                 <>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <SectionLabel>Shopping lists</SectionLabel>
-                    <button onClick={openNewShoppingForm} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> New list</button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <button onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide shopping history" : "View shopping history"} style={{ display: "flex", alignItems: "center", gap: 4, background: historyExpanded ? PANEL_2 : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={15} /> History</button>
+                      <button onClick={openNewShoppingForm} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> New list</button>
+                    </div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {shoppingLists.filter((l) => l.status !== "paid").sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).map((list) => {
+                    {shoppingLists.filter((l) => !["paid", "completed", "cancelled"].includes(l.status) && !l.dismissed).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).map((list) => {
                       const total = shoppingListTotal(list);
-                      const statusColor = list.status === "paid" ? TEAL : list.status === "done" ? BRASS : INK_FAINT;
+                      const statusColor = list.status === "done" ? BRASS : INK_FAINT;
                       const statusLabel = list.status === "paid" ? "Paid" : list.status === "done" ? "Done \u2014 ready to pay" : "Planning";
                       const previewing = previewShoppingId === list.id;
                       return (
@@ -2849,7 +2857,10 @@ function LifeTracker() {
                             <button onClick={() => setPreviewShoppingId(previewing ? null : list.id)} style={{ display: "flex", alignItems: "center", gap: 4, background: previewing ? "rgba(0,113,227,0.10)" : "transparent", border: `1px solid ${previewing ? BRASS : LINE}`, color: previewing ? BRASS : INK_DIM, borderRadius: 7, padding: "5px 9px", fontSize: 14, cursor: "pointer" }}><Eye size={13} /> Preview</button>
                             <button onClick={() => openEditShoppingForm(list)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${LINE}`, color: INK_DIM, borderRadius: 7, padding: "5px 9px", fontSize: 14, cursor: "pointer" }}><Pencil size={13} /> Edit</button>
                             {list.status === "planning" && (
-                              <button onClick={() => markShoppingDone(list.id)} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "5px 9px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>Mark done</button>
+                              <>
+                                <button onClick={() => markShoppingDone(list.id)} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "5px 9px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>Mark done</button>
+                                <button onClick={() => dismissShoppingList(list.id)} style={{ background: "transparent", border: `1px solid ${CORAL}`, borderRadius: 7, padding: "5px 9px", color: CORAL, cursor: "pointer", fontSize: 14, fontWeight: 600 }}>Cancel</button>
+                              </>
                             )}
                             {list.status === "done" && (
                               <>
@@ -2883,7 +2894,7 @@ function LifeTracker() {
                         </Card>
                       );
                     })}
-                    {shoppingLists.filter((l) => l.status !== "paid").length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{shoppingLists.some((l) => l.status === "paid") ? "All lists are paid — check History." : "No shopping lists yet."}</div>}
+                    {shoppingLists.filter((l) => !["paid", "completed", "cancelled"].includes(l.status) && !l.dismissed).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{shoppingHistoryLists.length ? "All shopping lists are completed or cancelled — check History." : "No shopping lists yet."}</div>}
                   </div>
                 </>
               ) : (
@@ -3786,11 +3797,11 @@ function LifeTracker() {
                 : catTab === "trip"
                   ? travelPlans.filter((t) => t.completed).length
                   : catTab === "shopping"
-                    ? shoppingLists.filter((l) => l.status === "paid").length
+                    ? shoppingHistoryLists.length
                     : goals.filter((g) => g.category === catTab && g.done).length;
             const hasHistory = historyCount > 0;
-            // Show the History button only when this section actually has history.
-            if (!hasHistory) return null;
+            // Shopping keeps its History button visible even when there are no records yet.
+            if (!hasHistory && catTab !== "shopping") return null;
             return (
               <div style={{ marginTop: 12, marginBottom: 12 }}>
                 {historyExpanded && (
@@ -3874,17 +3885,23 @@ function LifeTracker() {
                       </div>
                     ))}
 
-                    {catTab === "shopping" && shoppingLists.filter((l) => l.status === "paid").map((l) => (
-                      <div key={`shopping-history-${l.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
-                        <ShoppingBag size={18} color={TEAL} />
-                        <div className="history-main" style={{ flex: 1, minWidth: 0 }}>
-                          <div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{l.shopName || "Shopping"}</div>
-                          <div style={{ fontSize: 12, color: INK_FAINT }}>{l.location || ""}{l.items?.length ? ` · ${l.items.length} item${l.items.length === 1 ? "" : "s"}` : ""}</div>
-                          <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>{l.status === "paid" ? "Paid" : "Completed"} · {fmtTime(l.paidAt || l.completedAt || l.createdAt)}</div>
+                    {catTab === "shopping" && shoppingHistoryLists.map((l) => {
+                      const cancelled = l.status === "cancelled" || l.dismissed;
+                      const statusText = cancelled ? "Cancelled" : l.status === "paid" ? "Paid" : "Completed";
+                      const statusColor = cancelled ? CORAL : TEAL;
+                      const when = cancelled ? (l.dismissedAt || l.createdAt) : (l.paidAt || l.completedAt || l.createdAt);
+                      return (
+                        <div key={`shopping-history-${l.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
+                          <ShoppingBag size={18} color={statusColor} />
+                          <div className="history-main" style={{ flex: 1, minWidth: 0 }}>
+                            <div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{l.shopName || "Shopping"}</div>
+                            <div style={{ fontSize: 12, color: INK_FAINT }}>{l.location || ""}{l.items?.length ? ` · ${l.items.length} item${l.items.length === 1 ? "" : "s"}` : ""}</div>
+                            <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>{statusText}: {fmtTime(when)}{when ? ` · ${formatDMY(when)}` : ""}</div>
+                          </div>
+                          <div className="history-actions"><span style={{ fontSize: 12, color: statusColor, fontWeight: 700 }}>{statusText}</span><div className="history-amount" style={{ fontFamily: mono, fontWeight: 700 }}>{inr(shoppingListTotal(l))}</div><IconAction className="history-delete-btn" onClick={() => deleteHistoryShopping(l.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
                         </div>
-                        <div className="history-actions"><div className="history-amount" style={{ fontFamily: mono, fontWeight: 700 }}>{inr(shoppingListTotal(l))}</div><IconAction className="history-delete-btn" onClick={() => deleteHistoryShopping(l.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     {(catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).map((g) => (
                       <div key={`goal-history-${g.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
