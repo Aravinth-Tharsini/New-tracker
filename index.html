@@ -2709,13 +2709,6 @@ function LifeTracker() {
                     <ChipButton label="Goals" active={financeGoalView === "goals"} onClick={() => { setFinanceGoalView("goals"); setHistoryExpanded(false); }} />
                     <ChipButton label="Repayment due" active={financeGoalView === "repayments"} onClick={() => { setFinanceGoalView("repayments"); setHistoryExpanded(false); }} />
                   </div>
-                  {(financeHistoryGoals.length + financeHistoryRepayments.length) > 0 && (
-                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-                      <button onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide history" : "View history"} style={{ display: "flex", alignItems: "center", gap: 5, background: historyExpanded ? PANEL_2 : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 8, padding: "6px 10px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}>
-                        <History size={16} /> <span>History</span>
-                      </button>
-                    </div>
-                  )}
                 </>
               )}
               {catTab === "finance" && (
@@ -3013,9 +3006,9 @@ function LifeTracker() {
                 <SectionLabel>Goals</SectionLabel>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <button onClick={() => (showAddGoal ? cancelGoalForm() : setShowAddGoal(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add goal</button>
-                  {(((catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).length > 0)) && (
+                  {((catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).length > 0) || (catTab === "financegoals" && (financeHistoryGoals.length + financeHistoryRepayments.length) > 0) ? (
                     <button onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide history" : "View history"} style={{ display: "flex", alignItems: "center", gap: 4, background: historyExpanded ? PANEL_2 : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={15} /> <span>History</span></button>
-                  )}
+                  ) : null}
                 </div>
               </div>
               {isRoutineCategory && categoryGoals.length > 0 && (() => {
