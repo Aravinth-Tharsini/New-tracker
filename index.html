@@ -2353,8 +2353,8 @@ function LifeTracker() {
                 <path d="M30 32 q3.5 -3.5 7 0" stroke="#8FA3C9" strokeWidth="1.6" fill="none" strokeLinecap="round" opacity={darkMode ? 0.4 : 1} />
               </svg>
               <div style={{ position: "relative", maxWidth: "72%" }}>
-                <div style={{ fontSize: 25, fontWeight: 800, color: darkMode ? "#F2F2F7" : "#2B2B33", letterSpacing: "-0.02em" }}>{greeting}! <span style={{ display: "inline-block" }}>👋</span></div>
-                <div style={{ fontSize: 14, color: darkMode ? "#AEAEB6" : "#5B5B66", marginTop: 5, lineHeight: 1.4 }}>
+                <div style={{ fontSize: 25, fontWeight: 800, color: INK, letterSpacing: "-0.02em" }}>{greeting}! <span style={{ display: "inline-block" }}>👋</span></div>
+                <div style={{ fontSize: 14, color: INK_DIM, marginTop: 5, lineHeight: 1.4 }}>
                   {totalActivities === 0
                     ? "Plan your day and get started."
                     : completedActivities === totalActivities
@@ -4140,9 +4140,7 @@ function LifeTracker() {
                       <div style={{ flex: "1 1 30%", minWidth: 80 }}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Completed</div><div style={{ fontFamily: mono, fontSize: 19, fontWeight: 700, color: TEAL }}>{doneGoals}</div></div>
                       <div style={{ flex: "1 1 30%", minWidth: 80 }}><div style={{ fontSize: 11, textTransform: "uppercase", color: INK_FAINT }}>Pending</div><div style={{ fontFamily: mono, fontSize: 19, fontWeight: 700, color: pendingGoals ? BRASS : INK }}>{pendingGoals}</div></div>
                     </div>
-                    <div style={{ height: 6, borderRadius: 999, background: PANEL_2, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${pct}%`, background: TEAL, borderRadius: 999 }} />
-                    </div>
+                    <ProgressBar pct={pct} color={TEAL} />
                     <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 4 }}>{pct}% of all {catTab === "career" ? "career growth" : "health"} goals completed</div>
                   </Card>
                 );
@@ -4554,8 +4552,8 @@ function LifeTracker() {
                                 <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Vendor</div><TextField value={editing.vendor || ""} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, vendor: ev.target.value }))} /></div>
                                 <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Remark</div><TextField value={editing.remarks || ""} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, remarks: ev.target.value }))} /></div>
                                 <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 6 }}>
-                                  <button onClick={() => setEditingHistoryExpense(null)} style={{ background: PANEL_2, border: "none", borderRadius: 8, padding: "8px 12px", color: INK_DIM, cursor: "pointer" }}>Cancel</button>
-                                  <button onClick={() => { updateHistoryExpense(e.date, e.id, { amount: Number(editing.amount) || 0, vendor: (editing.vendor || "").trim(), remarks: (editing.remarks || "").trim() }); setEditingHistoryExpense(null); }} style={{ background: BRASS, border: "none", borderRadius: 8, padding: "8px 12px", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Save</button>
+                                  <button onClick={() => setEditingHistoryExpense(null)} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
+                                  <button onClick={() => { updateHistoryExpense(e.date, e.id, { amount: Number(editing.amount) || 0, vendor: (editing.vendor || "").trim(), remarks: (editing.remarks || "").trim() }); setEditingHistoryExpense(null); }} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>Save</button>
                                 </div>
                               </div>
                             ) : (
