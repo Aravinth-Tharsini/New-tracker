@@ -2016,6 +2016,7 @@ function LifeTracker() {
           --brass:#0071E3; --brass-dim:#B9DBFB; --teal:#34C759; --coral:#FF3B30;
           --card-shadow:0 1px 2px rgba(0,0,0,0.04), 0 1px 8px rgba(0,0,0,0.04);
           --nav-bg:rgba(255,255,255,0.92);
+          --nav-safe-bg:#FFFFFF;
         }
         [data-theme="dark"]{
           --ink:#F2F2F7; --ink-dim:#AEAEB6; --ink-faint:#7C7C80;
@@ -2023,6 +2024,7 @@ function LifeTracker() {
           --brass:#0A84FF; --brass-dim:#123153; --teal:#30D158; --coral:#FF453A;
           --card-shadow:0 1px 2px rgba(0,0,0,0.5), 0 1px 8px rgba(0,0,0,0.4);
           --nav-bg:rgba(28,28,30,0.92);
+          --nav-safe-bg:#000000;
         }
         /* Today category cards: clean, visual-first UI */
         .today-expand-enter { animation: todaySlideIn .48s cubic-bezier(.22,.8,.25,1) both; overflow: hidden; }
@@ -4706,11 +4708,13 @@ function doPost(e) {
         </div>
       )}
 
-      <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: "var(--nav-bg)", backdropFilter: "blur(20px)", position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 10000, paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: LayoutGrid }, { id: "analysis", label: "Progress", icon: TrendingUp }, { id: "datalink", label: "More", icon: Settings2 }].map((p) => {
-          const Icon = p.icon; const active = page === p.id;
-          return <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 0 8px", background: "transparent", border: "none", cursor: "pointer", color: active ? BRASS : INK_FAINT }}><Icon size={18} strokeWidth={active ? 2.2 : 1.8} /><span style={{ fontSize: 11, fontWeight: active ? 600 : 500, fontFamily: disp }}>{p.label}</span></button>;
-        })}
+      <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 10000, background: "var(--nav-safe-bg)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <div style={{ display: "flex", borderTop: `1px solid ${LINE}`, background: "var(--nav-bg)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
+          {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: LayoutGrid }, { id: "analysis", label: "Progress", icon: TrendingUp }, { id: "datalink", label: "More", icon: Settings2 }].map((p) => {
+            const Icon = p.icon; const active = page === p.id;
+            return <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 0 8px", background: "transparent", border: "none", cursor: "pointer", color: active ? BRASS : INK_FAINT }}><Icon size={18} strokeWidth={active ? 2.2 : 1.8} /><span style={{ fontSize: 11, fontWeight: active ? 600 : 500, fontFamily: disp }}>{p.label}</span></button>;
+          })}
+        </div>
       </div>
     </div>
   );
