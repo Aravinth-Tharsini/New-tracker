@@ -10,6 +10,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <meta name="theme-color" content="#F5F5F7" />
+  <meta name="color-scheme" content="light dark" />
 
   <!-- iOS: run as a standalone app with no browser chrome when added to Home Screen -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1042,8 +1043,13 @@ function LifeTracker() {
     const bg = darkMode ? "#000000" : "#F5F5F7";
     document.documentElement.style.background = bg;
     document.body.style.background = bg;
+    // Hints Chrome/Android to tint its own system UI (incl. the gesture-nav strip,
+    // which lives outside the page and can't be painted directly) to match.
+    document.documentElement.style.colorScheme = darkMode ? "dark" : "light";
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", bg);
+    const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]');
+    if (colorSchemeMeta) colorSchemeMeta.setAttribute("content", darkMode ? "dark" : "light");
   }, [darkMode]);
   useEffect(() => { if (loaded) window.storage.set("dataMode", JSON.stringify(dataMode), false).catch(() => {}); }, [dataMode, loaded]);
   useEffect(() => { if (loaded) window.storage.set("sheetUrl", JSON.stringify(sheetUrl), false).catch(() => {}); }, [sheetUrl, loaded]);
