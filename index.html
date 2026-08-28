@@ -286,6 +286,15 @@ const disp = "-apple-system, ui-rounded, 'SF Pro Rounded', 'SF Pro Display', 'He
 const CARD_SHADOW = "var(--card-shadow)";
 
 function pad2(n) { return String(n).padStart(2, "0"); }
+// Converts a "#RRGGBB" hex color into an rgba() string at the given alpha, so category accent
+// colors can be used as soft tinted backgrounds that still read correctly in dark mode.
+function hexA(hex, alpha) {
+  const h = String(hex || "").replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16) || 0;
+  const g = parseInt(h.substring(2, 4), 16) || 0;
+  const b = parseInt(h.substring(4, 6), 16) || 0;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 function dateKey(d = new Date()) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 function monthKey(d = new Date()) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; }
 function formatDateLong(d) { return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); }
@@ -828,6 +837,18 @@ const TODAY_CARD_META = {
   career: { desc: "Build skills & grow your career", bg: "#F2F9F4" },
   health: { desc: "Track health & wellness", bg: "#ECFAF4" },
   activity: { desc: "Track daily routines & habits", bg: "#F0FAF5" },
+};
+// A distinct accent hue per Today category — used for the card icon tile, tinted background,
+// mini progress bar and attention badge, so each row reads as its own place at a glance rather
+// than everything sharing the same blue.
+const TODAY_CARD_ACCENT = {
+  myday: "#5A20B8",
+  expense: "#159957",
+  shopping: "#E08A2E",
+  trip: "#0BA5A5",
+  career: "#0071E3",
+  health: "#E0356B",
+  activity: "#7C3AED",
 };
 // Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
@@ -2093,14 +2114,14 @@ function LifeTracker() {
           justify-content: center !important;
           text-align: center !important;
           gap: 9px !important;
-          padding: 14px 10px 12px !important;
-          border-radius: 22px !important;
-          border: 1px solid rgba(0,0,0,.035) !important;
-          box-shadow: 0 3px 12px rgba(20,30,45,.045) !important;
+          padding: 16px 12px 14px !important;
+          border-radius: 26px !important;
+          border: 1px solid rgba(0,0,0,.04) !important;
+          box-shadow: 0 1px 2px rgba(20,30,45,.04), 0 6px 18px rgba(20,30,45,.06) !important;
           overflow: visible !important;
           transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease, background .22s ease !important;
         }
-        .today-focus-card:active { transform: scale(.975); }
+        .today-focus-card:active { transform: scale(.965); box-shadow: 0 1px 2px rgba(20,30,45,.04), 0 2px 8px rgba(20,30,45,.05) !important; }
         .today-focus-card.is-open {
           min-height: 58px !important;
           height: 58px !important;
@@ -2118,9 +2139,9 @@ function LifeTracker() {
           width: 68px !important;
           height: 68px !important;
           border-radius: 20px !important;
-          background: rgba(255,255,255,.62) !important;
-          border: 1px solid rgba(255,255,255,.82);
-          box-shadow: 0 2px 7px rgba(20,30,45,.045);
+          background: var(--icon-tint, rgba(255,255,255,.62)) !important;
+          border: 1px solid var(--icon-tint-border, rgba(255,255,255,.82));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 3px 10px rgba(20,30,45,.07);
           transition: width .42s cubic-bezier(.22,.8,.25,1), height .42s cubic-bezier(.22,.8,.25,1),
                       border-radius .42s cubic-bezier(.22,.8,.25,1), transform .42s cubic-bezier(.22,.8,.25,1);
         }
@@ -2158,9 +2179,10 @@ function LifeTracker() {
           display: grid;
           place-items: center;
           margin-top: 1px;
+          box-shadow: 0 2px 6px rgba(20,30,45,.06);
           transition: opacity .28s ease, transform .38s cubic-bezier(.22,.8,.25,1);
         }
-        .today-category-grid { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px !important; }
+        .today-category-grid { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px !important; }
         @media(min-width:700px){
           .today-category-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px !important; }
           .today-focus-card { min-height:210px !important; padding:20px 14px 16px !important; }
@@ -2458,47 +2480,109 @@ function LifeTracker() {
         </div>;
       })()}
 
-      {page === "daily" && (
-        <div key="daily-page" className="daily-page-content" style={{ padding: "6px 0 12px", flex: 1, minHeight: 0, width: "100%" }}>
-          {todayLog.wakeUpTime && (
-            <div style={{ padding: "0 16px 9px", display: "flex", justifyContent: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(0,113,227,0.10)", border: `1px solid ${BRASS_DIM}`, borderRadius: 16, padding: "4px 9px", fontSize: 13, color: BRASS, fontFamily: mono }}>
-                <Sun size={13} /> Woke up at {fmtTime(todayLog.wakeUpTime)}
+      {page === "daily" && (() => {
+        // One pass over the categories to derive every count/label the header and cards need,
+        // so the hero summary and each card read from the same numbers instead of drifting.
+        const categoryStats = availableDailyCategories.map((cat) => {
+          const expanded = expandedDailyCategory === cat.id;
+          const itemsForCat = validItems.filter((i) => i.category === cat.id).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
+          // Only remaining (not-yet-done) routines are shown in today's list; completed instant/duration
+          // items drop off once marked done. Interval-type items (recurring) always stay visible.
+          const pendingItemsForCat = itemsForCat.filter((i) => i.type === "interval" || field(i.id).status !== "done");
+          const todaysExpenseCount = todayLog.expenses.length;
+          const todaysExpenseTotal = todayLog.expenses.reduce((s, e) => s + e.amount, 0);
+          const visibleTrips = todaysTravelPlans;
+          const visibleMyDay = todaysMyDayEvents;
+          const shoppingDueCount = todaysShoppingLists.length;
+          const expenseDueCount = todaysRepaymentReminders.length;
+          const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "myday" ? visibleMyDay.length : cat.id === "shopping" ? todaysShoppingLists.length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
+          const doneCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
+          const countLabel = cat.id === "trip" ? `${totalCount} upcoming${todaysTravelPlans.length ? ` \u00b7 ${todaysTravelPlans.length} due` : ""}` : cat.id === "myday" ? `${totalCount} planned${todaysMyDayEvents.length ? ` \u00b7 ${todaysMyDayEvents.length} today` : ""}` : cat.id === "shopping" ? `${totalCount} planned${shoppingDueCount ? ` \u00b7 ${shoppingDueCount} reminder today` : ""}` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}${expenseDueCount ? ` \u00b7 ${expenseDueCount} due` : ""}` : `${doneCount}/${totalCount} done`;
+          const trackableCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval").length;
+          const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "myday" ? todaysMyDayEvents.length : cat.id === "shopping" ? shoppingDueCount : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
+          const accent = TODAY_CARD_ACCENT[cat.id] || BRASS;
+          return { cat, expanded, CatIcon: cat.icon, itemsForCat, pendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent };
+        });
+        const overallTrackable = categoryStats.reduce((s, c) => s + c.trackableCount, 0);
+        const overallDone = categoryStats.reduce((s, c) => s + c.doneCount, 0);
+        const overallAttention = categoryStats.reduce((s, c) => s + c.attentionCount, 0);
+        const overallPct = overallTrackable > 0 ? Math.round((overallDone / overallTrackable) * 100) : 0;
+        const ringR = 25, ringC = 2 * Math.PI * ringR;
+        const hour = now.getHours();
+        const greeting = hour < 5 ? "Still up" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : hour < 21 ? "Good evening" : "Winding down";
+
+        return (
+        <div key="daily-page" className="daily-page-content" style={{ padding: "6px 0 14px", flex: 1, minHeight: 0, width: "100%" }}>
+          <div style={{ margin: "2px 16px 18px", position: "relative", overflow: "hidden", borderRadius: 26, padding: "20px 18px 18px", background: darkMode ? `linear-gradient(135deg, ${hexA(BRASS, 0.20)} 0%, ${PANEL} 60%)` : `linear-gradient(135deg, ${hexA(BRASS, 0.12)} 0%, ${PANEL} 60%)`, border: `1px solid ${LINE}`, boxShadow: CARD_SHADOW }}>
+            <div style={{ position: "absolute", top: -36, right: -30, width: 130, height: 130, borderRadius: "50%", background: hexA(overallAttention > 0 ? CORAL : TEAL, darkMode ? 0.16 : 0.10), pointerEvents: "none" }} />
+            <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11.5, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 5 }}>{formatDateLong(now)}</div>
+                <div style={{ fontSize: 25, fontWeight: 800, color: INK, letterSpacing: "-0.01em", lineHeight: 1.15 }}>{greeting}</div>
+                <div style={{ fontSize: 13.5, color: INK_DIM, marginTop: 6, lineHeight: 1.4 }}>
+                  {overallTrackable > 0 ? (
+                    <>{overallDone} of {overallTrackable} tracked{overallAttention > 0 ? <span style={{ color: CORAL, fontWeight: 600 }}> · {overallAttention} need{overallAttention === 1 ? "s" : ""} attention</span> : " · you're on track"}</>
+                  ) : overallAttention > 0 ? (
+                    <span style={{ color: CORAL, fontWeight: 600 }}>{overallAttention} thing{overallAttention === 1 ? "" : "s"} need{overallAttention === 1 ? "s" : ""} attention</span>
+                  ) : "Here's what's on for today"}
+                </div>
+                {todayLog.wakeUpTime && (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 10, background: hexA(BRASS, darkMode ? 0.20 : 0.12), border: `1px solid ${BRASS_DIM}`, borderRadius: 999, padding: "4px 10px 4px 8px", fontSize: 12, color: BRASS, fontFamily: mono, fontWeight: 700 }}>
+                    <Sun size={12} /> Woke up at {fmtTime(todayLog.wakeUpTime)}
+                  </div>
+                )}
               </div>
+              {overallTrackable > 0 && (
+                <div style={{ position: "relative", width: 72, height: 72, flexShrink: 0 }}>
+                  <svg width="72" height="72" viewBox="0 0 60 60" style={{ transform: "rotate(-90deg)" }}>
+                    <circle cx="30" cy="30" r={ringR} fill="none" stroke={LINE} strokeWidth="6" />
+                    <circle cx="30" cy="30" r={ringR} fill="none" stroke={overallPct >= 100 ? TEAL : BRASS} strokeWidth="6" strokeDasharray={ringC} strokeDashoffset={ringC * (1 - overallPct / 100)} strokeLinecap="round" style={{ transition: "stroke-dashoffset .5s cubic-bezier(.22,.8,.25,1)" }} />
+                  </svg>
+                  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: INK, fontFamily: mono, lineHeight: 1 }}>{overallPct}%</div>
+                    <div style={{ fontSize: 9, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 2 }}>done</div>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+            {overallTrackable > 0 && (
+              <div style={{ position: "relative", display: "flex", gap: 8, marginTop: 16 }}>
+                <div style={{ flex: 1, background: PANEL_2, borderRadius: 12, padding: "8px 4px", textAlign: "center" }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: TEAL, fontFamily: mono }}>{overallDone}</div>
+                  <div style={{ fontSize: 10.5, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginTop: 1 }}>Done</div>
+                </div>
+                <div style={{ flex: 1, background: PANEL_2, borderRadius: 12, padding: "8px 4px", textAlign: "center" }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: BRASS, fontFamily: mono }}>{Math.max(0, overallTrackable - overallDone)}</div>
+                  <div style={{ fontSize: 10.5, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginTop: 1 }}>Left</div>
+                </div>
+                <div style={{ flex: 1, background: PANEL_2, borderRadius: 12, padding: "8px 4px", textAlign: "center" }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: overallAttention > 0 ? CORAL : INK_FAINT, fontFamily: mono }}>{overallAttention}</div>
+                  <div style={{ fontSize: 10.5, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginTop: 1 }}>Attention</div>
+                </div>
+              </div>
+            )}
+          </div>
           {availableDailyCategories.length === 0 ? (
-            <div style={{ padding: "32px 16px", textAlign: "center", color: INK_FAINT, fontSize: 15 }}>
-              Nothing to track yet. Go to <span style={{ color: BRASS }}>Planner</span> to add a My Day plan or Trip, or set up Daily Routine, Career growth, or Healthcare goals.
+            <div style={{ margin: "0 16px", padding: "36px 18px", textAlign: "center", background: PANEL, borderRadius: 22, boxShadow: CARD_SHADOW, border: `1px solid ${LINE}` }}>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: hexA(BRASS, 0.12), display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+                <CalendarDays size={28} color={BRASS} strokeWidth={2.2} />
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: INK, marginBottom: 5 }}>Nothing to track yet</div>
+              <div style={{ fontSize: 13, color: INK_DIM, lineHeight: 1.5 }}>Go to <span style={{ color: BRASS, fontWeight: 600 }}>Planner</span> to add a My Day plan or Trip, or set up Daily Routine, Career growth, or Healthcare goals.</div>
             </div>
           ) : (
             <div className="today-category-grid" style={{ padding: "0 16px" }}>
-              <div style={{ gridColumn: "1 / -1", padding: "2px 2px 2px", marginBottom: 2 }}>
-                <div style={{ fontSize: 13, color: INK_DIM, marginTop: 3 }}>Plan your day. Stay focused. Get things done.</div>
-              </div>
-              {availableDailyCategories.map((cat) => {
-                const CatIcon = cat.icon;
-                const expanded = expandedDailyCategory === cat.id;
-                const itemsForCat = validItems.filter((i) => i.category === cat.id).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
-                // Only remaining (not-yet-done) routines are shown in today's list; completed instant/duration
-                // items drop off once marked done. Interval-type items (recurring) always stay visible.
-                const pendingItemsForCat = itemsForCat.filter((i) => i.type === "interval" || field(i.id).status !== "done");
-                const todaysExpenseCount = todayLog.expenses.length;
-                const todaysExpenseTotal = todayLog.expenses.reduce((s, e) => s + e.amount, 0);
-                const visibleTrips = todaysTravelPlans;
-                const visibleMyDay = todaysMyDayEvents;
-                const shoppingDueCount = todaysShoppingLists.length;
-                const expenseDueCount = todaysRepaymentReminders.length;
-                const totalCount = cat.id === "trip" ? visibleTrips.length : cat.id === "myday" ? visibleMyDay.length : cat.id === "shopping" ? todaysShoppingLists.length : cat.id === "expense" ? todaysExpenseCount : itemsForCat.length;
-                const doneCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
-                const countLabel = cat.id === "trip" ? `${totalCount} upcoming${todaysTravelPlans.length ? ` \u00b7 ${todaysTravelPlans.length} due` : ""}` : cat.id === "myday" ? `${totalCount} planned${todaysMyDayEvents.length ? ` \u00b7 ${todaysMyDayEvents.length} today` : ""}` : cat.id === "shopping" ? `${totalCount} planned${shoppingDueCount ? ` \u00b7 ${shoppingDueCount} reminder today` : ""}` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}${expenseDueCount ? ` \u00b7 ${expenseDueCount} due` : ""}` : `${doneCount}/${totalCount} done`;
-                const trackableCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval").length;
-                const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "myday" ? todaysMyDayEvents.length : cat.id === "shopping" ? shoppingDueCount : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
+              {categoryStats.map((cs) => {
+                const { cat, expanded, CatIcon, itemsForCat, pendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent } = cs;
                 return (
                   <div key={cat.id} className={`cat-grid-item ${expanded ? "is-open-row" : (expandedDailyCategory ? "is-collapsed" : "")}`}>
-                    <button className={`today-focus-card ${expanded ? "is-open" : ""}`} onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)} style={{ background: expanded ? "rgba(0,113,227,0.10)" : (TODAY_CARD_META[cat.id]?.bg || PANEL), cursor: "pointer" }}>
-                      <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        <CatIcon size={34} color={expanded ? BRASS : (cat.id === "trip" || cat.id === "career" ? "#5A20B8" : cat.id === "activity" || cat.id === "health" ? "#159957" : BRASS)} strokeWidth={2.2} />
+                    <button
+                      className={`today-focus-card ${expanded ? "is-open" : ""}`}
+                      onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)}
+                      style={{ background: expanded ? hexA(BRASS, darkMode ? 0.20 : 0.10) : hexA(accent, darkMode ? 0.20 : 0.09), cursor: "pointer" }}
+                    >
+                      <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0, "--icon-tint": expanded ? hexA(BRASS, darkMode ? 0.24 : 0.14) : hexA(accent, darkMode ? 0.24 : 0.13), "--icon-tint-border": expanded ? hexA(BRASS, 0.3) : hexA(accent, 0.24) }}>
+                        <CatIcon size={32} color={expanded ? BRASS : accent} strokeWidth={2.2} />
                         {attentionCount > 0 && (
                           <div style={{ position: "absolute", top: -8, right: -8, minWidth: 26, height: 26, borderRadius: 999, background: CORAL, color: "#FFFFFF", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px", border: "2px solid " + BG, fontFamily: mono }}>
                             {attentionCount > 9 ? "9+" : attentionCount}
@@ -2507,9 +2591,14 @@ function LifeTracker() {
                       </div>
                       <div className="today-focus-text">
                         <div style={{ fontSize: 18, color: expanded ? BRASS : INK, fontWeight: 750, lineHeight: 1.15 }}>{cat.label}</div>
-                        <div className="today-focus-description" style={{ fontSize: 13, lineHeight: 1.35, color: INK_DIM, marginTop: 7 }}>{TODAY_CARD_META[cat.id]?.desc}</div>
+                        <div className="today-focus-description" style={{ fontSize: 12.5, lineHeight: 1.4, color: INK_DIM, marginTop: 6, fontFamily: mono }}>{countLabel}</div>
+                        {trackableCount > 0 && (
+                          <div style={{ marginTop: 8, height: 4, borderRadius: 999, background: hexA(accent, darkMode ? 0.22 : 0.16), overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${Math.round((doneCount / trackableCount) * 100)}%`, background: accent, borderRadius: 999, transition: "width .4s ease" }} />
+                          </div>
+                        )}
                       </div>
-                      <div className="today-focus-arrow" style={{ background: expanded ? "rgba(0,113,227,.14)" : "rgba(0,113,227,.10)", color: BRASS }}>
+                      <div className="today-focus-arrow" style={{ background: expanded ? hexA(BRASS, 0.16) : hexA(accent, 0.15), color: expanded ? BRASS : accent }}>
                         <ArrowRight size={22} strokeWidth={2.4} />
                       </div>
                     </button>
@@ -3047,7 +3136,8 @@ function LifeTracker() {
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {page === "categories" && (
         <div key="categories-page" className="planner-page-content" style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
