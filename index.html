@@ -2127,7 +2127,7 @@ function LifeTracker() {
 
       <div style={{ padding: "calc(16px + env(safe-area-inset-top)) 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
-          {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "Data Link" : "Insights"}
+          {page === "dashboard" ? "Home" : page === "daily" ? "" : page === "categories" ? "Planner" : page === "datalink" ? "Data Link" : "Insights"}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
           <button onClick={() => setDarkMode((v) => !v)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} style={{ background: "transparent", border: "none", color: darkMode ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}>
