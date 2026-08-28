@@ -905,6 +905,53 @@ function Time12Input({ value, onChange, style }) {
     </div>
   );
 }
+// 24-hour time picker (hour 00-23 / minute 00-59) with the same draft-preserving behavior as
+// Time12Input, so a leading zero (e.g. typing "0" then "6" for 06) is never stripped mid-keystroke.
+function Time24Input({ value, onChange, style }) {
+  const parsed = parseHHMMSafe(value);
+
+  const [hourDraft, setHourDraft] = useState(null);
+  const [minDraft, setMinDraft] = useState(null);
+
+  const hourDisplay = hourDraft != null ? hourDraft : pad2(parsed.h);
+  const minDisplay = minDraft != null ? minDraft : pad2(parsed.m);
+
+  const commitHour = (raw) => {
+    const digits = raw.replace(/[^0-9]/g, "");
+    if (digits === "") return;
+    const nh = Math.min(23, Math.max(0, Number(digits)));
+    onChange(buildHHMM(nh, parsed.m));
+  };
+
+  const commitMinute = (raw) => {
+    const digits = raw.replace(/[^0-9]/g, "");
+    if (digits === "") return;
+    const nm = Math.min(59, Math.max(0, Number(digits)));
+    onChange(buildHHMM(parsed.h, nm));
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, ...style }}>
+      <TextField
+        type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} placeholder="HH"
+        value={hourDisplay}
+        onChange={(e) => { const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 2); setHourDraft(digits); commitHour(digits); }}
+        onFocus={(e) => e.target.select()}
+        onBlur={() => setHourDraft(null)}
+        style={{ width: "100%", textAlign: "center" }}
+      />
+      <span style={{ color: INK_FAINT, fontWeight: 700 }}>:</span>
+      <TextField
+        type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} placeholder="MM"
+        value={minDisplay}
+        onChange={(e) => { const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 2); setMinDraft(digits); commitMinute(digits); }}
+        onFocus={(e) => e.target.select()}
+        onBlur={() => setMinDraft(null)}
+        style={{ width: "100%", textAlign: "center" }}
+      />
+    </div>
+  );
+}
 function IconBtn({ onClick, children }) { return <button onClick={onClick} style={{ background: PANEL_2, border: "none", borderRadius: 10, padding: "0 11px", height: 38, color: BRASS, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>{children}</button>; }
 function IconAction({ onClick, children, disabled, tone, style }) {
   return (
@@ -3122,29 +3169,11 @@ function LifeTracker() {
                               <button onClick={() => setTravelTimeInputMode("12h")} style={{ background: travelTimeInputMode === "12h" ? BRASS : PANEL_2, color: travelTimeInputMode === "12h" ? "#FFFFFF" : INK_DIM, border: "none", borderRadius: 7, padding: "2px 6px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>12h</button>
                             </div>
                           </div>
-                          {travelTimeInputMode === "24h" ? (() => {
-                            const parsed = parseHHMMSafe(travelForm.travelTime);
-                            return (
-                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                <TextField type="number" min="0" max="23" placeholder="HH" value={pad2(parsed.h)} onChange={(e) => { const raw = e.target.value.replace(/[^0-9]/g, ""); const nh = raw === "" ? 0 : Math.min(23, Math.max(0, Number(raw))); setTravelForm({ ...travelForm, travelTime: buildHHMM(nh, parsed.m) }); }} style={{ width: "100%", fontFamily: mono, textAlign: "center" }} />
-                                <span style={{ color: INK_FAINT, fontWeight: 700 }}>:</span>
-                                <TextField type="number" min="0" max="59" placeholder="MM" value={pad2(parsed.m)} onChange={(e) => { const raw = e.target.value.replace(/[^0-9]/g, ""); const nm = raw === "" ? 0 : Math.min(59, Math.max(0, Number(raw))); setTravelForm({ ...travelForm, travelTime: buildHHMM(parsed.h, nm) }); }} style={{ width: "100%", fontFamily: mono, textAlign: "center" }} />
-                              </div>
-                            );
-                          })() : (() => {
-                            const parsed = parseHHMMSafe(travelForm.travelTime);
-                            const { h12, period } = to12hParts(parsed.h);
-                            return (
-                              <div style={{ display: "flex", gap: 5 }}>
-                                <TextField type="number" min="1" max="12" value={h12} onChange={(e) => { const nh12 = Math.min(12, Math.max(1, Number(e.target.value) || 1)); const h = from12hParts(nh12, period); setTravelForm({ ...travelForm, travelTime: buildHHMM(h, parsed.m) }); }} style={{ width: "100%", fontFamily: mono, textAlign: "center" }} />
-                                <TextField type="number" min="0" max="59" value={parsed.m} onChange={(e) => { const nm = Math.min(59, Math.max(0, Number(e.target.value) || 0)); setTravelForm({ ...travelForm, travelTime: buildHHMM(parsed.h, nm) }); }} style={{ width: "100%", fontFamily: mono, textAlign: "center" }} />
-                                <Select value={period} onChange={(e) => { const h = from12hParts(h12, e.target.value); setTravelForm({ ...travelForm, travelTime: buildHHMM(h, parsed.m) }); }} style={{ width: "90px" }}>
-                                  <option value="AM">AM</option>
-                                  <option value="PM">PM</option>
-                                </Select>
-                              </div>
-                            );
-                          })()}
+                          {travelTimeInputMode === "24h" ? (
+                            <Time24Input value={travelForm.travelTime} onChange={(v) => setTravelForm({ ...travelForm, travelTime: v })} style={{ fontFamily: mono }} />
+                          ) : (
+                            <Time12Input value={travelForm.travelTime} onChange={(v) => setTravelForm({ ...travelForm, travelTime: v })} style={{ fontFamily: mono }} />
+                          )}
                         </div>
                         <TextField type="number" placeholder="Amount" value={travelForm.amount} onChange={(e) => setTravelForm({ ...travelForm, amount: e.target.value })} style={{ fontFamily: mono }} />
                         <div>
