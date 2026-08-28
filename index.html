@@ -2603,148 +2603,165 @@ function LifeTracker() {
                       </div>
                     </button>
                     {expanded && cat.id === "trip" && (
-                      <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
-                        <Card>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {visibleTrips.map((t) => {
-                              const due = isTravelRelevantToday(t, today);
-                              const dayLabel = dayLabelFor(t.travelDate, today);
-                              const highlighted = dailyHighlightId === t.id;
-                              return (
-                                <div id={`daily-activity-${t.id}`} key={t.id} style={{ background: highlighted ? "rgba(0,113,227,0.10)" : PANEL_2, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : (due ? BRASS_DIM : LINE)}`, borderRadius: 10, padding: "9px 11px", transition: "background .3s ease, border-color .3s ease" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 16, color: INK, fontWeight: 700, marginBottom: 6 }}><TravelModeIcon mode={t.mode} size={19} color={BRASS} style={{ flexShrink: 0 }} /><span>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</span></div>
-
-                                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
-                                    {dayLabel && (
-                                      <span style={{ fontSize: 13, fontWeight: 700, color: "#FFFFFF", background: BRASS, borderRadius: 980, padding: "2px 8px" }}>{dayLabel}</span>
-                                    )}
-                                    <span style={{ fontSize: 13, fontWeight: 700, color: BRASS, background: "rgba(0,113,227,0.10)", borderRadius: 980, padding: "2px 8px" }}>{formatDMY(t.travelDate)}</span>
-                                    {t.travelTime && (
-                                      <span style={{ fontSize: 13, fontWeight: 700, color: TEAL, background: "rgba(52,199,89,0.12)", borderRadius: 980, padding: "2px 8px" }}>{fmtTimeString12(t.travelTime)} &middot; {timeOfDayLabel(t.travelTime)}</span>
-                                    )}
-                                    {t.amount > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: INK_DIM, background: PANEL, borderRadius: 980, padding: "2px 8px" }}>{inr(t.amount)}</span>}
-                                    {t.amount > 0 && (
-                                      <span style={{ fontSize: 13, fontWeight: 700, color: t.paymentStatus === "Already Paid" ? TEAL : CORAL, background: t.paymentStatus === "Already Paid" ? "rgba(52,199,89,0.12)" : "rgba(255,59,48,0.10)", borderRadius: 980, padding: "2px 8px" }}>
-                                        {t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}
-                                      </span>
-                                    )}
-                                    {due && <span style={{ fontSize: 13, fontWeight: 600, color: BRASS }}>Reminder active</span>}
+                      <div className="today-expand-enter" style={{ marginTop: 8, paddingTop: 2 }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {visibleTrips.map((t) => {
+                            const due = isTravelRelevantToday(t, today);
+                            const dayLabel = dayLabelFor(t.travelDate, today);
+                            const highlighted = dailyHighlightId === t.id;
+                            return (
+                              <div id={`daily-activity-${t.id}`} key={t.id} style={{ background: highlighted ? hexA(BRASS, 0.10) : PANEL, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : (due ? BRASS_DIM : LINE)}`, borderRadius: 18, padding: "14px 15px", boxShadow: CARD_SHADOW, transition: "background .3s ease, border-color .3s ease" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                                  <div style={{ width: 38, height: 38, borderRadius: 12, background: hexA(BRASS, darkMode ? 0.20 : 0.12), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                    <TravelModeIcon mode={t.mode} size={19} color={BRASS} />
                                   </div>
-
-                                  {t.bookingDetails && (
-                                    <div style={{ display: "flex", alignItems: "flex-start", gap: 6, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 8px", marginBottom: 8 }}>
-                                      <FileJson size={15} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 1 }} />
-                                      <div>
-                                        <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>Booking details</div>
-                                        <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.5, wordBreak: "break-word" }}>{t.bookingDetails}</div>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {(t.notes && t.notes.length > 0) && (() => {
-                                    const scheduledDay = today === t.travelDate;
-                                    return (
-                                      <div style={{ marginBottom: 8 }}>
-                                        <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Plan &amp; notes &middot; {t.notes.filter((n) => n.done).length}/{t.notes.length} done</div>
-                                        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                                          {t.notes.map((n) => (
-                                            <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 6, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 8px" }}>
-                                              <button
-                                                onClick={() => scheduledDay && toggleTravelNoteDone(t.id, n.id)}
-                                                disabled={!scheduledDay}
-                                                style={{ width: 22, height: 22, borderRadius: 5, border: `1.5px solid ${n.done ? TEAL : INK_FAINT}`, background: n.done ? TEAL : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: scheduledDay ? "pointer" : "default", opacity: scheduledDay ? 1 : 0.55, flexShrink: 0 }}
-                                              >
-                                                {n.done && <Check size={12} strokeWidth={3} color="#FFFFFF" />}
-                                              </button>
-                                              <span style={{ flex: 1, fontSize: 14, color: n.done ? INK_FAINT : INK, textDecoration: n.done ? "line-through" : "none", wordBreak: "break-word" }}>{n.text}</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                        {!scheduledDay && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 4 }}>Marking done is available on {formatDMY(t.travelDate)}</div>}
-                                      </div>
-                                    );
-                                  })()}
-
-                                  {today === t.travelDate ? (
-                                    <div style={{ display: "flex", gap: 6, width: "100%" }}>
-                                      {t.amount > 0 && t.paymentStatus !== "Already Paid" && !t.expenseLogged && <button onClick={() => logTravelExpense(t)} style={{ flex: 1, minWidth: 0, background: TEAL, border: "none", borderRadius: 8, padding: "7px 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Log expense</button>}
-                                      <button onClick={() => completeTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: BRASS, border: "none", borderRadius: 8, padding: "7px 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Done</button>
-                                      <button onClick={() => dismissTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, background: "rgba(255,59,48,0.12)", border: `1px solid ${CORAL}`, borderRadius: 8, padding: "7px 5px", color: CORAL, cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Dismiss</button>
-                                    </div>
-                                  ) : (
-                                    <div style={{ fontSize: 12, color: INK_FAINT, textAlign: "center", padding: "5px 0" }}>
-                                      {today < t.travelDate ? `Done / Dismiss available on ${formatDMY(t.travelDate)}` : "Travel date has passed \u2014 edit or delete from Categories"}
-                                    </div>
-                                  )}
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div style={{ fontSize: 16, color: INK, fontWeight: 750, lineHeight: 1.25 }}>{t.mode}</div>
+                                    <div style={{ fontSize: 13, color: INK_DIM, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.fromLocation} &rarr; {t.toLocation}</div>
+                                  </div>
                                 </div>
-                              );
-                            })}
-                          </div>
-                        </Card>
+
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                                  {dayLabel && (
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#FFFFFF", background: BRASS, borderRadius: 980, padding: "3px 9px" }}>{dayLabel}</span>
+                                  )}
+                                  <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS, 0.10), borderRadius: 980, padding: "3px 9px" }}>{formatDMY(t.travelDate)}</span>
+                                  {t.travelTime && (
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: TEAL, background: hexA(TEAL, 0.12), borderRadius: 980, padding: "3px 9px" }}>{fmtTimeString12(t.travelTime)} &middot; {timeOfDayLabel(t.travelTime)}</span>
+                                  )}
+                                  {t.amount > 0 && <span style={{ fontSize: 12.5, fontWeight: 700, color: INK_DIM, background: PANEL_2, borderRadius: 980, padding: "3px 9px" }}>{inr(t.amount)}</span>}
+                                  {t.amount > 0 && (
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: t.paymentStatus === "Already Paid" ? TEAL : CORAL, background: t.paymentStatus === "Already Paid" ? hexA(TEAL, 0.12) : hexA(CORAL, 0.10), borderRadius: 980, padding: "3px 9px" }}>
+                                      {t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}
+                                    </span>
+                                  )}
+                                  {due && <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, display: "inline-flex", alignItems: "center", gap: 3 }}><Bell size={11} /> Active</span>}
+                                </div>
+
+                                {t.bookingDetails && (
+                                  <div style={{ display: "flex", alignItems: "flex-start", gap: 7, background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 12, padding: "9px 10px", marginBottom: 10 }}>
+                                    <FileJson size={15} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 1 }} />
+                                    <div>
+                                      <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>Booking details</div>
+                                      <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.5, wordBreak: "break-word" }}>{t.bookingDetails}</div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {(t.notes && t.notes.length > 0) && (() => {
+                                  const scheduledDay = today === t.travelDate;
+                                  return (
+                                    <div style={{ marginBottom: 10 }}>
+                                      <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 5 }}>Plan &amp; notes &middot; {t.notes.filter((n) => n.done).length}/{t.notes.length} done</div>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                        {t.notes.map((n) => (
+                                          <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 8, background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 10, padding: "7px 9px" }}>
+                                            <button
+                                              onClick={() => scheduledDay && toggleTravelNoteDone(t.id, n.id)}
+                                              disabled={!scheduledDay}
+                                              style={{ width: 22, height: 22, borderRadius: 6, border: `1.5px solid ${n.done ? TEAL : INK_FAINT}`, background: n.done ? TEAL : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: scheduledDay ? "pointer" : "default", opacity: scheduledDay ? 1 : 0.55, flexShrink: 0 }}
+                                            >
+                                              {n.done && <Check size={12} strokeWidth={3} color="#FFFFFF" />}
+                                            </button>
+                                            <span style={{ flex: 1, fontSize: 14, color: n.done ? INK_FAINT : INK, textDecoration: n.done ? "line-through" : "none", wordBreak: "break-word" }}>{n.text}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      {!scheduledDay && <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 5 }}>Marking done is available on {formatDMY(t.travelDate)}</div>}
+                                    </div>
+                                  );
+                                })()}
+
+                                {today === t.travelDate ? (
+                                  <div style={{ display: "flex", gap: 7, width: "100%" }}>
+                                    {t.amount > 0 && t.paymentStatus !== "Already Paid" && !t.expenseLogged && <button onClick={() => logTravelExpense(t)} style={{ flex: 1, minWidth: 0, minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, background: TEAL, border: "none", borderRadius: 11, padding: "0 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}><Wallet size={14} /> Log</button>}
+                                    <button onClick={() => completeTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, background: BRASS, border: "none", borderRadius: 11, padding: "0 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}><Check size={14} /> Done</button>
+                                    <button onClick={() => dismissTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, minHeight: 40, background: hexA(CORAL, 0.10), border: `1px solid ${CORAL}`, borderRadius: 11, padding: "0 5px", color: CORAL, cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}>Dismiss</button>
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: 12, color: INK_FAINT, textAlign: "center", padding: "5px 0" }}>
+                                    {today < t.travelDate ? `Done / Dismiss available on ${formatDMY(t.travelDate)}` : "Travel date has passed \u2014 edit or delete from Categories"}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                     {expanded && cat.id === "myday" && (
-                      <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
-                        <Card>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {visibleMyDay.map((e) => {
-                              const isRecurring = e.repeatDays && e.repeatDays.length > 0;
-                              const occursToday = myDayEventOccursOn(e, today);
-                              const dLabel = !isRecurring ? dayLabelForExt(e.eventDate, today) : "";
-                              const highlighted = dailyHighlightId === e.id;
-                              return (
-                                <div id={`daily-activity-${e.id}`} key={e.id} style={{ background: highlighted ? "rgba(0,113,227,0.10)" : PANEL_2, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : (occursToday ? BRASS_DIM : LINE)}`, borderRadius: 10, padding: "9px 11px", transition: "background .3s ease, border-color .3s ease" }}>
-                                  <div style={{ fontSize: 16, color: INK, fontWeight: 700, marginBottom: 6 }}>{e.type} &middot; {e.title}</div>
-
-                                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
-                                    {dLabel && (
-                                      <span style={{ fontSize: 13, fontWeight: 700, color: "#FFFFFF", background: dLabel === "Yesterday" ? CORAL : BRASS, borderRadius: 980, padding: "2px 8px" }}>{dLabel}</span>
-                                    )}
-                                    {isRecurring ? (
-                                      <span style={{ fontSize: 13, fontWeight: 700, color: BRASS, background: "rgba(0,113,227,0.10)", borderRadius: 980, padding: "2px 8px" }}>Repeats {e.repeatDays.join(", ")}</span>
-                                    ) : (
-                                      <span style={{ fontSize: 13, fontWeight: 700, color: BRASS, background: "rgba(0,113,227,0.10)", borderRadius: 980, padding: "2px 8px" }}>{formatDMY(e.eventDate)}</span>
-                                    )}
-                                    {e.eventTime && (
-                                      <span style={{ fontSize: 13, fontWeight: 700, color: TEAL, background: "rgba(52,199,89,0.12)", borderRadius: 980, padding: "2px 8px" }}>{fmtTimeString12(e.eventTime)} &middot; {timeOfDayLabel(e.eventTime)}</span>
-                                    )}
-                                    {e.location && <span style={{ fontSize: 13, fontWeight: 700, color: INK_DIM, background: PANEL, borderRadius: 980, padding: "2px 8px" }}>{e.location}</span>}
-                                    {occursToday && e.reminderEnabled && <span style={{ fontSize: 13, fontWeight: 600, color: BRASS }}>Reminder active</span>}
+                      <div className="today-expand-enter" style={{ marginTop: 8, paddingTop: 2 }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {visibleMyDay.map((e) => {
+                            const isRecurring = e.repeatDays && e.repeatDays.length > 0;
+                            const occursToday = myDayEventOccursOn(e, today);
+                            const dLabel = !isRecurring ? dayLabelForExt(e.eventDate, today) : "";
+                            const highlighted = dailyHighlightId === e.id;
+                            return (
+                              <div id={`daily-activity-${e.id}`} key={e.id} style={{ background: highlighted ? hexA(BRASS, 0.10) : PANEL, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : (occursToday ? BRASS_DIM : LINE)}`, borderRadius: 18, padding: "14px 15px", boxShadow: CARD_SHADOW, transition: "background .3s ease, border-color .3s ease" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                                  <div style={{ width: 38, height: 38, borderRadius: 12, background: hexA(BRASS, darkMode ? 0.20 : 0.12), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                    <Users size={18} color={BRASS} />
                                   </div>
-
-                                  {e.notes && (
-                                    <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.5, wordBreak: "break-word", marginBottom: 8 }}>{e.notes}</div>
-                                  )}
-
-                                  <div style={{ display: "flex", gap: 6, width: "100%" }}>
-                                    <button onClick={() => toggleMyDayCompleted(e.id)} style={{ flex: 1, minWidth: 0, background: BRASS, border: "none", borderRadius: 8, padding: "7px 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Done</button>
-                                    <button onClick={() => { openEditMyDay(e); setCatTab("myday"); setPage("categories"); }} style={{ flex: 1, minWidth: 0, background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "7px 5px", color: INK_DIM, cursor: "pointer", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><Pencil size={13} /> Edit</button>
-                                    <button onClick={() => deleteMyDayEvent(e.id)} style={{ flex: 1, minWidth: 0, background: "rgba(255,59,48,0.12)", border: `1px solid ${CORAL}`, borderRadius: 8, padding: "7px 5px", color: CORAL, cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Delete</button>
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div style={{ fontSize: 12, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em" }}>{e.type}</div>
+                                    <div style={{ fontSize: 16, color: INK, fontWeight: 750, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.title}</div>
                                   </div>
                                 </div>
-                              );
-                            })}
-                            {visibleMyDay.length === 0 && <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "10px 0" }}>Nothing planned. Add a meeting or activity from Planner.</div>}
-                          </div>
-                        </Card>
+
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                                  {dLabel && (
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#FFFFFF", background: dLabel === "Yesterday" ? CORAL : BRASS, borderRadius: 980, padding: "3px 9px" }}>{dLabel}</span>
+                                  )}
+                                  {isRecurring ? (
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS, 0.10), borderRadius: 980, padding: "3px 9px" }}>Repeats {e.repeatDays.join(", ")}</span>
+                                  ) : (
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS, 0.10), borderRadius: 980, padding: "3px 9px" }}>{formatDMY(e.eventDate)}</span>
+                                  )}
+                                  {e.eventTime && (
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: TEAL, background: hexA(TEAL, 0.12), borderRadius: 980, padding: "3px 9px" }}>{fmtTimeString12(e.eventTime)} &middot; {timeOfDayLabel(e.eventTime)}</span>
+                                  )}
+                                  {e.location && <span style={{ fontSize: 12.5, fontWeight: 700, color: INK_DIM, background: PANEL_2, borderRadius: 980, padding: "3px 9px" }}>{e.location}</span>}
+                                  {occursToday && e.reminderEnabled && <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, display: "inline-flex", alignItems: "center", gap: 3 }}><Bell size={11} /> Active</span>}
+                                </div>
+
+                                {e.notes && (
+                                  <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.5, wordBreak: "break-word", marginBottom: 10, background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 12, padding: "9px 10px" }}>{e.notes}</div>
+                                )}
+
+                                <div style={{ display: "flex", gap: 7, width: "100%" }}>
+                                  <button onClick={() => toggleMyDayCompleted(e.id)} style={{ flex: 1, minWidth: 0, minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, background: BRASS, border: "none", borderRadius: 11, padding: "0 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}><Check size={14} /> Done</button>
+                                  <button onClick={() => { openEditMyDay(e); setCatTab("myday"); setPage("categories"); }} style={{ flex: 1, minWidth: 0, minHeight: 40, background: "transparent", border: `1px solid ${LINE}`, borderRadius: 11, padding: "0 5px", color: INK_DIM, cursor: "pointer", fontSize: 13.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><Pencil size={13} /> Edit</button>
+                                  <button onClick={() => deleteMyDayEvent(e.id)} style={{ flex: 1, minWidth: 0, minHeight: 40, background: hexA(CORAL, 0.10), border: `1px solid ${CORAL}`, borderRadius: 11, padding: "0 5px", color: CORAL, cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}>Delete</button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {visibleMyDay.length === 0 && <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "10px 0" }}>Nothing planned. Add a meeting or activity from Planner.</div>}
+                        </div>
                       </div>
                     )}
                     {expanded && cat.id === "shopping" && (
-                      <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
-                        <Card>
+                      <div className="today-expand-enter" style={{ marginTop: 8, paddingTop: 2 }}>
+                        <Card style={{ borderRadius: 20 }}>
                           <SectionLabel>Today's shopping reminders</SectionLabel>
                           {todaysShoppingLists.length === 0 ? (
-                            <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "12px 0" }}>No shopping reminder for today.</div>
+                            <div style={{ textAlign: "center", padding: "20px 6px 6px" }}>
+                              <div style={{ width: 44, height: 44, borderRadius: "50%", background: hexA(BRASS, 0.12), display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px" }}>
+                                <ShoppingBag size={22} color={BRASS} />
+                              </div>
+                              <div style={{ color: INK_FAINT, fontSize: 14 }}>No shopping reminder for today.</div>
+                            </div>
                           ) : (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                               {todaysShoppingLists.map((l) => {
                                 const open = expandedDailyShoppingId === l.id;
                                 const total = shoppingListTotal(l);
                                 return (
-                                  <div id={`daily-activity-${l.id}`} key={l.id} onClick={() => setExpandedDailyShoppingId(open ? null : l.id)} style={{ background: PANEL_2, border: `1px solid ${open ? BRASS : BRASS_DIM}`, borderRadius: 16, padding: open ? "13px 12px" : "11px 12px", cursor: "pointer", transition: "all .24s ease", boxShadow: open ? "0 10px 28px rgba(20, 30, 45, .06)" : "none" }}>
+                                  <div id={`daily-activity-${l.id}`} key={l.id} onClick={() => setExpandedDailyShoppingId(open ? null : l.id)} style={{ background: PANEL_2, border: `1px solid ${open ? BRASS : BRASS_DIM}`, borderRadius: 18, padding: open ? "13px 12px" : "11px 12px", cursor: "pointer", transition: "all .24s ease", boxShadow: open ? "0 10px 28px rgba(20, 30, 45, .08)" : "0 1px 2px rgba(20,30,45,.04), 0 3px 10px rgba(20,30,45,.05)" }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
                                       <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
-                                        <div style={{ width: open ? 62 : 48, height: open ? 62 : 48, borderRadius: 18, background: "rgba(0,113,227,.08)", display: "grid", placeItems: "center", flexShrink: 0, transition: "all .24s ease" }}><ShoppingBag size={open ? 31 : 24} color={BRASS} /></div>
+                                        <div style={{ width: open ? 62 : 48, height: open ? 62 : 48, borderRadius: 18, background: hexA(BRASS, darkMode ? 0.20 : 0.10), display: "grid", placeItems: "center", flexShrink: 0, transition: "all .24s ease" }}><ShoppingBag size={open ? 31 : 24} color={BRASS} /></div>
                                         <div style={{ minWidth: 0 }}>
                                           <div style={{ fontSize: open ? 20 : 16, fontWeight: 700, color: INK, lineHeight: 1.15 }}>{l.shopName || "Shopping"}</div>
                                           <div style={{ fontSize: open ? 14 : 12, color: INK_DIM, marginTop: open ? 6 : 4, display: "flex", alignItems: "center", gap: 5 }}><Bell size={open ? 18 : 13} color={BRASS} /> Reminder today{l.reminderTime ? ` · ${fmtTimeString12(l.reminderTime)}` : ""}</div>
@@ -2788,28 +2805,28 @@ function LifeTracker() {
                       return (
                         <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
                           {todaysRepaymentReminders.length > 0 && (
-                            <Card style={{ marginBottom: 8 }}>
+                            <Card style={{ marginBottom: 8, borderRadius: 20 }}>
                               <SectionLabel>Repayments due</SectionLabel>
-                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                                 {todaysRepaymentReminders.map((r) => {
                                   const cls = repaymentCategoryClass(r.category);
                                   const variable = REPAYMENT_VARIABLE_CATEGORIES.includes(r.category);
                                   const overdue = r.dueDate && r.dueDate < today;
                                   const highlighted = dailyHighlightId === r.id;
                                   return (
-                                    <div id={`daily-activity-${r.id}`} key={r.id} style={{ background: highlighted ? "rgba(0,113,227,0.10)" : PANEL_2, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : LINE}`, borderRadius: 8, padding: "8px 9px", transition: "background .3s ease, border-color .3s ease" }}>
+                                    <div id={`daily-activity-${r.id}`} key={r.id} style={{ background: highlighted ? hexA(BRASS, 0.10) : PANEL_2, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : (overdue ? CORAL : LINE)}`, borderRadius: 14, padding: "10px 12px", transition: "background .3s ease, border-color .3s ease" }}>
                                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
                                         <div style={{ flex: 1 }}>
-                                          <div style={{ fontSize: 15, color: INK }}>{r.name || r.category}</div>
-                                          <div style={{ fontSize: 13, color: overdue ? CORAL : INK_FAINT, marginTop: 2 }}>{r.category} &middot; due {formatDMY(r.dueDate)}{overdue ? " \u00b7 overdue" : ""}</div>
+                                          <div style={{ fontSize: 15, color: INK, fontWeight: 650 }}>{r.name || r.category}</div>
+                                          <div style={{ fontSize: 12.5, color: overdue ? CORAL : INK_FAINT, marginTop: 2, fontWeight: overdue ? 700 : 400 }}>{r.category} &middot; due {formatDMY(r.dueDate)}{overdue ? " \u00b7 overdue" : ""}</div>
                                         </div>
-                                        {!variable && <span style={{ fontFamily: mono, fontSize: 16, color: CORAL, flexShrink: 0 }}>{inr(r.amount)}</span>}
+                                        {!variable && <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: CORAL, flexShrink: 0 }}>{inr(r.amount)}</span>}
                                       </div>
                                       {variable ? (
-                                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
                                           <div style={{ display: "flex", gap: 6 }}>
                                             <TextField type="number" placeholder={`Amount (last ${inr(r.amount)})`} value={getFlow(`repay-${r.id}`).amount || ""} onChange={(e) => setFlow(`repay-${r.id}`, { amount: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
-                                            <button onClick={() => payRepaymentQuick(r)} style={{ background: TEAL, border: "none", borderRadius: 7, padding: "0 12px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>Pay</button>
+                                            <button onClick={() => payRepaymentQuick(r)} style={{ background: TEAL, border: "none", borderRadius: 10, padding: "0 14px", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Pay</button>
                                           </div>
                                           {cls === "recharge" && (
                                             <div style={{ display: "flex", gap: 6 }}>
@@ -2824,7 +2841,7 @@ function LifeTracker() {
                                           )}
                                         </div>
                                       ) : (
-                                        <button onClick={() => payRepaymentQuick(r)} style={{ width: "100%", marginTop: 6, background: TEAL, border: "none", borderRadius: 7, padding: "6px 0", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>{cls === "loan" ? "Pay EMI" : "Pay"}</button>
+                                        <button onClick={() => payRepaymentQuick(r)} style={{ width: "100%", marginTop: 8, minHeight: 38, background: TEAL, border: "none", borderRadius: 10, padding: "6px 0", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>{cls === "loan" ? "Pay EMI" : "Pay"}</button>
                                       )}
                                     </div>
                                   );
@@ -2833,88 +2850,88 @@ function LifeTracker() {
                             </Card>
                           )}
                           {shoppingLists.some((l) => l.status === "done") && (
-                            <Card style={{ marginBottom: 8 }}>
+                            <Card style={{ marginBottom: 8, borderRadius: 20 }}>
                               <SectionLabel>Shopping lists ready to pay</SectionLabel>
-                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                                 {shoppingLists.filter((l) => l.status === "done").map((l) => (
-                                  <div key={l.id} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 8, padding: "8px 9px" }}>
+                                  <div key={l.id} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 14, padding: "10px 12px" }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
                                       <div style={{ flex: 1 }}>
-                                        <div style={{ fontSize: 15, color: INK }}>{l.shopName}</div>
-                                        <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 2 }}>{l.items.length} item{l.items.length === 1 ? "" : "s"}{l.location ? ` \u00b7 ${l.location}` : ""}</div>
+                                        <div style={{ fontSize: 15, color: INK, fontWeight: 650 }}>{l.shopName}</div>
+                                        <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 2 }}>{l.items.length} item{l.items.length === 1 ? "" : "s"}{l.location ? ` \u00b7 ${l.location}` : ""}</div>
                                       </div>
-                                      <span style={{ fontFamily: mono, fontSize: 16, color: CORAL, flexShrink: 0 }}>{inr(shoppingListTotal(l))}</span>
+                                      <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: CORAL, flexShrink: 0 }}>{inr(shoppingListTotal(l))}</span>
                                     </div>
-                                    <button onClick={() => payShoppingList(l)} style={{ width: "100%", marginTop: 6, background: TEAL, border: "none", borderRadius: 7, padding: "6px 0", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>Pay</button>
+                                    <button onClick={() => payShoppingList(l)} style={{ width: "100%", marginTop: 8, minHeight: 38, background: TEAL, border: "none", borderRadius: 10, padding: "6px 0", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Pay</button>
                                   </div>
                                 ))}
                               </div>
                             </Card>
                           )}
-                          <Card style={{ marginBottom: 8 }}>
+                          <Card style={{ marginBottom: 8, borderRadius: 20 }}>
                             <SectionLabel>Log an expense</SectionLabel>
                             <div>
-                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 6 }}>Category</div>
-                              <div className="no-scrollbar" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
+                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 7, fontWeight: 600 }}>Category</div>
+                              <div className="no-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
                                 {groupKeys.map((g) => {
                                   const GIcon = EXPENSE_GROUP_ICON[g] || Receipt;
                                   const sel = activeGroup === g;
                                   return (
-                                    <button key={g} onClick={() => setFlow("dailyExpense", { group: g, sub: null })} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 58 }}>
-                                      <div style={{ width: 44, height: 44, borderRadius: 10, background: sel ? "rgba(0,113,227,0.16)" : PANEL_2, border: `1.5px solid ${sel ? BRASS : LINE}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                        <GIcon size={18} color={sel ? BRASS : INK_DIM} />
+                                    <button key={g} onClick={() => setFlow("dailyExpense", { group: g, sub: null })} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 60 }}>
+                                      <div style={{ width: 46, height: 46, borderRadius: 13, background: sel ? hexA(BRASS, darkMode ? 0.22 : 0.14) : PANEL_2, border: `1.5px solid ${sel ? BRASS : LINE}`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: sel ? `0 3px 10px ${hexA(BRASS, 0.18)}` : "none", transition: "all .18s ease" }}>
+                                        <GIcon size={19} color={sel ? BRASS : INK_DIM} />
                                       </div>
-                                      <span style={{ fontSize: 11, color: sel ? BRASS : INK_FAINT, whiteSpace: "nowrap" }}>{g}</span>
+                                      <span style={{ fontSize: 11, fontWeight: sel ? 700 : 500, color: sel ? BRASS : INK_FAINT, whiteSpace: "nowrap" }}>{g}</span>
                                     </button>
                                   );
                                 })}
                               </div>
 
                               {subOptions.length > 0 && (
-                                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 9 }}>
+                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 11 }}>
                                   {subOptions.map((s) => (
                                     <ChipButton key={s} label={s} active={activeSub === s} onClick={() => setFlow("dailyExpense", { sub: s })} />
                                   ))}
                                 </div>
                               )}
 
-                              <div style={{ textAlign: "center", padding: "14px 0 3px", borderTop: `1px solid ${LINE}`, marginTop: 10 }}>
-                                <div style={{ fontSize: 11, color: INK_FAINT, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>Amount</div>
+                              <div style={{ textAlign: "center", padding: "16px 0 4px", borderTop: `1px solid ${LINE}`, marginTop: 12, background: hexA(BRASS, darkMode ? 0.08 : 0.05), borderRadius: 14, marginLeft: -2, marginRight: -2 }}>
+                                <div style={{ fontSize: 11, color: INK_FAINT, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3, fontWeight: 700 }}>Amount</div>
                                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 3 }}>
                                   <span style={{ fontFamily: mono, fontSize: 18, color: BRASS_DIM }}>&#8377;</span>
-                                  <input type="number" inputMode="decimal" placeholder="0" value={flow.amount || ""} onChange={(e) => setFlow("dailyExpense", { amount: e.target.value })} style={{ background: "transparent", border: "none", outline: "none", textAlign: "center", color: BRASS, fontFamily: mono, fontSize: 28, fontWeight: 600, width: 140 }} />
+                                  <input type="number" inputMode="decimal" placeholder="0" value={flow.amount || ""} onChange={(e) => setFlow("dailyExpense", { amount: e.target.value })} style={{ background: "transparent", border: "none", outline: "none", textAlign: "center", color: BRASS, fontFamily: mono, fontSize: 30, fontWeight: 700, width: 140 }} />
                                 </div>
                               </div>
 
-                              <div style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "wrap" }}>
+                              <div style={{ display: "flex", gap: 7, marginTop: 11, flexWrap: "wrap" }}>
                                 <TextField placeholder="Vendor (optional)" value={flow.vendor || ""} onChange={(e) => setFlow("dailyExpense", { vendor: e.target.value })} style={{ flex: "1 1 140px" }} />
                                 <TextField placeholder="Remarks (optional)" value={flow.remarks || ""} onChange={(e) => setFlow("dailyExpense", { remarks: e.target.value })} style={{ flex: "1 1 140px" }} />
                               </div>
 
-                              <div style={{ marginTop: 9 }}>
+                              <div style={{ marginTop: 11 }}>
                                 <ActionButton onClick={() => canLog && confirmExpense({ id: "dailyExpense", groups: DAILY_EXPENSE_GROUPS })} label="Save expense" icon={Check} tone={canLog ? TEAL : LINE} big />
                               </div>
                             </div>
                           </Card>
-                          <Card>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                          <Card style={{ borderRadius: 20 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
                               <SectionLabel>Today</SectionLabel>
-                              <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 600, color: todaysExpenseTotal > 0 ? CORAL : INK_FAINT }}>{inr(todaysExpenseTotal)}</span>
+                              <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: todaysExpenseTotal > 0 ? CORAL : INK_FAINT }}>{inr(todaysExpenseTotal)}</span>
                             </div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                               {todayLog.expenses.length === 0 && <span style={{ color: INK_FAINT, fontSize: 14 }}>Nothing logged yet.</span>}
                               {[...todayLog.expenses].reverse().map((e) => {
                                 const EIcon = EXPENSE_GROUP_ICON[e.group] || Receipt;
                                 return (
-                                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 8px" }}>
-                                    <div style={{ width: 30, height: 30, borderRadius: 8, background: PANEL, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 9, background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 12, padding: "8px 10px" }}>
+                                    <div style={{ width: 32, height: 32, borderRadius: 9, background: PANEL, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                       <EIcon size={15} color={INK_DIM} />
                                     </div>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{ fontSize: 14, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.subcategory}{e.vendor ? ` \u00b7 ${e.vendor}` : ""}</div>
                                       <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 1 }}>{fmtTime(e.time)}</div>
                                     </div>
-                                    <span style={{ fontFamily: mono, fontSize: 15, color: CORAL, flexShrink: 0 }}>{inr(e.amount)}</span>
+                                    <span style={{ fontFamily: mono, fontSize: 15, fontWeight: 700, color: CORAL, flexShrink: 0 }}>{inr(e.amount)}</span>
                                     <button onClick={() => deleteExpense(e.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer", flexShrink: 0 }}><Trash2 size={14} /></button>
                                   </div>
                                 );
