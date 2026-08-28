@@ -2174,10 +2174,40 @@ function LifeTracker() {
         const completedActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
         const totalActivities = validItems.filter((i) => i.type !== "interval").length;
         const todayExpenses = todayLog.expenses.reduce((sum, e) => sum + e.amount, 0);
-        // Exact percentage (to 1 decimal place when not a whole number) strictly from completedActivities / totalActivities,
-        // where totalActivities is only activities actually scheduled for today (interval-type excluded, as they're
-        // ongoing rather than "completed"). progressPercent (rounded) is used only for the bar's visual width.
-        const progressPercentExact = totalActivities > 0 ? (completedActivities / totalActivities) * 100 : 0;
+        // Timing-aware credit for a single completed activity, in [0, 1]:
+        //  - Not done yet -> 0 credit.
+        //  - No scheduledTime (nothing to be "on time" against) -> full credit once done.
+        //  - Done within the same 5-minute grace window used elsewhere (timingStatus) counts as on time -> full credit.
+        //  - Done later than that -> credit decays linearly from 1 down to 0 over DECAY_WINDOW_MIN minutes
+        //    past the grace window, so a task completed only slightly late still contributes most of its weight,
+        //    while one finished very late contributes little to nothing.
+        //  - Done early -> always full credit (being ahead of schedule is never penalized).
+        const GRACE_MIN = 5;
+        const DECAY_WINDOW_MIN = 120;
+        const activityCredit = (item) => {
+          const rec = field(item.id);
+          if (rec.status !== "done") return 0;
+          if (!item.scheduledTime) return 1;
+          // Completion timestamp: instant activities log it in rec.time, duration activities in rec.endTime
+          // (falling back to the other field / startTime if one wasn't set for some reason).
+          const completedIso = rec.time || rec.endTime || rec.startTime;
+          if (!completedIso) return 1;
+          const completedDate = new Date(completedIso);
+          if (isNaN(completedDate.getTime())) return 1;
+          const actualMins = completedDate.getHours() * 60 + completedDate.getMinutes() + completedDate.getSeconds() / 60;
+          const { h, m } = parseHHMMSafe(item.scheduledTime);
+          const scheduledMins = h * 60 + m;
+          const lateByMin = actualMins - scheduledMins;
+          if (lateByMin <= GRACE_MIN) return 1;
+          const overBy = lateByMin - GRACE_MIN;
+          return Math.max(0, 1 - overBy / DECAY_WINDOW_MIN);
+        };
+        // Exact percentage (to 1 decimal place when not a whole number) computed from the sum of per-activity
+        // timing credits / totalActivities, where totalActivities is only activities actually scheduled for today
+        // (interval-type excluded, as they're ongoing rather than "completed"). progressPercent (rounded) is used
+        // only for the bar's visual width.
+        const totalCredit = validItems.filter((i) => i.type !== "interval").reduce((sum, i) => sum + activityCredit(i), 0);
+        const progressPercentExact = totalActivities > 0 ? (totalCredit / totalActivities) * 100 : 0;
         const progressPercent = Math.round(progressPercentExact);
         const progressPercentLabel = totalActivities === 0 ? "0" : Number.isInteger(progressPercentExact) ? String(progressPercentExact) : progressPercentExact.toFixed(1);
         const currentHour = new Date().getHours();
