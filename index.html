@@ -1197,21 +1197,26 @@ function LifeTracker() {
     if (!loaded) return;
     if (!expandedDailyCategory || expandedDailyCategory === "trip") return;
     const itemsForCat = validItems.filter((i) => i.category === expandedDailyCategory).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
-    if (activeTab && itemsForCat.some((i) => i.id === activeTab)) return;
-    const order = itemsForCat.filter((i) => i.type === "instant" || i.type === "duration");
-    const firstPending = order.find((i) => !(field(i.id).status === "done"));
-    setActiveTab((firstPending || itemsForCat[0] || {}).id || null);
+    const isPending = (i) => i.type === "interval" || field(i.id).status !== "done";
+    const pendingItems = itemsForCat.filter(isPending);
+    if (activeTab && pendingItems.some((i) => i.id === activeTab)) return;
+    const order = pendingItems.filter((i) => i.type === "instant" || i.type === "duration");
+    const firstPending = order[0];
+    setActiveTab((firstPending || pendingItems[0] || {}).id || null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, expandedDailyCategory, validItems.length]);
+  }, [loaded, expandedDailyCategory, validItems.length, dailyLogs[today]]);
 
   const updateField = (id, patch) => {
     setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, [id]: { ...(log[id] || {}), ...patch } } }; });
   };
   const nextValidAfter = (id) => {
     const itemsForCat = validItems.filter((i) => i.category === expandedDailyCategory).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
+    const isPending = (i) => i.type === "interval" || field(i.id).status !== "done";
     const idx = itemsForCat.findIndex((i) => i.id === id);
-    if (idx === -1 || idx === itemsForCat.length - 1) return id;
-    return itemsForCat[idx + 1].id;
+    const after = itemsForCat.slice(idx + 1).filter(isPending);
+    if (after.length) return after[0].id;
+    const anyPending = itemsForCat.filter((i) => i.id !== id && isPending(i));
+    return anyPending.length ? anyPending[0].id : id;
   };
   const goNext = (id) => setActiveTab(nextValidAfter(id));
   const pressInstant = (id, hhmm) => {
@@ -2179,7 +2184,7 @@ function LifeTracker() {
           .sort((a, b) => String(a.scheduledTime).localeCompare(String(b.scheduledTime)));
         const upcomingToday = incompleteScheduled.filter((i) => String(i.scheduledTime) >= nowHHMM);
         const overdueToday = incompleteScheduled.filter((i) => String(i.scheduledTime) < nowHHMM).reverse();
-        const nextActivity = upcomingToday[0] || overdueToday[0] || null;
+        const nextActivities = [...upcomingToday, ...overdueToday].slice(0, 4);
         const statCards = [
           { key: "completed", label: "Completed", sub: "activities", value: `${completedActivities}/${totalActivities}`, icon: CheckCircle2, fg: TEAL, bg: "rgba(52,199,89,0.14)" },
           { key: "expenses", label: "Expenses", sub: "today", value: inr(todayExpenses), icon: Wallet, fg: "#8B5CF6", bg: "rgba(139,92,246,0.14)" },
@@ -2251,35 +2256,37 @@ function LifeTracker() {
             </Card>
           )}
 
-          {nextActivity && (
+          {nextActivities.length > 0 && (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
                 <SectionLabel style={{ marginBottom: 0 }}>Next Up</SectionLabel>
                 <button onClick={() => setPage("daily")} style={{ background: "transparent", border: "none", padding: 0, fontSize: 13, fontWeight: 700, color: BRASS, cursor: "pointer" }}>View all</button>
               </div>
               <Card style={{ marginBottom: 16, padding: "4px 14px" }}>
-                {(() => {
-                  const catTone = (nextActivity.category === "career" || nextActivity.category === "trip") ? { fg: "#5A20B8", bg: "rgba(90,32,184,0.12)" }
-                    : (nextActivity.category === "activity" || nextActivity.category === "health") ? { fg: "#159957", bg: "rgba(21,153,87,0.12)" }
+                {nextActivities.map((act, idx) => {
+                  const catTone = (act.category === "career" || act.category === "trip") ? { fg: "#5A20B8", bg: "rgba(90,32,184,0.12)" }
+                    : (act.category === "activity" || act.category === "health") ? { fg: "#159957", bg: "rgba(21,153,87,0.12)" }
                     : { fg: BRASS, bg: "rgba(0,113,227,0.10)" };
-                  const NextIcon = ICON_MAP[nextActivity.icon] || Clock;
+                  const ActIcon = ICON_MAP[act.icon] || Clock;
+                  const overdue = String(act.scheduledTime) < nowHHMM;
                   return (
                     <button
-                      onClick={() => { setExpandedDailyCategory(nextActivity.category); setActiveTab(nextActivity.id); setPage("daily"); }}
-                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", background: "transparent", border: "none", color: INK, textAlign: "left", cursor: "pointer", width: "100%" }}
+                      key={act.id}
+                      onClick={() => { setExpandedDailyCategory(act.category); setActiveTab(act.id); setPage("daily"); }}
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", background: "transparent", border: "none", borderTop: idx > 0 ? `1px solid ${LINE}` : "none", color: INK, textAlign: "left", cursor: "pointer", width: "100%" }}
                     >
                       <div style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 10, background: catTone.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <NextIcon size={19} color={catTone.fg} />
+                        <ActIcon size={19} color={catTone.fg} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 15, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nextActivity.name}</div>
-                        <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Tap to open in Today</div>
+                        <div style={{ fontSize: 15, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.name}</div>
+                        <div style={{ fontSize: 12, color: overdue ? CORAL : INK_DIM, marginTop: 2 }}>{overdue ? "Overdue \u00b7 tap to open" : "Tap to open in Today"}</div>
                       </div>
-                      <div style={{ flexShrink: 0, fontSize: 14, color: BRASS, fontFamily: mono, fontWeight: 700 }}>{fmtTimeString12(nextActivity.scheduledTime)}</div>
+                      <div style={{ flexShrink: 0, fontSize: 14, color: overdue ? CORAL : BRASS, fontFamily: mono, fontWeight: 700 }}>{fmtTimeString12(act.scheduledTime)}</div>
                       <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
                     </button>
                   );
-                })()}
+                })}
               </Card>
             </>
           )}
@@ -2351,6 +2358,9 @@ function LifeTracker() {
                 const CatIcon = cat.icon;
                 const expanded = expandedDailyCategory === cat.id;
                 const itemsForCat = validItems.filter((i) => i.category === cat.id).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
+                // Only remaining (not-yet-done) routines are shown in today's list; completed instant/duration
+                // items drop off once marked done. Interval-type items (recurring) always stay visible.
+                const pendingItemsForCat = itemsForCat.filter((i) => i.type === "interval" || field(i.id).status !== "done");
                 const todaysExpenseCount = todayLog.expenses.length;
                 const todaysExpenseTotal = todayLog.expenses.reduce((s, e) => s + e.amount, 0);
                 const visibleTrips = todaysTravelPlans;
@@ -2700,10 +2710,21 @@ function LifeTracker() {
                         </div>
                       );
                     })()}
-                    {expanded && cat.id !== "trip" && cat.id !== "expense" && (
+                    {expanded && cat.id !== "trip" && cat.id !== "expense" && pendingItemsForCat.length === 0 && (
+                      <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
+                        <Card style={{ textAlign: "center", padding: "26px 18px" }}>
+                          <div style={{ width: 52, height: 52, borderRadius: "50%", background: "rgba(52,199,89,0.12)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                            <Check size={26} color={TEAL} strokeWidth={2.6} />
+                          </div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: INK, marginBottom: 4 }}>All done for today</div>
+                          <div style={{ fontSize: 13, color: INK_FAINT }}>Nothing left to track here.</div>
+                        </Card>
+                      </div>
+                    )}
+                    {expanded && cat.id !== "trip" && cat.id !== "expense" && pendingItemsForCat.length > 0 && (
                       <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
               <div className="no-scrollbar" style={{ display: "flex", gap: 8, paddingBottom: 14, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                {itemsForCat.map((item) => {
+                {pendingItemsForCat.map((item) => {
                   const active = activeTab === item.id;
                   const done = (item.type === "instant" || item.type === "duration") && field(item.id).status === "done";
                   const due = item.type === "interval" && isIntervalDue(item, todayLog, now.getTime());
@@ -2744,7 +2765,7 @@ function LifeTracker() {
               </div>
 
               <div>
-                {itemsForCat.filter((i) => i.id === activeTab).map((item) => {
+                {pendingItemsForCat.filter((i) => i.id === activeTab).map((item) => {
                   const rec = field(item.id);
 
                   if (item.type === "instant") {
