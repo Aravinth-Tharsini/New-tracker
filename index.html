@@ -2693,6 +2693,12 @@ function LifeTracker() {
                                 <button onClick={() => { setInstantTimeInputs((p) => ({ ...p, [item.id]: hhmm(rec.time) })); setEditingInstantTime((p) => ({ ...p, [item.id]: true })); }} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={14} /></button>
                               </div>
                             )}
+                            {item.scheduledTime && !editingInstantTime[item.id] && (() => {
+                              const status = timingStatus(item.scheduledTime, new Date(rec.time));
+                              return status && (
+                                <div style={{ fontSize: 13, fontWeight: 700, color: status.color, marginTop: 6 }}>{status.label} &middot; planned {fmtTimeString12(item.scheduledTime)}</div>
+                              );
+                            })()}
                           </>
                         ) : (
                           <>
@@ -2706,20 +2712,25 @@ function LifeTracker() {
                             <div style={{ fontSize: 22, fontWeight: 700, color: INK, marginBottom: 6 }}>{item.name}</div>
                             <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 22 }}>Tap {`"Done"`} the moment it happens</div>
                             {item.scheduledTime && (() => {
+                              const status = timingStatus(item.scheduledTime, now);
                               return (
                                 <div style={{
                                   display: "flex", alignItems: "stretch", justifyContent: "center",
                                   background: PANEL_2, borderRadius: 16, padding: "15px 8px", marginBottom: 20,
+                                  flexDirection: "column", gap: 10,
                                 }}>
-                                  <div style={{ flex: 1, textAlign: "center" }}>
-                                    <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 5, fontWeight: 700 }}>Planned</div>
-                                    <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: INK }}>{fmtTimeString12(item.scheduledTime)}</div>
+                                  <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center" }}>
+                                    <div style={{ flex: 1, textAlign: "center" }}>
+                                      <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 5, fontWeight: 700 }}>Planned</div>
+                                      <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: INK }}>{fmtTimeString12(item.scheduledTime)}</div>
+                                    </div>
+                                    <div style={{ width: 1, background: LINE, margin: "2px 4px" }} />
+                                    <div style={{ flex: 1, textAlign: "center" }}>
+                                      <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 5, fontWeight: 700 }}>Live now</div>
+                                      <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: BRASS }}>{fmtClock12(now)}</div>
+                                    </div>
                                   </div>
-                                  <div style={{ width: 1, background: LINE, margin: "2px 4px" }} />
-                                  <div style={{ flex: 1, textAlign: "center" }}>
-                                    <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 5, fontWeight: 700 }}>Live now</div>
-                                    <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: BRASS }}>{fmtClock12(now)}</div>
-                                  </div>
+                                  {status && <div style={{ fontSize: 13, fontWeight: 700, color: status.color }}>{status.label}</div>}
                                 </div>
                               );
                             })()}
@@ -2742,12 +2753,31 @@ function LifeTracker() {
                     return (
                       <Card key={item.id} style={{ textAlign: "center", padding: "19px 12px" }}>
                         {rec.status === "done" ? (
-                          <><div style={{ fontSize: 15, color: INK_DIM, marginBottom: 5 }}>{item.name} completed</div><div style={{ fontFamily: mono, fontSize: 18, color: TEAL, fontWeight: 600 }}>{fmtDuration(rec.durationMin)}</div></>
+                          <>
+                            <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 5 }}>{item.name} completed</div>
+                            <div style={{ fontFamily: mono, fontSize: 18, color: TEAL, fontWeight: 600 }}>{fmtDuration(rec.durationMin)}</div>
+                            {item.scheduledTime && rec.startTime && (() => {
+                              const status = timingStatus(item.scheduledTime, new Date(rec.startTime));
+                              return status && (
+                                <div style={{ fontSize: 13, fontWeight: 700, color: status.color, marginTop: 6 }}>{status.label} starting &middot; planned {fmtTimeString12(item.scheduledTime)}</div>
+                              );
+                            })()}
+                          </>
                         ) : rec.status === "in_progress" ? (
                           <><RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{fmtElapsed(now - new Date(rec.startTime))}</div><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></>
                         ) : (
                           <>
-                            <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Start when {item.name.toLowerCase()} begins</div><ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
+                            <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Start when {item.name.toLowerCase()} begins</div>
+                            {item.scheduledTime && (() => {
+                              const status = timingStatus(item.scheduledTime, now);
+                              return (
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, background: PANEL_2, borderRadius: 14, padding: "10px 8px", marginBottom: 12 }}>
+                                  <div style={{ fontSize: 13, color: INK_DIM }}>Planned for <span style={{ fontFamily: mono, fontWeight: 700, color: INK }}>{fmtTimeString12(item.scheduledTime)}</span></div>
+                                  {status && <div style={{ fontSize: 13, fontWeight: 700, color: status.color }}>{status.label}</div>}
+                                </div>
+                              );
+                            })()}
+                            <ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 10 }}>
                               <span style={{ fontSize: 13, color: INK_FAINT }}>or log time spent (min)</span>
                               <TextField type="number" value={timeSpentInputs[item.id] || ""} onChange={(e) => setTimeSpentInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 60, fontFamily: mono, textAlign: "center" }} />
