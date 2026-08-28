@@ -2174,7 +2174,12 @@ function LifeTracker() {
         const completedActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
         const totalActivities = validItems.filter((i) => i.type !== "interval").length;
         const todayExpenses = todayLog.expenses.reduce((sum, e) => sum + e.amount, 0);
-        const progressPercent = totalActivities > 0 ? Math.round((completedActivities / totalActivities) * 100) : 0;
+        // Exact percentage (to 1 decimal place when not a whole number) strictly from completedActivities / totalActivities,
+        // where totalActivities is only activities actually scheduled for today (interval-type excluded, as they're
+        // ongoing rather than "completed"). progressPercent (rounded) is used only for the bar's visual width.
+        const progressPercentExact = totalActivities > 0 ? (completedActivities / totalActivities) * 100 : 0;
+        const progressPercent = Math.round(progressPercentExact);
+        const progressPercentLabel = totalActivities === 0 ? "0" : Number.isInteger(progressPercentExact) ? String(progressPercentExact) : progressPercentExact.toFixed(1);
         const currentHour = new Date().getHours();
         const greeting = currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
         const remainingActivities = Math.max(0, totalActivities - completedActivities);
@@ -2242,7 +2247,7 @@ function LifeTracker() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Today's Progress</div>
-                    <div style={{ fontSize: 14, color: BRASS, fontFamily: mono, fontWeight: 800 }}>{progressPercent}%</div>
+                    <div style={{ fontSize: 14, color: BRASS, fontFamily: mono, fontWeight: 800 }}>{progressPercentLabel}%</div>
                   </div>
                   <div style={{ height: 8, borderRadius: 999, background: PANEL_2, overflow: "hidden" }}>
                     <div style={{ width: `${progressPercent}%`, height: "100%", borderRadius: 999, background: BRASS, transition: "width 0.25s ease" }} />
