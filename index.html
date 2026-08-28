@@ -1974,6 +1974,7 @@ function LifeTracker() {
           align-items: center !important;
           align-self: flex-start !important;
           margin-right: auto !important;
+          overflow: hidden !important;
         }
         .today-focus-icon {
           width: 68px !important;
@@ -2002,6 +2003,8 @@ function LifeTracker() {
           transform: translateY(-8px);
           pointer-events: none;
           width: 0 !important;
+          height: 0 !important;
+          min-height: 0 !important;
           margin: 0 !important;
           padding: 0 !important;
           overflow: hidden !important;
@@ -2508,7 +2511,7 @@ function LifeTracker() {
                       const activeSub = flow.sub || subOptions[0];
                       const canLog = parseFloat(flow.amount) > 0;
                       return (
-                        <div style={{ marginTop: 6 }}>
+                        <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
                           {todaysRepaymentReminders.length > 0 && (
                             <Card style={{ marginBottom: 8 }}>
                               <SectionLabel>Repayments due</SectionLabel>
