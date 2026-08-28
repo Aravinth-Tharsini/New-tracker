@@ -1034,7 +1034,17 @@ function LifeTracker() {
   useEffect(() => { if (loaded) window.storage.set("savedShoppingCategories", JSON.stringify(savedShoppingCategories), false).catch(() => {}); }, [savedShoppingCategories, loaded]);
   useEffect(() => { if (loaded) window.storage.set("remindersEnabled", JSON.stringify(remindersEnabled), false).catch(() => {}); }, [remindersEnabled, loaded]);
   useEffect(() => { if (loaded) window.storage.set("darkMode", JSON.stringify(darkMode), false).catch(() => {}); }, [darkMode, loaded]);
-  useEffect(() => { document.body.style.background = darkMode ? "#000000" : "#F5F5F7"; }, [darkMode]);
+  // Keeps the real <html>/<body> background (and the browser's theme-color chrome) in sync with dark
+  // mode too, not just the in-app container — otherwise overscroll/bounce or any area outside the app's
+  // own max-width wrapper still shows the browser's default white, producing a light gap at the very
+  // top/bottom of the screen even though the app content itself is dark.
+  useEffect(() => {
+    const bg = darkMode ? "#000000" : "#F5F5F7";
+    document.documentElement.style.background = bg;
+    document.body.style.background = bg;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", bg);
+  }, [darkMode]);
   useEffect(() => { if (loaded) window.storage.set("dataMode", JSON.stringify(dataMode), false).catch(() => {}); }, [dataMode, loaded]);
   useEffect(() => { if (loaded) window.storage.set("sheetUrl", JSON.stringify(sheetUrl), false).catch(() => {}); }, [sheetUrl, loaded]);
   useEffect(() => { if (loaded) window.storage.set("lastSyncedAt", JSON.stringify(lastSyncedAt), false).catch(() => {}); }, [lastSyncedAt, loaded]);
@@ -2254,20 +2264,20 @@ function LifeTracker() {
         ];
         return <div key="dashboard-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, width: "100%" }}>
           <div className="notificationStickyBar">
-            <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, marginBottom: 10, padding: "18px 18px 16px", background: "linear-gradient(120deg, #E4EAF7 0%, #F1E4D8 60%, #F7DFC4 100%)", border: `1px solid ${LINE}` }}>
-              <svg width="112" height="98" viewBox="0 0 112 98" style={{ position: "absolute", right: -6, bottom: -10, opacity: 0.9 }}>
-                <circle cx="82" cy="60" r="26" fill="#FFFFFF" opacity="0.55" />
+            <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, marginBottom: 10, padding: "18px 18px 16px", background: darkMode ? "linear-gradient(120deg, #1C1C1E 0%, #2A2019 55%, #33240F 100%)" : "linear-gradient(120deg, #E4EAF7 0%, #F1E4D8 60%, #F7DFC4 100%)", border: `1px solid ${LINE}` }}>
+              <svg width="112" height="98" viewBox="0 0 112 98" style={{ position: "absolute", right: -6, bottom: -10, opacity: darkMode ? 0.6 : 0.9 }}>
+                <circle cx="82" cy="60" r="26" fill="#FFFFFF" opacity={darkMode ? 0.12 : 0.55} />
                 <circle cx="82" cy="60" r="26" fill="#F2A65A" opacity="0.6" />
-                <circle cx="82" cy="60" r="14" fill="#FFF8EF" />
-                <path d="M0 82 Q30 58 60 78 T112 70 V98 H0 Z" fill="#B9C8E8" opacity="0.75" />
-                <ellipse cx="24" cy="24" rx="13" ry="7" fill="#FFFFFF" opacity="0.8" />
-                <ellipse cx="46" cy="16" rx="9" ry="5" fill="#FFFFFF" opacity="0.7" />
-                <path d="M12 40 q4 -4 8 0 q4 -4 8 0" stroke="#8FA3C9" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-                <path d="M30 32 q3.5 -3.5 7 0" stroke="#8FA3C9" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+                <circle cx="82" cy="60" r="14" fill="#FFF8EF" opacity={darkMode ? 0.85 : 1} />
+                <path d="M0 82 Q30 58 60 78 T112 70 V98 H0 Z" fill="#B9C8E8" opacity={darkMode ? 0.18 : 0.75} />
+                <ellipse cx="24" cy="24" rx="13" ry="7" fill="#FFFFFF" opacity={darkMode ? 0.18 : 0.8} />
+                <ellipse cx="46" cy="16" rx="9" ry="5" fill="#FFFFFF" opacity={darkMode ? 0.14 : 0.7} />
+                <path d="M12 40 q4 -4 8 0 q4 -4 8 0" stroke="#8FA3C9" strokeWidth="1.6" fill="none" strokeLinecap="round" opacity={darkMode ? 0.4 : 1} />
+                <path d="M30 32 q3.5 -3.5 7 0" stroke="#8FA3C9" strokeWidth="1.6" fill="none" strokeLinecap="round" opacity={darkMode ? 0.4 : 1} />
               </svg>
               <div style={{ position: "relative", maxWidth: "72%" }}>
-                <div style={{ fontSize: 25, fontWeight: 800, color: "#2B2B33", letterSpacing: "-0.02em" }}>{greeting}! <span style={{ display: "inline-block" }}>👋</span></div>
-                <div style={{ fontSize: 14, color: "#5B5B66", marginTop: 5, lineHeight: 1.4 }}>
+                <div style={{ fontSize: 25, fontWeight: 800, color: darkMode ? "#F2F2F7" : "#2B2B33", letterSpacing: "-0.02em" }}>{greeting}! <span style={{ display: "inline-block" }}>👋</span></div>
+                <div style={{ fontSize: 14, color: darkMode ? "#AEAEB6" : "#5B5B66", marginTop: 5, lineHeight: 1.4 }}>
                   {totalActivities === 0
                     ? "Plan your day and get started."
                     : completedActivities === totalActivities
