@@ -266,7 +266,7 @@ import {
   Plane, Train, Bus, Activity, Bike, Car, MapPin, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, History, Home as HomeIcon,
-  CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles,
+  CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -2503,65 +2503,8 @@ function LifeTracker() {
           const accent = TODAY_CARD_ACCENT[cat.id] || BRASS;
           return { cat, expanded, CatIcon: cat.icon, itemsForCat, pendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent };
         });
-        const overallTrackable = categoryStats.reduce((s, c) => s + c.trackableCount, 0);
-        const overallDone = categoryStats.reduce((s, c) => s + c.doneCount, 0);
-        const overallAttention = categoryStats.reduce((s, c) => s + c.attentionCount, 0);
-        const overallPct = overallTrackable > 0 ? Math.round((overallDone / overallTrackable) * 100) : 0;
-        const ringR = 25, ringC = 2 * Math.PI * ringR;
-        const hour = now.getHours();
-        const greeting = hour < 5 ? "Still up" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : hour < 21 ? "Good evening" : "Winding down";
-
         return (
         <div key="daily-page" className="daily-page-content" style={{ padding: "6px 0 14px", flex: 1, minHeight: 0, width: "100%" }}>
-          <div style={{ margin: "2px 16px 18px", position: "relative", overflow: "hidden", borderRadius: 26, padding: "20px 18px 18px", background: darkMode ? `linear-gradient(135deg, ${hexA(BRASS, 0.20)} 0%, ${PANEL} 60%)` : `linear-gradient(135deg, ${hexA(BRASS, 0.12)} 0%, ${PANEL} 60%)`, border: `1px solid ${LINE}`, boxShadow: CARD_SHADOW }}>
-            <div style={{ position: "absolute", top: -36, right: -30, width: 130, height: 130, borderRadius: "50%", background: hexA(overallAttention > 0 ? CORAL : TEAL, darkMode ? 0.16 : 0.10), pointerEvents: "none" }} />
-            <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 11.5, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 5 }}>{formatDateLong(now)}</div>
-                <div style={{ fontSize: 25, fontWeight: 800, color: INK, letterSpacing: "-0.01em", lineHeight: 1.15 }}>{greeting}</div>
-                <div style={{ fontSize: 13.5, color: INK_DIM, marginTop: 6, lineHeight: 1.4 }}>
-                  {overallTrackable > 0 ? (
-                    <>{overallDone} of {overallTrackable} tracked{overallAttention > 0 ? <span style={{ color: CORAL, fontWeight: 600 }}> · {overallAttention} need{overallAttention === 1 ? "s" : ""} attention</span> : " · you're on track"}</>
-                  ) : overallAttention > 0 ? (
-                    <span style={{ color: CORAL, fontWeight: 600 }}>{overallAttention} thing{overallAttention === 1 ? "" : "s"} need{overallAttention === 1 ? "s" : ""} attention</span>
-                  ) : "Here's what's on for today"}
-                </div>
-                {todayLog.wakeUpTime && (
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 10, background: hexA(BRASS, darkMode ? 0.20 : 0.12), border: `1px solid ${BRASS_DIM}`, borderRadius: 999, padding: "4px 10px 4px 8px", fontSize: 12, color: BRASS, fontFamily: mono, fontWeight: 700 }}>
-                    <Sun size={12} /> Woke up at {fmtTime(todayLog.wakeUpTime)}
-                  </div>
-                )}
-              </div>
-              {overallTrackable > 0 && (
-                <div style={{ position: "relative", width: 72, height: 72, flexShrink: 0 }}>
-                  <svg width="72" height="72" viewBox="0 0 60 60" style={{ transform: "rotate(-90deg)" }}>
-                    <circle cx="30" cy="30" r={ringR} fill="none" stroke={LINE} strokeWidth="6" />
-                    <circle cx="30" cy="30" r={ringR} fill="none" stroke={overallPct >= 100 ? TEAL : BRASS} strokeWidth="6" strokeDasharray={ringC} strokeDashoffset={ringC * (1 - overallPct / 100)} strokeLinecap="round" style={{ transition: "stroke-dashoffset .5s cubic-bezier(.22,.8,.25,1)" }} />
-                  </svg>
-                  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: INK, fontFamily: mono, lineHeight: 1 }}>{overallPct}%</div>
-                    <div style={{ fontSize: 9, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 2 }}>done</div>
-                  </div>
-                </div>
-              )}
-            </div>
-            {overallTrackable > 0 && (
-              <div style={{ position: "relative", display: "flex", gap: 8, marginTop: 16 }}>
-                <div style={{ flex: 1, background: PANEL_2, borderRadius: 12, padding: "8px 4px", textAlign: "center" }}>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: TEAL, fontFamily: mono }}>{overallDone}</div>
-                  <div style={{ fontSize: 10.5, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginTop: 1 }}>Done</div>
-                </div>
-                <div style={{ flex: 1, background: PANEL_2, borderRadius: 12, padding: "8px 4px", textAlign: "center" }}>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: BRASS, fontFamily: mono }}>{Math.max(0, overallTrackable - overallDone)}</div>
-                  <div style={{ fontSize: 10.5, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginTop: 1 }}>Left</div>
-                </div>
-                <div style={{ flex: 1, background: PANEL_2, borderRadius: 12, padding: "8px 4px", textAlign: "center" }}>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: overallAttention > 0 ? CORAL : INK_FAINT, fontFamily: mono }}>{overallAttention}</div>
-                  <div style={{ fontSize: 10.5, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginTop: 1 }}>Attention</div>
-                </div>
-              </div>
-            )}
-          </div>
           {availableDailyCategories.length === 0 ? (
             <div style={{ margin: "0 16px", padding: "36px 18px", textAlign: "center", background: PANEL, borderRadius: 22, boxShadow: CARD_SHADOW, border: `1px solid ${LINE}` }}>
               <div style={{ width: 56, height: 56, borderRadius: "50%", background: hexA(BRASS, 0.12), display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
@@ -2638,15 +2581,37 @@ function LifeTracker() {
                                   {due && <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, display: "inline-flex", alignItems: "center", gap: 3 }}><Bell size={11} /> Active</span>}
                                 </div>
 
-                                {t.bookingDetails && (
-                                  <div style={{ display: "flex", alignItems: "flex-start", gap: 7, background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 12, padding: "9px 10px", marginBottom: 10 }}>
-                                    <FileJson size={15} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 1 }} />
-                                    <div>
-                                      <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>Booking details</div>
-                                      <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.5, wordBreak: "break-word" }}>{t.bookingDetails}</div>
-                                    </div>
+                                <div style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 14, padding: "10px 12px", marginBottom: 10 }}>
+                                  <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                    <Ticket size={13} /> Trip booking details
                                   </div>
-                                )}
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                                      <MapPin size={14} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 2 }} />
+                                      <div style={{ fontSize: 14, color: INK, fontWeight: 600, lineHeight: 1.4, wordBreak: "break-word" }}>{t.fromLocation} &rarr; {t.toLocation}</div>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                                      <CalendarDays size={14} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 2 }} />
+                                      <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.4 }}>
+                                        {formatDMY(t.travelDate)}{t.travelTime ? ` \u00b7 ${fmtTimeString12(t.travelTime)} (${timeOfDayLabel(t.travelTime)})` : ""}
+                                      </div>
+                                    </div>
+                                    {t.amount > 0 && (
+                                      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                                        <Wallet size={14} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 2 }} />
+                                        <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.4 }}>
+                                          {inr(t.amount)} &middot; <span style={{ color: t.paymentStatus === "Already Paid" ? TEAL : CORAL, fontWeight: 700 }}>{t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {t.bookingDetails && (
+                                      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                                        <FileJson size={14} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 2 }} />
+                                        <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.5, wordBreak: "break-word" }}>{t.bookingDetails}</div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
 
                                 {(t.notes && t.notes.length > 0) && (() => {
                                   const scheduledDay = today === t.travelDate;
