@@ -416,6 +416,13 @@ function parseHHMMSafe(hhmmStr) {
   return { h: isNaN(h) ? 9 : h, m: isNaN(m) ? 0 : m };
 }
 function buildHHMM(h, m) { return `${pad2(h)}:${pad2(m)}`; }
+// Minutes-since-midnight for a "HH:MM" scheduledTime, used to sort routines chronologically.
+// Items with no scheduled time sort to the end (kept in their original order among themselves).
+function scheduledMinutes(item) {
+  if (!item || !item.scheduledTime) return Infinity;
+  const { h, m } = parseHHMMSafe(item.scheduledTime);
+  return h * 60 + m;
+}
 // Compares a scheduled "HH:MM" time against a live Date and returns an early/on-time/late verdict.
 // Within 5 minutes either side counts as "On time".
 function timingStatus(scheduledTime, nowDate) {
@@ -918,10 +925,18 @@ function IconAction({ onClick, children, disabled, tone, style }) {
 }
 function ProgressBar({ pct, color = BRASS }) { return <div style={{ height: 8, background: PANEL_2, borderRadius: 999, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.min(100, Math.max(0, pct))}%`, background: color, borderRadius: 999 }} /></div>; }
 function ActionButton({ onClick, label, icon: Icon, tone = BRASS, big, spinning }) {
-  return <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 5, background: tone, border: "none", color: "#FFFFFF", borderRadius: 980, padding: big ? "13px 24px" : "10px 17px", fontSize: big ? 16 : 14, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}><Icon size={big ? 17 : 15} className={spinning ? "spin-icon" : undefined} /> {label}</button>;
+  return <button onClick={onClick} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, background: tone, border: "none", color: "#FFFFFF", borderRadius: 980, padding: big ? "13px 24px" : "10px 17px", fontSize: big ? 16 : 14, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}><Icon size={big ? 17 : 15} className={spinning ? "spin-icon" : undefined} /> {label}</button>;
 }
 function ChipButton({ onClick, label, active }) {
   return <button onClick={onClick} style={{ background: active ? BRASS : PANEL_2, border: "none", color: active ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "8px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{label}</button>;
+}
+// Wraps an ActionButton so it stays a fixed, neatly centered width instead of stretching edge-to-edge.
+function CenteredButton({ children, maxWidth = 280, widthPct = "58%" }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "center" }}>
+      <div style={{ width: widthPct, maxWidth }}>{children}</div>
+    </div>
+  );
 }
 
 const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalHours: 2, amount: 250, unit: "ml", groups: {}, days: [], scheduledTime: "" });
@@ -1181,7 +1196,7 @@ function LifeTracker() {
   useEffect(() => {
     if (!loaded) return;
     if (!expandedDailyCategory || expandedDailyCategory === "trip") return;
-    const itemsForCat = validItems.filter((i) => i.category === expandedDailyCategory);
+    const itemsForCat = validItems.filter((i) => i.category === expandedDailyCategory).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
     if (activeTab && itemsForCat.some((i) => i.id === activeTab)) return;
     const order = itemsForCat.filter((i) => i.type === "instant" || i.type === "duration");
     const firstPending = order.find((i) => !(field(i.id).status === "done"));
@@ -1193,7 +1208,7 @@ function LifeTracker() {
     setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, [id]: { ...(log[id] || {}), ...patch } } }; });
   };
   const nextValidAfter = (id) => {
-    const itemsForCat = validItems.filter((i) => i.category === expandedDailyCategory);
+    const itemsForCat = validItems.filter((i) => i.category === expandedDailyCategory).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
     const idx = itemsForCat.findIndex((i) => i.id === id);
     if (idx === -1 || idx === itemsForCat.length - 1) return id;
     return itemsForCat[idx + 1].id;
@@ -2336,7 +2351,7 @@ function LifeTracker() {
               {availableDailyCategories.map((cat) => {
                 const CatIcon = cat.icon;
                 const expanded = expandedDailyCategory === cat.id;
-                const itemsForCat = validItems.filter((i) => i.category === cat.id);
+                const itemsForCat = validItems.filter((i) => i.category === cat.id).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
                 const todaysExpenseCount = todayLog.expenses.length;
                 const todaysExpenseTotal = todayLog.expenses.reduce((s, e) => s + e.amount, 0);
                 const visibleTrips = todaysTravelPlans;
@@ -2694,16 +2709,35 @@ function LifeTracker() {
                   const done = (item.type === "instant" || item.type === "duration") && field(item.id).status === "done";
                   const due = item.type === "interval" && isIntervalDue(item, todayLog, now.getTime());
                   const streak = streaks[item.id] || 0;
-                  const ringColor = active ? BRASS : done ? TEAL : due ? CORAL : LINE;
+                  const accentColor = active ? BRASS : done ? TEAL : due ? CORAL : INK_FAINT;
                   return (
-                    <button key={item.id} onClick={() => setActiveTab(item.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 58 }}>
-                      <div style={{ position: "relative", width: 44, height: 44, borderRadius: 10, background: active ? "rgba(0,113,227,0.16)" : PANEL, border: `1.5px solid ${ringColor}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <RoutineActivityIcon icon={item.icon} size={20} title={item.name} />
-                        {streak > 0 && (
-                          <div style={{ position: "absolute", top: -6, right: -6, display: "flex", alignItems: "center", gap: 1, background: BG, border: `1px solid ${BRASS_DIM}`, borderRadius: 7, padding: "1px 3px", fontSize: 10, color: BRASS, fontFamily: mono }}>
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      style={{
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                        background: active ? "rgba(0,113,227,0.10)" : PANEL,
+                        border: `1.5px solid ${active ? BRASS : LINE}`,
+                        borderRadius: 16, padding: "10px 12px 8px", cursor: "pointer",
+                        flexShrink: 0, minWidth: 72, boxShadow: active ? "0 4px 14px rgba(0,113,227,0.12)" : "none",
+                      }}
+                    >
+                      <div style={{ position: "relative", width: 38, height: 38, borderRadius: 10, background: active ? "rgba(0,113,227,0.14)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <RoutineActivityIcon icon={item.icon} size={19} title={item.name} />
+                        {done && (
+                          <div style={{ position: "absolute", bottom: -4, right: -4, width: 15, height: 15, borderRadius: "50%", background: TEAL, border: `2px solid ${BG}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Check size={9} color="#FFFFFF" strokeWidth={3.2} />
+                          </div>
+                        )}
+                        {streak > 0 && !done && (
+                          <div style={{ position: "absolute", top: -7, right: -7, display: "flex", alignItems: "center", gap: 1, background: BG, border: `1px solid ${BRASS_DIM}`, borderRadius: 7, padding: "1px 3px", fontSize: 10, color: BRASS, fontFamily: mono }}>
                             <Flame size={9} /> {streak}
                           </div>
                         )}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: active ? BRASS : INK, maxWidth: 68, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                      <div style={{ fontSize: 11, fontFamily: mono, color: accentColor, fontWeight: 600 }}>
+                        {item.scheduledTime ? fmtTimeString12(item.scheduledTime) : "—"}
                       </div>
                     </button>
                   );
@@ -2772,11 +2806,9 @@ function LifeTracker() {
                                 </div>
                               );
                             })()}
-                            <div style={{ display: "flex", justifyContent: "center" }}>
-                              <div style={{ width: "58%", maxWidth: 280 }}>
-                                <ActionButton onClick={() => pressInstant(item.id, hhmm(now))} label="Done" icon={Check} tone={TEAL} big />
-                              </div>
-                            </div>
+                            <CenteredButton>
+                              <ActionButton onClick={() => pressInstant(item.id, hhmm(now))} label="Done" icon={Check} tone={TEAL} big />
+                            </CenteredButton>
                           </>
                         )}
                         {streaks[item.id] > 0 && (
@@ -2802,7 +2834,7 @@ function LifeTracker() {
                             })()}
                           </>
                         ) : rec.status === "in_progress" ? (
-                          <><RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{fmtElapsed(now - new Date(rec.startTime))}</div><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></>
+                          <><RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{fmtElapsed(now - new Date(rec.startTime))}</div><CenteredButton><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></CenteredButton></>
                         ) : (
                           <>
                             <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Start when {item.name.toLowerCase()} begins</div>
@@ -2815,7 +2847,9 @@ function LifeTracker() {
                                 </div>
                               );
                             })()}
-                            <ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
+                            <CenteredButton>
+                              <ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
+                            </CenteredButton>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 10 }}>
                               <span style={{ fontSize: 13, color: INK_FAINT }}>or log time spent (min)</span>
                               <TextField type="number" value={timeSpentInputs[item.id] || ""} onChange={(e) => setTimeSpentInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 60, fontFamily: mono, textAlign: "center" }} />
@@ -2843,7 +2877,9 @@ function LifeTracker() {
                           <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
                           <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 3 }}>{due ? "An interval is due" : `Next at ${fmtTime(new Date(nextDueMs).toISOString())}`}</div>
                           <div style={{ fontFamily: mono, fontSize: 18, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{item.amount} {item.unit}</div>
-                          <ActionButton onClick={() => logInterval(item)} label={`Log ${item.amount}${item.unit}`} icon={Check} tone={TEAL} big />
+                          <CenteredButton widthPct="70%" maxWidth={320}>
+                            <ActionButton onClick={() => logInterval(item)} label={`Log ${item.amount}${item.unit}`} icon={Check} tone={TEAL} big />
+                          </CenteredButton>
                         </Card>
                         <Card>
                           <SectionLabel>Today &middot; {total} {item.unit}</SectionLabel>
