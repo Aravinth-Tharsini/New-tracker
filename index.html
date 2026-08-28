@@ -2149,12 +2149,15 @@ function LifeTracker() {
         <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
           {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "Data Link" : "Insights"}
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
-          <button onClick={() => setDarkMode((v) => !v)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} style={{ background: "transparent", border: "none", color: darkMode ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}>
-            {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+        <div style={{ display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
+          <button onClick={() => setDarkMode((v) => !v)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} style={{ background: "transparent", border: "none", color: INK, cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}>
+            {darkMode ? <Sun size={20} strokeWidth={1.8} /> : <Moon size={20} strokeWidth={1.8} />}
           </button>
-          <button onClick={toggleReminders} title={remindersEnabled ? "Reminders on" : "Reminders off"} style={{ background: "transparent", border: "none", color: remindersEnabled ? BRASS : INK_FAINT, cursor: "pointer", display: "flex", alignItems: "center" }}>
-            {remindersEnabled ? <Bell size={16} /> : <BellOff size={16} />}
+          <button onClick={toggleReminders} title={remindersEnabled ? "Reminders on" : "Reminders off"} style={{ background: "transparent", border: "none", position: "relative", color: INK, cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}>
+            {remindersEnabled ? <Bell size={20} strokeWidth={1.8} /> : <BellOff size={20} strokeWidth={1.8} color={INK_FAINT} />}
+            {remindersEnabled && (
+              <span style={{ position: "absolute", top: -1, right: -1, width: 8, height: 8, borderRadius: "50%", background: CORAL, border: "1.5px solid var(--bg, #F5F5F7)" }} />
+            )}
           </button>
           <button
             onClick={() => {
@@ -2164,9 +2167,11 @@ function LifeTracker() {
               else { el.focus(); el.click(); }
             }}
             title="Open calendar"
-            style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 14, color: INK_FAINT, fontFamily: mono, background: "transparent", border: "none", cursor: "pointer", padding: 0 }}
+            style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: INK, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 980, padding: "8px 14px 8px 12px", cursor: "pointer", boxShadow: "0 2px 6px rgba(20,30,45,.05)" }}
           >
-            <CalendarDays size={13} /> {formatDateLong(new Date())}
+            <CalendarDays size={16} color={BRASS} strokeWidth={2} />
+            <span style={{ fontWeight: 650 }}>{formatDateLong(new Date())}</span>
+            <ChevronDown size={15} color={INK_FAINT} strokeWidth={2} />
           </button>
           <input
             ref={headerDateInputRef}
