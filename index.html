@@ -266,7 +266,7 @@ import {
   Plane, Train, Bus, Activity, Bike, Car, MapPin, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, History, Home as HomeIcon,
-  CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper,
+  CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper, Trophy,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -721,7 +721,7 @@ const CATEGORY_DEFS = [
   { id: "myday", label: "My Day", icon: Users },
   { id: "finance", label: "Finance", icon: Wallet },
   { id: "financegoals", label: "Financial Goals", icon: Target },
-  { id: "career", label: "Career growth", icon: Briefcase },
+  { id: "career", label: "Career Growth", icon: Briefcase },
   { id: "health", label: "Health", icon: HeartPulse },
   { id: "trip", label: "Trips", icon: Plane },
   { id: "activity", label: "Routine", icon: Activity },
@@ -855,7 +855,7 @@ const DAILY_TAB_CATEGORY_DEFS = [
   { id: "expense", label: "Expense", icon: Receipt },
   { id: "shopping", label: "Shopping", icon: ShoppingBag },
   { id: "trip", label: "Trips", icon: Plane },
-  { id: "career", label: "Career growth", icon: Briefcase },
+  { id: "career", label: "Career Growth", icon: Briefcase },
   { id: "health", label: "Health", icon: HeartPulse },
   { id: "activity", label: "Routine", icon: Activity },
 ];
@@ -3425,7 +3425,16 @@ function LifeTracker() {
         <div key="categories-page" className="planner-page-content" style={{ padding: "6px 16px 12px", flex: 1, minHeight: 0, width: "100%" }}>
           {!catTab && (
             <>
-              <div style={{ fontSize: 13, color: INK_DIM, marginBottom: 14 }}>Plan smart. Stay focused. Achieve more.</div>
+              <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, padding: "20px 18px", marginBottom: 18, borderLeft: `4px solid ${BRASS}`, background: darkMode ? "linear-gradient(135deg, #2C2A3D 0%, #1E1D2A 100%)" : "linear-gradient(135deg, #E9E3FB 0%, #F1E7F5 45%, #FBEEE1 100%)" }}>
+                <svg viewBox="0 0 400 90" preserveAspectRatio="none" style={{ position: "absolute", left: 0, right: 0, bottom: -1, width: "100%", height: 60 }}>
+                  <path d="M0,60 C80,20 140,70 220,35 C290,5 340,45 400,20 L400,90 L0,90 Z" fill={darkMode ? "rgba(120,100,170,0.25)" : "rgba(150,130,200,0.32)"} />
+                </svg>
+                <div style={{ position: "absolute", right: 20, top: "50%", transform: "translateY(-50%)", width: 56, height: 56, borderRadius: "50%", background: "radial-gradient(circle at 35% 35%, #FFE7B0, #F5B84B)", boxShadow: "0 0 22px rgba(245,184,75,0.5)" }} />
+                <div style={{ position: "relative", zIndex: 1, maxWidth: "72%" }}>
+                  <div style={{ fontSize: 19, fontWeight: 750, color: INK, fontFamily: disp, marginBottom: 4, lineHeight: 1.25 }}>Plan smart. Stay focused.</div>
+                  <div style={{ fontSize: 14, color: INK_DIM }}>Achieve more, every day.</div>
+                </div>
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
                 <Sparkles size={16} color={BRASS} />
                 <span style={{ fontSize: 16, fontWeight: 750, color: INK, fontFamily: disp }}>What do you want to plan today?</span>
@@ -3448,6 +3457,24 @@ function LifeTracker() {
                       <div className="planner-cat-desc">{meta.desc}</div>
                       <div className="planner-cat-arrow"><ArrowRight size={14} color={meta.fg} /></div>
                     </button>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", background: PANEL, borderRadius: 14, padding: "14px 12px", marginBottom: 12, boxShadow: CARD_SHADOW, gap: 8 }}>
+                {[
+                  { icon: CheckCircle2, color: "#6D28D9", title: "Stay Organized", desc: "All your plans in one place" },
+                  { icon: Target, color: "#0F9D58", title: "Stay Focused", desc: "Track progress and achieve goals" },
+                  { icon: Trophy, color: "#2563EB", title: "Achieve More", desc: "Small steps, big achievements" },
+                ].map((item, i) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={i} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "flex-start", gap: 6 }}>
+                      <Icon size={18} color={item.color} strokeWidth={2} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 750, color: item.color, fontFamily: disp, marginBottom: 2, lineHeight: 1.2 }}>{item.title}</div>
+                        <div style={{ fontSize: 10.5, color: INK_FAINT, lineHeight: 1.3 }}>{item.desc}</div>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
