@@ -1094,6 +1094,19 @@ function LifeTracker() {
   const [dailyHighlightId, setDailyHighlightId] = useState(null);
   const [catTab, setCatTab] = useState(null);
   const [historyExpanded, setHistoryExpanded] = useState(false);
+  // History lists (finance expenses, repayments, goals, trips, shopping) grow without bound as the
+  // app is used over weeks/months. Rendering every entry at once turns these panels into DOM trees
+  // with hundreds/thousands of nodes, which is what made scrolling stutter and lock up once an
+  // account had real history — not just a few days of demo data. We render a capped "page" of the
+  // most recent entries and let the user load more on demand, same pattern as any infinite list.
+  const HISTORY_PAGE_SIZE = 25;
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(HISTORY_PAGE_SIZE);
+  useEffect(() => { setHistoryVisibleCount(HISTORY_PAGE_SIZE); }, [historyExpanded, catTab]);
+  const LoadMoreHistory = ({ total }) => total > historyVisibleCount ? (
+    <button onClick={() => setHistoryVisibleCount((v) => v + HISTORY_PAGE_SIZE)} style={{ width: "100%", marginTop: 8, background: "transparent", border: `1px dashed ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "8px 10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+      Show {Math.min(HISTORY_PAGE_SIZE, total - historyVisibleCount)} more (of {total})
+    </button>
+  ) : null;
   const [editingHistoryExpense, setEditingHistoryExpense] = useState(null);
   const [dailyItems, setDailyItems] = useState([]);
   const [dailyLogs, setDailyLogs] = useState({});
@@ -3580,7 +3593,7 @@ function LifeTracker() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <SectionLabel>Travel</SectionLabel>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      {travelHistoryPlans.length > 0 && <button className={showTravelHistory ? "history-toggle-active" : ""} onClick={() => { setShowTravelHistory((v) => !v); setHistoryExpanded(false); }} style={{ display: "flex", alignItems: "center", gap: 4, background: showTravelHistory ? "rgba(38,160,106,0.10)" : "transparent", border: `1px solid ${showTravelHistory ? TEAL : LINE}`, color: showTravelHistory ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={14} /> History ({travelHistoryPlans.length})</button>}
+                      {travelHistoryPlans.length > 0 && <button className={showTravelHistory ? "history-toggle-active" : ""} onClick={() => { setShowTravelHistory((v) => !v); setHistoryExpanded(false); setHistoryVisibleCount(HISTORY_PAGE_SIZE); }} style={{ display: "flex", alignItems: "center", gap: 4, background: showTravelHistory ? "rgba(38,160,106,0.10)" : "transparent", border: `1px solid ${showTravelHistory ? TEAL : LINE}`, color: showTravelHistory ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={14} /> History ({travelHistoryPlans.length})</button>}
                       <button onClick={() => { setShowTravelHistory(false); showAddTravel ? cancelTravelForm() : setShowAddTravel(true); }} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add trip</button>
                     </div>
                   </div>
@@ -3669,7 +3682,7 @@ function LifeTracker() {
                     <div className="history-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                       {travelHistoryPlans.length === 0 ? (
                         <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>No travel history yet.</div>
-                      ) : travelHistoryPlans.map((t) => {
+                      ) : travelHistoryPlans.slice(0, historyVisibleCount).map((t) => {
                         const cancelled = t.status === "Cancelled" || t.dismissed;
                         const status = cancelled ? "Cancelled" : "Completed";
                         const statusColor = cancelled ? CORAL : TEAL;
@@ -3688,6 +3701,7 @@ function LifeTracker() {
                           </Card>
                         );
                       })}
+                      <LoadMoreHistory total={travelHistoryPlans.length} />
                     </div>
                   )}
                   {!showTravelHistory && <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
@@ -3862,7 +3876,7 @@ function LifeTracker() {
                   </div>
                   {historyExpanded && shoppingHistoryLists.length > 0 && (
                     <div className="history-open-anim" style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                      {shoppingHistoryLists.map((l) => {
+                      {shoppingHistoryLists.slice(0, historyVisibleCount).map((l) => {
                         const cancelled = l.status === "cancelled" || l.dismissed;
                         const statusText = cancelled ? "Cancelled" : l.status === "paid" ? "Paid" : "Completed";
                         const statusColor = cancelled ? CORAL : TEAL;
@@ -3883,6 +3897,7 @@ function LifeTracker() {
                           </Card>
                         );
                       })}
+                      <LoadMoreHistory total={shoppingHistoryLists.length} />
                     </div>
                   )}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -4849,7 +4864,7 @@ function LifeTracker() {
                       {financeHistoryGoals.length > 0 && (
                       <>
                         <div style={{ fontSize: 12, fontWeight: 800, color: INK_FAINT, letterSpacing: 1, margin: "10px 0 6px" }}>GOALS</div>
-                        {financeHistoryGoals.map((g) => (
+                        {financeHistoryGoals.slice(0, historyVisibleCount).map((g) => (
                           <div key={g.id} style={{ padding: "10px 12px", border: `1px solid ${LINE}`, borderRadius: 10, background: PANEL, marginBottom: 8 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                               <div>
@@ -4866,7 +4881,7 @@ function LifeTracker() {
                     {financeHistoryRepayments.length > 0 && (
                       <div style={{ fontSize: 12, fontWeight: 800, color: INK_FAINT, letterSpacing: 1, margin: "10px 0 6px" }}>REPAYMENTS</div>
                     )}
-                    {financeHistoryRepayments.map((r) => (
+                    {financeHistoryRepayments.slice(0, historyVisibleCount).map((r) => (
                         <div key={`repay-history-${r.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
                           <Wallet size={18} color={BRASS} />
                           <div className="history-main" style={{ flex: 1, minWidth: 0 }}>
@@ -4878,10 +4893,11 @@ function LifeTracker() {
                           <IconAction onClick={() => openEditRepayment(r)} title="Edit finance record"><Pencil size={15} /></IconAction><IconAction className="history-delete-btn" onClick={() => deleteHistoryRepayment(r.id)} title="Delete history"><Trash2 size={16} /></IconAction>
                         </div>
                       ))}
+                    <LoadMoreHistory total={financeHistoryGoals.length + financeHistoryRepayments.length} />
                     </>}
 
                     {catTab === "finance" && <>
-                      {financeHistoryExpenses.map((e) => {
+                      {financeHistoryExpenses.slice(0, historyVisibleCount).map((e) => {
                         const editing = editingHistoryExpense && editingHistoryExpense.id === e.id && editingHistoryExpense.date === e.date;
                         return (
                           <div key={`expense-history-${e.date}-${e.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
@@ -4911,17 +4927,19 @@ function LifeTracker() {
                           </div>
                         );
                       })}
+                    <LoadMoreHistory total={financeHistoryExpenses.length} />
                     </>}
 
-                    {catTab === "trip" && travelPlans.filter((t) => t.completed || t.dismissed).map((t) => (
+                    {catTab === "trip" && travelHistoryPlans.slice(0, historyVisibleCount).map((t) => (
                       <div key={`trip-history-${t.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
                         <TravelModeIcon mode={t.mode} size={18} color={(t.status === "Cancelled" || t.dismissed) ? CORAL : TEAL} />
                         <div className="history-main" style={{ flex: 1, minWidth: 0 }}><div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{`${t.mode || "Trip"} · ${t.fromLocation || ""} → ${t.toLocation || ""}`}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>{(t.status === "Cancelled" || t.dismissed) ? `Cancelled: ${fmtTime(t.dismissedAt)}${t.dismissedAt ? ` · ${formatDMY(t.dismissedAt)}` : ""}` : `Completed: ${fmtTime(t.completedAt)}${t.completedAt ? ` · ${formatDMY(t.completedAt)}` : ""}`}</div></div>
                         <div className="history-actions"><span style={{ fontSize: 12, color: (t.status === "Cancelled" || t.dismissed) ? CORAL : TEAL, fontWeight: 700 }}>{(t.status === "Cancelled" || t.dismissed) ? "Cancelled" : "Completed"}</span><IconAction className="history-delete-btn" onClick={() => deleteHistoryTrip(t.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
                       </div>
                     ))}
+                    {catTab === "trip" && <LoadMoreHistory total={travelHistoryPlans.length} />}
 
-                    {catTab === "shopping" && shoppingHistoryLists.map((l) => {
+                    {catTab === "shopping" && shoppingHistoryLists.slice(0, historyVisibleCount).map((l) => {
                       const cancelled = l.status === "cancelled" || l.dismissed;
                       const statusText = cancelled ? "Cancelled" : l.status === "paid" ? "Paid" : "Completed";
                       const statusColor = cancelled ? CORAL : TEAL;
@@ -4938,14 +4956,16 @@ function LifeTracker() {
                         </div>
                       );
                     })}
+                    {catTab === "shopping" && <LoadMoreHistory total={shoppingHistoryLists.length} />}
 
-                    {(catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).map((g) => (
+                    {(catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).slice(0, historyVisibleCount).map((g) => (
                       <div key={`goal-history-${g.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
                         <RoutineActivityIcon icon={GOAL_TRACK_ICON[catTab]} size={18} title={g.title} />
                         <div className="history-main" style={{ flex: 1, minWidth: 0 }}><div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{g.title}</div><div style={{ fontSize: 12, color: INK_FAINT }}>{g.goalType || "Goal"}{g.expectedYear ? ` · Expected ${g.expectedYear}` : ""}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Achieved: {g.completedAt ? `${fmtTime(g.completedAt)} · ${formatDMY(g.completedAt)}` : (g.completedDate || "")}</div></div>
                         <div className="history-actions"><span style={{ fontSize: 12, color: TEAL, fontWeight: 700 }}>Achieved</span><IconAction className="history-delete-btn" onClick={() => deleteHistoryGoal(g.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
                       </div>
                     ))}
+                    {(catTab === "career" || catTab === "health") && <LoadMoreHistory total={goals.filter((g) => g.category === catTab && g.done).length} />}
                   </div>
                   </div></Card>
                 )}
