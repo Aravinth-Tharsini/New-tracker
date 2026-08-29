@@ -2383,6 +2383,7 @@ function LifeTracker() {
           transition: transform .18s ease, box-shadow .18s ease;
         }
         .today-cardv2:active { transform: scale(.965); }
+        .daily-input-tab:active { transform: scale(.965); }
         .today-cardv2-icon-wrap {
           position: relative; width: 48px; height: 48px; border-radius: 15px;
           display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-bottom: 11px;
@@ -3295,36 +3296,50 @@ function LifeTracker() {
                   const done = (item.type === "instant" || item.type === "duration") && field(item.id).status === "done";
                   const due = item.type === "interval" && isIntervalDue(item, todayLog, now.getTime());
                   const streak = streaks[item.id] || 0;
-                  const accentColor = active ? BRASS : done ? TEAL : due ? CORAL : INK_FAINT;
+                  // Redesigned to match the main Today menu cards: the item's own category accent
+                  // (not a hardcoded blue) drives the icon well and selected state, a soft two-layer
+                  // shadow matches .today-cardv2 at rest, and the old overlapping corner badges are
+                  // replaced with a single labeled status pill below a divider.
+                  const statusLabel = done ? "Done" : due ? "Due now" : null;
+                  const statusColor = done ? TEAL : due ? CORAL : null;
                   return (
                     <button
                       key={item.id}
                       onClick={() => setActiveTab(item.id)}
                       style={{
                         display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
-                        background: active ? "rgba(0,113,227,0.10)" : PANEL,
-                        border: `1.5px solid ${active ? BRASS : LINE}`,
-                        borderRadius: 16, padding: "10px 12px 8px", cursor: "pointer",
-                        flexShrink: 0, minWidth: 72, boxShadow: active ? "0 4px 14px rgba(0,113,227,0.12)" : "none",
+                        background: active ? hexA(accent, darkMode ? 0.20 : 0.10) : PANEL,
+                        border: `1.5px solid ${active ? accent : LINE}`,
+                        borderRadius: 18, padding: "12px 12px 10px", cursor: "pointer",
+                        flexShrink: 0, minWidth: 84,
+                        boxShadow: active ? `0 4px 14px ${hexA(accent, 0.18)}` : "0 1px 2px rgba(20,30,45,.04), 0 6px 18px rgba(20,30,45,.05)",
+                        opacity: done ? 0.72 : 1,
+                        transition: "transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease",
                       }}
+                      className="daily-input-tab"
                     >
-                      <div style={{ position: "relative", width: 38, height: 38, borderRadius: 10, background: active ? "rgba(0,113,227,0.14)" : PANEL_2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <RoutineActivityIcon icon={item.icon} size={19} title={item.name} />
-                        {done && (
-                          <div style={{ position: "absolute", bottom: -4, right: -4, width: 15, height: 15, borderRadius: "50%", background: TEAL, border: `2px solid ${BG}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <Check size={9} color="#FFFFFF" strokeWidth={3.2} />
-                          </div>
-                        )}
-                        {streak > 0 && !done && (
-                          <div style={{ position: "absolute", top: -7, right: -7, display: "flex", alignItems: "center", gap: 1, background: BG, border: `1px solid ${BRASS_DIM}`, borderRadius: 7, padding: "1px 3px", fontSize: 10, color: BRASS, fontFamily: mono }}>
-                            <Flame size={9} /> {streak}
-                          </div>
-                        )}
+                      <div style={{ width: 44, height: 44, borderRadius: 15, background: hexA(accent, active ? (darkMode ? 0.28 : 0.18) : (darkMode ? 0.16 : 0.08)), display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <RoutineActivityIcon icon={item.icon} size={21} title={item.name} />
                       </div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: active ? BRASS : INK, maxWidth: 68, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
-                      <div style={{ fontSize: 11, fontFamily: mono, color: accentColor, fontWeight: 600 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: active ? accent : INK, maxWidth: 76, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                      <div style={{ fontSize: 11, fontFamily: mono, color: INK_FAINT, fontWeight: 600 }}>
                         {item.scheduledTime ? fmtTimeString12(item.scheduledTime) : "—"}
                       </div>
+                      {(statusLabel || streak > 0) && (
+                        <>
+                          <div style={{ width: "100%", height: 1, background: LINE, margin: "1px 0 0" }} />
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }}>
+                            {statusLabel && (
+                              <span style={{ fontSize: 10.5, fontWeight: 700, color: statusColor, background: hexA(statusColor, 0.12), borderRadius: 980, padding: "2px 7px" }}>{statusLabel}</span>
+                            )}
+                            {streak > 0 && (
+                              <span style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 10.5, fontWeight: 700, color: BRASS, fontFamily: mono }}>
+                                <Flame size={10} /> {streak}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </button>
                   );
                 })}
