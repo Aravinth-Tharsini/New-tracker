@@ -298,6 +298,7 @@ function hexA(hex, alpha) {
 function dateKey(d = new Date()) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 function monthKey(d = new Date()) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; }
 function formatDateLong(d) { return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); }
+function formatDateShort(d) { return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }); }
 function formatDMY(dateStr) {
   if (!dateStr) return "";
   let dt;
@@ -2169,6 +2170,47 @@ function LifeTracker() {
           --nav-bg:rgba(28,28,30,0.92);
           --nav-safe-bg:#000000;
         }
+        /* ===== Responsive top header (title + dark mode / reminders / holidays / calendar icons) ===== */
+        .app-header-bar {
+          gap: 8px;
+          min-width: 0;
+        }
+        .app-header-title {
+          flex-shrink: 1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .app-header-icons {
+          min-width: 0;
+          flex-shrink: 1;
+          gap: clamp(6px, 3vw, 14px);
+        }
+        .app-header-icons > button {
+          flex-shrink: 0;
+        }
+        .header-date-btn {
+          min-width: 0;
+          flex-shrink: 1;
+          padding: clamp(6px, 2vw, 8px) clamp(8px, 2.5vw, 14px) clamp(6px, 2vw, 8px) clamp(6px, 2vw, 12px) !important;
+          gap: clamp(4px, 1.5vw, 8px) !important;
+        }
+        .header-date-btn > span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          min-width: 0;
+        }
+        .header-date-short { display: none; }
+        .header-date-chevron { flex-shrink: 0; }
+        @media (max-width: 400px) {
+          .header-date-full { display: none; }
+          .header-date-short { display: inline; }
+        }
+        @media (max-width: 340px) {
+          .header-date-chevron { display: none; }
+        }
         /* Today category cards: clean, visual-first UI */
         .today-expand-enter { animation: todaySlideIn .48s cubic-bezier(.22,.8,.25,1) both; overflow: hidden; }
         @keyframes todaySlideIn {
@@ -2322,11 +2364,11 @@ function LifeTracker() {
         }
       `}</style>
 
-      <div style={{ padding: "calc(16px + env(safe-area-inset-top)) 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
+      <div className="app-header-bar" style={{ padding: "calc(16px + env(safe-area-inset-top)) 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span className="app-header-title" style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
           {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "Data Link" : "Insights"}
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
+        <div className="app-header-icons" style={{ display: "flex", alignItems: "center", position: "relative" }}>
           <button onClick={() => setDarkMode((v) => !v)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} style={{ background: "transparent", border: "none", color: INK, cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}>
             {darkMode ? <Sun size={20} strokeWidth={1.8} /> : <Moon size={20} strokeWidth={1.8} />}
           </button>
@@ -2343,6 +2385,7 @@ function LifeTracker() {
             )}
           </button>
           <button
+            className="header-date-btn"
             onClick={() => {
               const el = headerDateInputRef.current;
               if (!el) return;
@@ -2350,11 +2393,12 @@ function LifeTracker() {
               else { el.focus(); el.click(); }
             }}
             title="Open calendar"
-            style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: INK, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 980, padding: "8px 14px 8px 12px", cursor: "pointer", boxShadow: "0 2px 6px rgba(20,30,45,.05)" }}
+            style={{ display: "flex", alignItems: "center", fontSize: 14, color: INK, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 980, cursor: "pointer", boxShadow: "0 2px 6px rgba(20,30,45,.05)" }}
           >
-            <CalendarDays size={16} color={BRASS} strokeWidth={2} />
-            <span style={{ fontWeight: 650 }}>{formatDateLong(new Date())}</span>
-            <ChevronDown size={15} color={INK_FAINT} strokeWidth={2} />
+            <CalendarDays size={16} color={BRASS} strokeWidth={2} style={{ flexShrink: 0 }} />
+            <span className="header-date-full" style={{ fontWeight: 650 }}>{formatDateLong(new Date())}</span>
+            <span className="header-date-short" style={{ fontWeight: 650 }}>{formatDateShort(new Date())}</span>
+            <ChevronDown className="header-date-chevron" size={15} color={INK_FAINT} strokeWidth={2} />
           </button>
           <input
             ref={headerDateInputRef}
@@ -2371,7 +2415,7 @@ function LifeTracker() {
           {showHolidays && (
             <>
               <div onClick={() => setShowHolidays(false)} style={{ position: "fixed", inset: 0, zIndex: 40, background: "transparent" }} />
-              <div style={{ position: "absolute", top: 30, right: 0, zIndex: 41, width: 262, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 16, boxShadow: "0 8px 28px rgba(20,30,45,.16)", padding: 12 }}>
+              <div style={{ position: "absolute", top: 30, right: 0, zIndex: 41, width: 262, maxWidth: "calc(100vw - 32px)", background: PANEL, border: `1px solid ${LINE}`, borderRadius: 16, boxShadow: "0 8px 28px rgba(20,30,45,.16)", padding: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 9, fontSize: 13, fontWeight: 750, color: INK, fontFamily: disp }}>
                   <PartyPopper size={14} color={BRASS} /> Upcoming Indian holidays
                 </div>
