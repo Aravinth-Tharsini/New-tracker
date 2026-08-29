@@ -87,9 +87,15 @@ button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
   animation: pageSmoothEnter .42s cubic-bezier(.22,.8,.25,1) both;
 }
 
+/* Opacity-only: earlier this also animated transform:translateY(), which promotes the
+   element to its own compositor layer for the animation's duration. That element is also
+   the page's actual scroll content, so a swipe started right after switching tabs (exactly
+   when people scroll) could get absorbed by the animation instead of moving the page --
+   the first couple of scroll attempts would feel stuck until the animation settled. A pure
+   opacity fade keeps the same smooth-entry feel without competing with touch scrolling. */
 @keyframes pageSmoothEnter {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* Respect users who prefer reduced motion */
@@ -203,7 +209,7 @@ button:active, [role="button"]:active {
 @media(max-width:420px){.mobile-array-grid{gap:7px!important}.mobile-array-grid .today-focus-card{min-height:60px!important;padding:8px 9px!important;gap:9px!important}.mobile-array-grid .today-focus-icon{width:34px!important;height:34px!important;border-radius:9px!important}.history-list-row,.mobile-array-row{gap:8px;padding:9px 2px}.history-list-row .history-amount,.mobile-array-row .mobile-array-amount{max-width:30%;font-size:13px}.history-list-row .history-actions,.mobile-array-row .mobile-array-actions{gap:3px}}
 /* Shared Daily + Planner layout: compact, balanced and consistent */
 .daily-page-content,.planner-page-content{animation:contentFadeIn .42s cubic-bezier(.22,.8,.25,1) both}
-@keyframes contentFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes contentFadeIn{from{opacity:0}to{opacity:1}}
 .daily-page-content .mobile-array-grid,.planner-page-content .mobile-array-grid{gap:8px!important}
 .daily-page-content .today-focus-card,.planner-page-content .today-focus-card{min-height:58px!important;padding:8px 10px!important;gap:9px!important}
 .daily-page-content .today-focus-icon,.planner-page-content .today-focus-icon{width:34px!important;height:34px!important;border-radius:9px!important}
