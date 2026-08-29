@@ -1975,6 +1975,33 @@ function LifeTracker() {
   const openNewItemForm = () => setItemForm(blankItemForm());
   const openEditItemForm = (item) => setItemForm({ ...blankItemForm(), ...item, groups: { ...(item.groups || {}) } });
   const closeItemForm = () => { setItemForm(null); setAddingGroup(false); setAddingSubTo(null); };
+
+  // ---- Back button: step back through the app's screens instead of closing it ----
+  // Whatever is "on top" (a confirmation modal, the holidays popup, an open add/edit form,
+  // a category drill-down, or a non-Home tab) is what Back closes first. Only pressing Back
+  // from the plain Home tab, with nothing else open, is allowed to actually exit the app.
+  useEffect(() => {
+    history.pushState({ appNav: true }, "");
+  }, []);
+  useEffect(() => {
+    const handlePopState = () => {
+      let handled = false;
+      if (pendingImportData) { cancelImport(); handled = true; }
+      else if (showHolidays) { setShowHolidays(false); handled = true; }
+      else if (itemForm || addingGroup || addingSubTo) { closeItemForm(); handled = true; }
+      else if (catTab) { setCatTab(null); handled = true; }
+      else if (page !== "dashboard") { setPage("dashboard"); handled = true; }
+      if (handled) {
+        // Re-arm the trap so the next Back press is caught too.
+        history.pushState({ appNav: true }, "");
+      }
+      // Nothing was open and we're already on the Home tab — let this Back proceed
+      // normally, which is the one case where the app should actually close.
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [page, catTab, itemForm, addingGroup, addingSubTo, showHolidays, pendingImportData]);
+
   const saveItemForm = () => {
     if (!itemForm.name.trim()) return;
     setDailyItems((prev) => {
