@@ -33,7 +33,12 @@
 <style id="mobile-auto-fit-ui">
 /* ===== SIMPLE MOBILE AUTO-FIT UI ===== */
 *{box-sizing:border-box;}
-html,body,#root{width:100%;max-width:100%;min-height:100%;margin:0;overflow-x:hidden;}
+html,#root{width:100%;max-width:100%;min-height:100%;margin:0;overflow-x:hidden;}
+/* IMPORTANT: overflow-x:hidden must NOT also be set on <body> at the same time as <html>.
+   Stacking it on both is a known iOS/WebKit trigger that can silently disable vertical
+   touch-scrolling on the whole page (content renders, but scrolling stops responding
+   entirely). #root already clips horizontal overflow, so body doesn't need this too. */
+body{width:100%;max-width:100%;min-height:100%;margin:0;}
 body{min-height:100dvh;padding-bottom:calc(76px + env(safe-area-inset-bottom));-webkit-text-size-adjust:100%;
   -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain;}
 #root{width:100%;min-width:0;}
@@ -46,7 +51,6 @@ img,svg{max-width:100%;}
 button{touch-action:manipulation;}
 @media(max-width:480px){
   #root{width:100vw;}
-  body{overflow-x:hidden;}
 }
 @media(max-width:380px){
   #root{font-size:14px;}
