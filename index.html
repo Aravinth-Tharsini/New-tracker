@@ -859,25 +859,25 @@ const DAILY_TAB_CATEGORY_DEFS = [
   { id: "activity", label: "Routine", icon: Activity },
 ];
 const TODAY_CARD_META = {
-  myday: { desc: "Plan your day & stay focused", bg: "#EEF5FF" },
-  expense: { desc: "Track spending & manage bills", bg: "#EEF6FF" },
-  shopping: { desc: "Keep your shopping list ready", bg: "#F2EEFF" },
-  trip: { desc: "Plan trips & set reminders", bg: "#F5EEFF" },
-  career: { desc: "Build skills & grow your career", bg: "#F2F9F4" },
-  health: { desc: "Track health & wellness", bg: "#ECFAF4" },
-  activity: { desc: "Track daily routines & habits", bg: "#F0FAF5" },
+  myday: { desc: "Plan your day & stay focused", bg: "rgba(109,40,217,0.10)" },
+  expense: { desc: "Track spending & manage bills", bg: "rgba(15,157,88,0.10)" },
+  shopping: { desc: "Keep your shopping list ready", bg: "rgba(234,88,12,0.10)" },
+  trip: { desc: "Plan trips & set reminders", bg: "rgba(13,148,136,0.10)" },
+  career: { desc: "Build skills & grow your career", bg: "rgba(37,99,235,0.09)" },
+  health: { desc: "Track health & wellness", bg: "rgba(219,39,119,0.09)" },
+  activity: { desc: "Track daily routines & habits", bg: "rgba(67,56,202,0.09)" },
 };
 // A distinct accent hue per Today category — used for the card icon tile, tinted background,
 // mini progress bar and attention badge, so each row reads as its own place at a glance rather
-// than everything sharing the same blue.
+// than everything sharing the same blue. Kept in sync with PLANNER_CATEGORY_META's palette.
 const TODAY_CARD_ACCENT = {
-  myday: "#5A20B8",
-  expense: "#159957",
-  shopping: "#E08A2E",
-  trip: "#0BA5A5",
-  career: "#0071E3",
-  health: "#E0356B",
-  activity: "#7C3AED",
+  myday: "#6D28D9",
+  expense: "#0F9D58",
+  shopping: "#EA580C",
+  trip: "#0D9488",
+  career: "#2563EB",
+  health: "#DB2777",
+  activity: "#4338CA",
 };
 // Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
@@ -2221,10 +2221,31 @@ function LifeTracker() {
           transition: opacity .28s ease, transform .38s cubic-bezier(.22,.8,.25,1);
         }
         .today-category-grid { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px !important; }
+        .today-cardv2 {
+          position: relative; display: flex; flex-direction: column; align-items: flex-start; text-align: left;
+          width: 100%; border-radius: 22px; border: 1px solid rgba(0,0,0,.04); cursor: pointer;
+          padding: 16px 15px 52px; box-shadow: 0 1px 2px rgba(20,30,45,.04), 0 6px 18px rgba(20,30,45,.05);
+          transition: transform .18s ease, box-shadow .18s ease;
+        }
+        .today-cardv2:active { transform: scale(.965); }
+        .today-cardv2-icon-wrap {
+          position: relative; width: 48px; height: 48px; border-radius: 15px;
+          display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-bottom: 11px;
+        }
+        .today-cardv2-title { font-size: 16px; font-weight: 750; line-height: 1.2; }
+        .today-cardv2-desc { font-size: 11.5px; color: var(--ink-dim); line-height: 1.35; margin-top: 3px; min-height: 30px; }
+        .today-cardv2-divider { width: 100%; height: 1px; background: var(--line); margin: 9px 0 11px; }
+        .today-cardv2-stats { display: flex; align-items: stretch; gap: 10px; width: 100%; }
+        .today-cardv2-stat { flex: 1; min-width: 0; }
+        .today-cardv2-stat-divider { width: 1px; background: var(--line); flex-shrink: 0; }
+        .today-cardv2-statnum { font-size: 16px; font-weight: 750; margin-top: 3px; font-family: 'JetBrains Mono', monospace; }
+        .today-cardv2-statlabel { font-size: 11px; color: var(--ink-dim); margin-top: 1px; }
+        .today-cardv2-arrow {
+          position: absolute; right: 14px; bottom: 14px; width: 38px; height: 38px; border-radius: 999px;
+          display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(20,30,45,.08);
+        }
         @media(min-width:700px){
           .today-category-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px !important; }
-          .today-focus-card { min-height:210px !important; padding:20px 14px 16px !important; }
-          .today-focus-icon { width:86px !important; height:86px !important; }
         }
         /* Shared 2-column grid item: collapses to 0 (siblings hidden) or expands to a full row
            (selected item, whose button then shrinks into a small icon via .today-focus-card/.is-open) */
@@ -2551,6 +2572,8 @@ function LifeTracker() {
       })()}
 
       {page === "daily" && (() => {
+        const currentHour = new Date().getHours();
+        const greeting = currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
         // One pass over the categories to derive every count/label the header and cards need,
         // so the hero summary and each card read from the same numbers instead of drifting.
         const categoryStats = availableDailyCategories.map((cat) => {
@@ -2575,6 +2598,12 @@ function LifeTracker() {
         });
         return (
         <div key="daily-page" className="daily-page-content" style={{ padding: "6px 0 14px", flex: 1, minHeight: 0, width: "100%" }}>
+          {!expandedDailyCategory && (
+            <div style={{ padding: "0 16px", marginBottom: 14 }}>
+              <div style={{ fontSize: 15, color: INK, marginBottom: 2 }}>{greeting}! 👋</div>
+              <div style={{ fontSize: 13, color: INK_DIM }}>Plan better, stay consistent, achieve your goals.</div>
+            </div>
+          )}
           {availableDailyCategories.length === 0 ? (
             <div style={{ margin: "0 16px", padding: "36px 18px", textAlign: "center", background: PANEL, borderRadius: 22, boxShadow: CARD_SHADOW, border: `1px solid ${LINE}` }}>
               <div style={{ width: 56, height: 56, borderRadius: "50%", background: hexA(BRASS, 0.12), display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
@@ -2587,34 +2616,97 @@ function LifeTracker() {
             <div className="today-category-grid" style={{ padding: "0 16px" }}>
               {categoryStats.map((cs) => {
                 const { cat, expanded, CatIcon, itemsForCat, pendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent } = cs;
+                const badge = attentionCount > 0 && (
+                  <div style={{ position: "absolute", top: -7, right: -7, minWidth: 22, height: 22, borderRadius: 999, background: CORAL, color: "#FFFFFF", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid " + BG, fontFamily: mono }}>
+                    {attentionCount > 9 ? "9+" : attentionCount}
+                  </div>
+                );
+                // Each category type gets the stat layout that fits its data best: a two-number
+                // split (My Day / Trips), a logged-count + total (Expense), a reminder callout
+                // (Shopping), or a done/total progress bar (Career growth / Health / Routine).
+                const statMode = cat.id === "expense" ? "expense" : cat.id === "shopping" ? "reminder" : (cat.id === "myday" || cat.id === "trip") ? "counts" : "progress";
                 return (
                   <div key={cat.id} className={`cat-grid-item ${expanded ? "is-open-row" : (expandedDailyCategory ? "is-collapsed" : "")}`}>
-                    <button
-                      className={`today-focus-card ${expanded ? "is-open" : ""}`}
-                      onClick={() => setExpandedDailyCategory(expanded ? null : cat.id)}
-                      style={{ background: expanded ? hexA(BRASS, darkMode ? 0.20 : 0.10) : hexA(accent, darkMode ? 0.20 : 0.09), cursor: "pointer" }}
-                    >
-                      <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0, "--icon-tint": expanded ? hexA(BRASS, darkMode ? 0.24 : 0.14) : hexA(accent, darkMode ? 0.24 : 0.13), "--icon-tint-border": expanded ? hexA(BRASS, 0.3) : hexA(accent, 0.24) }}>
-                        <CatIcon size={32} color={expanded ? BRASS : accent} strokeWidth={2.2} />
-                        {attentionCount > 0 && (
-                          <div style={{ position: "absolute", top: -8, right: -8, minWidth: 26, height: 26, borderRadius: 999, background: CORAL, color: "#FFFFFF", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px", border: "2px solid " + BG, fontFamily: mono }}>
-                            {attentionCount > 9 ? "9+" : attentionCount}
+                    {!expanded ? (
+                      <button
+                        className="today-cardv2"
+                        onClick={() => setExpandedDailyCategory(cat.id)}
+                        style={{ background: hexA(accent, darkMode ? 0.16 : 0.08) }}
+                      >
+                        <div className="today-cardv2-icon-wrap" style={{ background: hexA(accent, darkMode ? 0.26 : 0.16) }}>
+                          <CatIcon size={24} color={accent} strokeWidth={2.2} />
+                          {badge}
+                        </div>
+                        <div className="today-cardv2-title" style={{ color: INK, fontFamily: disp }}>{cat.label}</div>
+                        <div className="today-cardv2-desc">{PLANNER_CATEGORY_META[cat.id]?.desc || TODAY_CARD_META[cat.id]?.desc || ""}</div>
+                        <div className="today-cardv2-divider" />
+                        {statMode === "counts" && (() => {
+                          const secondNum = cat.id === "myday" ? visibleMyDay.length : visibleTrips.length;
+                          const SecondIcon = cat.id === "myday" ? CheckCircle2 : Bell;
+                          return (
+                            <div className="today-cardv2-stats">
+                              <div className="today-cardv2-stat">
+                                <CalendarDays size={14} color={accent} strokeWidth={2.2} />
+                                <div className="today-cardv2-statnum" style={{ color: INK }}>{totalCount}</div>
+                                <div className="today-cardv2-statlabel">Planned</div>
+                              </div>
+                              <div className="today-cardv2-stat-divider" />
+                              <div className="today-cardv2-stat">
+                                <SecondIcon size={14} color={accent} strokeWidth={2.2} />
+                                <div className="today-cardv2-statnum" style={{ color: INK }}>{secondNum}</div>
+                                <div className="today-cardv2-statlabel">Today</div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        {statMode === "expense" && (
+                          <div className="today-cardv2-stats">
+                            <div className="today-cardv2-stat">
+                              <Receipt size={14} color={accent} strokeWidth={2.2} />
+                              <div className="today-cardv2-statnum" style={{ color: INK }}>{todaysExpenseCount}</div>
+                              <div className="today-cardv2-statlabel">Logged</div>
+                            </div>
+                            <div className="today-cardv2-stat-divider" />
+                            <div className="today-cardv2-stat">
+                              <span style={{ fontSize: 13, fontWeight: 800, color: accent }}>&#8377;</span>
+                              <div className="today-cardv2-statnum" style={{ color: accent }}>{inr(todaysExpenseTotal).replace("\u20b9", "")}</div>
+                              <div className="today-cardv2-statlabel">Total</div>
+                            </div>
                           </div>
                         )}
-                      </div>
-                      <div className="today-focus-text">
-                        <div style={{ fontSize: 18, color: expanded ? BRASS : INK, fontWeight: 750, lineHeight: 1.15 }}>{cat.label}</div>
-                        <div className="today-focus-description" style={{ fontSize: 12.5, lineHeight: 1.4, color: INK_DIM, marginTop: 6, fontFamily: mono }}>{countLabel}</div>
-                        {trackableCount > 0 && (
-                          <div style={{ marginTop: 8, height: 4, borderRadius: 999, background: hexA(accent, darkMode ? 0.22 : 0.16), overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${Math.round((doneCount / trackableCount) * 100)}%`, background: accent, borderRadius: 999, transition: "width .4s ease" }} />
+                        {statMode === "reminder" && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <Bell size={16} color={accent} strokeWidth={2.2} />
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>{shoppingDueCount > 0 ? `${shoppingDueCount} Reminder${shoppingDueCount === 1 ? "" : "s"}` : "No reminders"}</div>
+                              {shoppingDueCount > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: accent }}>Today</div>}
+                            </div>
                           </div>
                         )}
-                      </div>
-                      <div className="today-focus-arrow" style={{ background: expanded ? hexA(BRASS, 0.16) : hexA(accent, 0.15), color: expanded ? BRASS : accent }}>
-                        <ArrowRight size={22} strokeWidth={2.4} />
-                      </div>
-                    </button>
+                        {statMode === "progress" && (
+                          <div>
+                            <div style={{ fontSize: 14, color: INK }}><span style={{ fontWeight: 750 }}>{doneCount}/{trackableCount}</span> <span style={{ color: INK_DIM }}>done</span></div>
+                            <div style={{ marginTop: 8, height: 5, borderRadius: 999, background: hexA(accent, darkMode ? 0.22 : 0.16), overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${trackableCount > 0 ? Math.round((doneCount / trackableCount) * 100) : 0}%`, background: accent, borderRadius: 999, transition: "width .4s ease" }} />
+                            </div>
+                          </div>
+                        )}
+                        <div className="today-cardv2-arrow" style={{ background: hexA(accent, 0.16), color: accent }}>
+                          <ArrowRight size={18} strokeWidth={2.4} />
+                        </div>
+                      </button>
+                    ) : (
+                      <button
+                        className="today-focus-card is-open"
+                        onClick={() => setExpandedDailyCategory(null)}
+                        style={{ background: hexA(BRASS, darkMode ? 0.20 : 0.10), cursor: "pointer" }}
+                      >
+                        <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0, "--icon-tint": hexA(BRASS, darkMode ? 0.24 : 0.14), "--icon-tint-border": hexA(BRASS, 0.3) }}>
+                          <CatIcon size={32} color={BRASS} strokeWidth={2.2} />
+                          {badge}
+                        </div>
+                      </button>
+                    )}
                     {expanded && cat.id === "trip" && (
                       <div className="today-expand-enter" style={{ marginTop: 8, paddingTop: 2 }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -3185,6 +3277,18 @@ function LifeTracker() {
                   </div>
                 );
               })}
+            </div>
+          )}
+          {!expandedDailyCategory && (
+            <div style={{ margin: "14px 16px 0", padding: "16px 18px", borderRadius: 18, background: darkMode ? "linear-gradient(120deg, #1E2A3D 0%, #22283A 100%)" : "linear-gradient(120deg, #E7EEFB 0%, #ECE7FA 100%)", border: `1px solid ${LINE}`, display: "flex", alignItems: "center", gap: 14, position: "relative", overflow: "hidden" }}>
+              <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 12, background: hexA(BRASS, darkMode ? 0.22 : 0.12), display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Sparkles size={17} color={BRASS} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 750, color: INK, fontFamily: disp }}>Quick tip</div>
+                <div style={{ fontSize: 12.5, color: INK_DIM, marginTop: 1 }}>Small steps today, big results tomorrow.</div>
+              </div>
+              <span style={{ fontSize: 26, flexShrink: 0 }}>🎯</span>
             </div>
           )}
         </div>
