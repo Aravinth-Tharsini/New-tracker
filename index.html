@@ -251,6 +251,15 @@ function readAll() {
   } catch (e) { return {}; }
 }
 function writeAll(store) { localStorage.setItem(PREFIX + "__store__", JSON.stringify(store)); }
+// Reads a persisted value the same way window.storage.get() would, but synchronously. Used only
+// to hydrate initial React state (see below) — everything else still goes through window.storage.
+function readPersistedSync(key, fallback) {
+  try {
+    const store = readAll();
+    if (key in store && store[key] != null) return JSON.parse(store[key]);
+  } catch (e) {}
+  return fallback;
+}
 window.storage = {
   async get(key, shared = false) {
     const store = readAll();
@@ -1118,18 +1127,25 @@ function LifeTracker() {
     </button>
   ) : null;
   const [editingHistoryExpense, setEditingHistoryExpense] = useState(null);
-  const [dailyItems, setDailyItems] = useState([]);
-  const [dailyLogs, setDailyLogs] = useState({});
-  const [goals, setGoals] = useState([]);
-  const [repayments, setRepayments] = useState([]);
-  const [travelPlans, setTravelPlans] = useState([]);
-  const [myDayEvents, setMyDayEvents] = useState([]);
-  const [financeMonthly, setFinanceMonthly] = useState({});
-  const [shoppingLists, setShoppingLists] = useState([]);
-  const [savedShopNames, setSavedShopNames] = useState([]);
-  const [savedShoppingCategories, setSavedShoppingCategories] = useState(["Groceries", "Vegetables", "Electronics"]);
-  const [remindersEnabled, setRemindersEnabled] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  // Hydrate straight from localStorage on the very first render (lazy initializer), instead of
+  // starting empty and filling in via an async effect after mount. The async version rendered an
+  // almost-empty page on first paint, then swelled to full height a moment later once real data
+  // loaded — a two-height render that WebKit sometimes fails to recompute the scrollable region
+  // for, leaving the page stuck non-scrollable until a manual scroll attempt or refresh forced a
+  // relayout. Reading synchronously here means the very first paint already has the real, full
+  // height, so there's no under-computed scroll region to begin with.
+  const [dailyItems, setDailyItems] = useState(() => readPersistedSync("dailyItems", []));
+  const [dailyLogs, setDailyLogs] = useState(() => readPersistedSync("dailyLogs", {}));
+  const [goals, setGoals] = useState(() => readPersistedSync("goals", []));
+  const [repayments, setRepayments] = useState(() => readPersistedSync("repayments", []));
+  const [travelPlans, setTravelPlans] = useState(() => readPersistedSync("travelPlans", []));
+  const [myDayEvents, setMyDayEvents] = useState(() => readPersistedSync("myDayEvents", []));
+  const [financeMonthly, setFinanceMonthly] = useState(() => readPersistedSync("financeMonthly", {}));
+  const [shoppingLists, setShoppingLists] = useState(() => readPersistedSync("shoppingLists", []));
+  const [savedShopNames, setSavedShopNames] = useState(() => readPersistedSync("savedShopNames", []));
+  const [savedShoppingCategories, setSavedShoppingCategories] = useState(() => readPersistedSync("savedShoppingCategories", ["Groceries", "Vegetables", "Electronics"]));
+  const [remindersEnabled, setRemindersEnabled] = useState(() => readPersistedSync("remindersEnabled", false));
+  const [darkMode, setDarkMode] = useState(() => readPersistedSync("darkMode", false));
   const [showHolidays, setShowHolidays] = useState(false);
   const upcomingHolidays = useMemo(() => {
     return INDIA_GOVT_HOLIDAYS
@@ -1139,14 +1155,14 @@ function LifeTracker() {
       .slice(0, 5);
   }, []);
   const nextHoliday = upcomingHolidays[0] || null;
-  const [dataMode, setDataMode] = useState("offline");
-  const [sheetUrl, setSheetUrl] = useState("");
+  const [dataMode, setDataMode] = useState(() => readPersistedSync("dataMode", "offline"));
+  const [sheetUrl, setSheetUrl] = useState(() => readPersistedSync("sheetUrl", ""));
   const [sheetUrlDraft, setSheetUrlDraft] = useState("");
   const [syncStatus, setSyncStatus] = useState("idle");
-  const [lastSyncedAt, setLastSyncedAt] = useState("");
+  const [lastSyncedAt, setLastSyncedAt] = useState(() => readPersistedSync("lastSyncedAt", ""));
   const [importMessage, setImportMessage] = useState("");
-  const [autoExportEnabled, setAutoExportEnabled] = useState(true);
-  const [lastAutoExportAt, setLastAutoExportAt] = useState("");
+  const [autoExportEnabled, setAutoExportEnabled] = useState(() => readPersistedSync("autoExportEnabled", true));
+  const [lastAutoExportAt, setLastAutoExportAt] = useState(() => readPersistedSync("lastAutoExportAt", ""));
   const [pendingImportData, setPendingImportData] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
   const undoTimerRef = useRef(null);
@@ -1155,7 +1171,9 @@ function LifeTracker() {
   const syncTimerRef = useRef(null);
   const didInitialPull = useRef(false);
   const pullSettledRef = useRef(false);
-  const [loaded, setLoaded] = useState(false);
+  // All persisted state above is now hydrated synchronously (lazy useState initializers), so
+  // there's no more async gap to wait out — loaded can simply start true.
+  const [loaded, setLoaded] = useState(true);
   const [now, setNow] = useState(new Date());
   const notifiedRef = useRef({});
   const today = dateKey();
@@ -1194,16 +1212,10 @@ function LifeTracker() {
     return () => clearInterval(t);
   }, [page]);
 
-  useEffect(() => {
-    (async () => {
-      const keys = ["dailyItems", "dailyLogs", "goals", "repayments", "travelPlans", "myDayEvents", "financeMonthly", "shoppingLists", "savedShopNames", "savedShoppingCategories", "remindersEnabled", "dataMode", "sheetUrl", "lastSyncedAt", "autoExportEnabled", "lastAutoExportAt", "darkMode"];
-      const setters = [setDailyItems, setDailyLogs, setGoals, setRepayments, setTravelPlans, setMyDayEvents, setFinanceMonthly, setShoppingLists, setSavedShopNames, setSavedShoppingCategories, setRemindersEnabled, setDataMode, setSheetUrl, setLastSyncedAt, setAutoExportEnabled, setLastAutoExportAt, setDarkMode];
-      for (let i = 0; i < keys.length; i++) {
-        try { const r = await window.storage.get(keys[i], false); if (r && r.value) setters[i](JSON.parse(r.value)); } catch (e) {}
-      }
-      setLoaded(true);
-    })();
-  }, []);
+  // Data is already hydrated synchronously above via lazy useState initializers, so the old
+  // async "load all keys, then setLoaded(true)" effect that used to live here has been removed —
+  // it was doing redundant work and, worse, was the actual source of the empty-first-paint/stuck
+  // scroll bug described above.
   useEffect(() => { if (loaded) window.storage.set("dailyItems", JSON.stringify(dailyItems), false).catch(() => {}); }, [dailyItems, loaded]);
   useEffect(() => { if (loaded) window.storage.set("dailyLogs", JSON.stringify(dailyLogs), false).catch(() => {}); }, [dailyLogs, loaded]);
   useEffect(() => { if (loaded) window.storage.set("goals", JSON.stringify(goals), false).catch(() => {}); }, [goals, loaded]);
