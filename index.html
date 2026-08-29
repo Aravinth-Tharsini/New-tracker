@@ -898,6 +898,37 @@ function TravelModeIcon({ mode, size = 18, color = BRASS, style }) {
 }
 
 function Card({ children, style }) { return <div style={{ background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 14, padding: "14px 16px", ...style }}>{children}</div>; }
+// Small circular percentage ring used for goal-progress badges (e.g. "68% completed").
+function RingProgress({ pct, size = 34, color = BRASS, track }) {
+  const r = (size - 5) / 2, c = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(100, pct));
+  return (
+    <svg width={size} height={size} style={{ flexShrink: 0 }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track || hexA(color, 0.16)} strokeWidth="3.5" />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="3.5" strokeLinecap="round"
+        strokeDasharray={c} strokeDashoffset={c - (clamped / 100) * c}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+      <text x="50%" y="52%" textAnchor="middle" dominantBaseline="middle" fontSize={size * 0.28} fontWeight="800" fill={color} fontFamily={mono}>{Math.round(clamped)}%</text>
+    </svg>
+  );
+}
+// A single "Upcoming attention" list row: colored icon tile, title/subtitle, and a trailing
+// badge (count pill or % ring) + chevron. Shared by the Home page's attention list.
+function AttentionRow({ icon: Icon, accent, title, subtitle, badge, onClick, isLast }) {
+  return (
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 2px", background: "transparent", border: "none", borderBottom: isLast ? "none" : `1px solid ${LINE}`, cursor: "pointer", textAlign: "left", width: "100%" }}>
+      <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 11, background: hexA(accent, 0.14), display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon size={18} color={accent} strokeWidth={2.2} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: INK_DIM, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{subtitle}</div>
+      </div>
+      {badge}
+      <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
+    </button>
+  );
+}
 function SectionLabel({ children }) { return <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: INK_FAINT, marginBottom: 8, fontWeight: 700 }}>{children}</div>; }
 function TextField(props) { return <input {...props} style={{ background: PANEL_2, border: "none", borderRadius: 10, padding: "10px 11px", color: INK, fontSize: 16, outline: "none", minWidth: 0, boxSizing: "border-box", width: "100%", ...props.style }} />; }
 function Select(props) { return <select {...props} style={{ background: PANEL_2, border: "none", borderRadius: 10, color: INK, fontSize: 16, padding: "10px 8px", outline: "none", minWidth: 0, boxSizing: "border-box", width: "100%", ...props.style }}>{props.children}</select>; }
@@ -2368,6 +2399,7 @@ function LifeTracker() {
 
       {page === "dashboard" && (() => {
         const pendingActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status !== "done").length;
+        const pendingItemsToday = validItems.filter((i) => i.type !== "interval" && field(i.id).status !== "done").slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
         const dueRepayments = todaysRepaymentReminders.length;
         const completedActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
         const totalActivities = validItems.filter((i) => i.type !== "interval").length;
@@ -2526,48 +2558,98 @@ function LifeTracker() {
             </>
           )}
 
-          <SectionLabel>Upcoming Attention</SectionLabel>
-          {dueRepayments === 0 && todaysTravelPlans.length === 0 && todaysMyDayEvents.length === 0 && todaysShoppingLists.length === 0 && pendingActivities === 0 ? (
-            <Card><div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div></Card>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {todaysMyDayEvents.length > 0 && (
-                <button onClick={() => { setExpandedDailyCategory("myday"); setDailyHighlightId(todaysMyDayEvents[0].id); setPage("daily"); }} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(0,113,227,0.06)", border: `1.5px solid ${BRASS_DIM}`, borderRadius: 14, padding: "12px 14px", cursor: "pointer", textAlign: "left", width: "100%" }}>
-                  <div style={{ flexShrink: 0, width: 30, height: 30, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Bell size={14} color="#FFFFFF" /></div>
-                  <div style={{ flex: 1, fontSize: 14, fontWeight: 650, color: INK }}>{todaysMyDayEvents.length} plan{todaysMyDayEvents.length > 1 ? "s" : ""} today{todaysMyDayEvents[0]?.title ? ` \u2014 ${todaysMyDayEvents[0].title}${todaysMyDayEvents[0].eventTime ? ` at ${fmtTimeString12(todaysMyDayEvents[0].eventTime)}` : ""}` : ""}</div>
-                  <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
-                </button>
-              )}
-              {todaysShoppingLists.length > 0 && (
-                <button onClick={() => { setExpandedDailyCategory("shopping"); setExpandedDailyShoppingId(todaysShoppingLists[0].id); setDailyHighlightId(todaysShoppingLists[0].id); setPage("daily"); }} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(0,113,227,0.06)", border: `1.5px solid ${BRASS_DIM}`, borderRadius: 14, padding: "12px 14px", cursor: "pointer", textAlign: "left", width: "100%" }}>
-                  <div style={{ flexShrink: 0, width: 30, height: 30, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Bell size={14} color="#FFFFFF" /></div>
-                  <div style={{ flex: 1, fontSize: 14, fontWeight: 650, color: INK }}>{todaysShoppingLists.length} shopping reminder{todaysShoppingLists.length > 1 ? "s" : ""} today</div>
-                  <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
-                </button>
-              )}
-              {dueRepayments > 0 && (
-                <button onClick={() => { setExpandedDailyCategory("expense"); setDailyHighlightId(todaysRepaymentReminders[0].id); setPage("daily"); }} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,59,48,0.06)", border: `1.5px solid rgba(255,59,48,0.35)`, borderRadius: 14, padding: "12px 14px", cursor: "pointer", textAlign: "left", width: "100%" }}>
-                  <div style={{ flexShrink: 0, width: 30, height: 30, borderRadius: "50%", background: CORAL, display: "flex", alignItems: "center", justifyContent: "center" }}><Bell size={14} color="#FFFFFF" /></div>
-                  <div style={{ flex: 1, fontSize: 14, fontWeight: 650, color: INK }}>{dueRepayments} repayment{dueRepayments > 1 ? "s" : ""} need attention</div>
-                  <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
-                </button>
-              )}
-              {todaysTravelPlans.length > 0 && (
-                <button onClick={() => { setExpandedDailyCategory("trip"); setDailyHighlightId(todaysTravelPlans[0].id); setPage("daily"); }} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(0,113,227,0.06)", border: `1.5px solid ${BRASS_DIM}`, borderRadius: 14, padding: "12px 14px", cursor: "pointer", textAlign: "left", width: "100%" }}>
-                  <div style={{ flexShrink: 0, width: 30, height: 30, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Bell size={14} color="#FFFFFF" /></div>
-                  <div style={{ flex: 1, fontSize: 14, fontWeight: 650, color: INK }}>{todaysTravelPlans.length} trip reminder{todaysTravelPlans.length > 1 ? "s" : ""}</div>
-                  <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
-                </button>
-              )}
-              {pendingActivities > 0 && (
-                <button onClick={() => { if (pendingActivityTarget) { setExpandedDailyCategory(pendingActivityTarget.category); setActiveTab(pendingActivityTarget.id); } setPage("daily"); }} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(242,166,90,0.10)", border: `1.5px solid rgba(242,166,90,0.5)`, borderRadius: 14, padding: "12px 14px", cursor: "pointer", textAlign: "left", width: "100%" }}>
-                  <div style={{ flexShrink: 0, width: 30, height: 30, borderRadius: "50%", background: "#F2A65A", display: "flex", alignItems: "center", justifyContent: "center" }}><Bell size={14} color="#FFFFFF" /></div>
-                  <div style={{ flex: 1, fontSize: 14, fontWeight: 650, color: INK }}>{pendingActivities} activity{pendingActivities > 1 ? "ies" : ""} still pending</div>
-                  <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
-                </button>
-              )}
-            </div>
-          )}
+          {(() => {
+            // "Add Expense" is always offered; up to 3 more slots surface today's soonest
+            // loggable items (config-driven, so this adapts to whatever the person has set up).
+            const quickActionItems = [
+              { key: "expense", icon: Wallet, label: "Add Expense", accent: TODAY_CARD_ACCENT.expense, onClick: () => { setExpandedDailyCategory("expense"); setPage("daily"); } },
+              ...pendingItemsToday.slice(0, 3).map((i) => ({
+                key: i.id, icon: ICON_MAP[i.icon] || Activity, label: i.name,
+                accent: TODAY_CARD_ACCENT[i.category] || BRASS,
+                onClick: () => { setExpandedDailyCategory(i.category); setActiveTab(i.id); setPage("daily"); },
+              })),
+            ];
+            return (
+              <>
+                <SectionLabel>Quick Actions</SectionLabel>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${quickActionItems.length}, 1fr)`, gap: 8, marginBottom: 16 }}>
+                  {quickActionItems.map((qa) => {
+                    const QIcon = qa.icon;
+                    return (
+                      <button key={qa.key} onClick={qa.onClick} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 16, padding: "14px 6px", cursor: "pointer", boxShadow: CARD_SHADOW }}>
+                        <div style={{ width: 34, height: 34, borderRadius: "50%", border: `2px solid ${qa.accent}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <QIcon size={16} color={qa.accent} strokeWidth={2.2} />
+                        </div>
+                        <span style={{ fontSize: 11.5, fontWeight: 650, color: INK, textAlign: "center", lineHeight: 1.2 }}>{qa.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
+
+          {(() => {
+            // Pick one goal category (career preferred, else the first with any goals set) to
+            // surface as a progress-ring attention row, mirroring the reference design.
+            const goalCat = goalAchievementByCat.find((g) => g.id === "career" && g.total > 0 && g.done < g.total)
+              || goalAchievementByCat.find((g) => g.total > 0 && g.done < g.total);
+            const attentionItems = [
+              ...todaysMyDayEvents.slice(0, 1).map((e) => ({
+                key: "myday-" + e.id, icon: Users, accent: TODAY_CARD_ACCENT.myday, title: "My Day",
+                subtitle: e.title ? `${e.title}${e.eventTime ? ` \u00b7 ${fmtTimeString12(e.eventTime)}` : ""}` : "Plan today",
+                badge: <span style={{ fontSize: 12.5, fontWeight: 750, color: TODAY_CARD_ACCENT.myday, background: hexA(TODAY_CARD_ACCENT.myday, 0.14), borderRadius: 999, minWidth: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 7px" }}>{todaysMyDayEvents.length}</span>,
+                onClick: () => { setExpandedDailyCategory("myday"); setDailyHighlightId(e.id); setPage("daily"); },
+              })),
+              ...todaysShoppingLists.slice(0, 1).map((s) => ({
+                key: "shop-" + s.id, icon: ShoppingBag, accent: TODAY_CARD_ACCENT.shopping, title: "Shopping",
+                subtitle: s.shopName ? `${s.shopName} \u00b7 reminder today` : "Reminder today",
+                badge: <span style={{ fontSize: 12.5, fontWeight: 750, color: TODAY_CARD_ACCENT.shopping, background: hexA(TODAY_CARD_ACCENT.shopping, 0.14), borderRadius: 999, minWidth: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 7px" }}>{todaysShoppingLists.length}</span>,
+                onClick: () => { setExpandedDailyCategory("shopping"); setExpandedDailyShoppingId(s.id); setDailyHighlightId(s.id); setPage("daily"); },
+              })),
+              ...todaysRepaymentReminders.slice(0, 1).map((r) => ({
+                key: "repay-" + r.id, icon: CreditCard, accent: TODAY_CARD_ACCENT.expense, title: "Finance",
+                subtitle: `${r.name || r.category}${r.dueDate ? ` \u00b7 ${formatDMY(r.dueDate)}` : ""}`,
+                badge: <span style={{ fontSize: 12.5, fontWeight: 750, color: CORAL, background: hexA(CORAL, 0.14), borderRadius: 999, minWidth: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 7px" }}>{dueRepayments}</span>,
+                onClick: () => { setExpandedDailyCategory("expense"); setDailyHighlightId(r.id); setPage("daily"); },
+              })),
+              ...todaysTravelPlans.slice(0, 1).map((t) => ({
+                key: "trip-" + t.id, icon: Plane, accent: TODAY_CARD_ACCENT.trip, title: "Travel",
+                subtitle: `${t.fromLocation} \u2192 ${t.toLocation}${t.travelDate ? ` \u00b7 ${formatDMY(t.travelDate)}` : ""}`,
+                badge: <span style={{ fontSize: 12.5, fontWeight: 750, color: TODAY_CARD_ACCENT.trip, background: hexA(TODAY_CARD_ACCENT.trip, 0.14), borderRadius: 999, minWidth: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 7px" }}>{todaysTravelPlans.length}</span>,
+                onClick: () => { setExpandedDailyCategory("trip"); setDailyHighlightId(t.id); setPage("daily"); },
+              })),
+              ...(goalCat ? [{
+                key: "goal-" + goalCat.id, icon: Target, accent: TODAY_CARD_ACCENT[goalCat.id] || TEAL, title: `${goalCat.label} Goal`,
+                subtitle: `${goalCat.label} \u00b7 ${Math.round((goalCat.done / goalCat.total) * 100)}% completed`,
+                badge: <RingProgress pct={(goalCat.done / goalCat.total) * 100} color={TEAL} size={32} />,
+                onClick: () => { setPage("categories"); setCatTab(goalCat.id); },
+              }] : []),
+              ...(pendingActivities > 0 && pendingActivityTarget ? [{
+                key: "pending-activity", icon: Clock, accent: "#F2A65A", title: "Pending activity",
+                subtitle: `${pendingActivities} activit${pendingActivities > 1 ? "ies" : "y"} still to do`,
+                badge: <span style={{ fontSize: 12.5, fontWeight: 750, color: "#F2A65A", background: "rgba(242,166,90,0.16)", borderRadius: 999, minWidth: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 7px" }}>{pendingActivities}</span>,
+                onClick: () => { setExpandedDailyCategory(pendingActivityTarget.category); setActiveTab(pendingActivityTarget.id); setPage("daily"); },
+              }] : []),
+            ];
+            return (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                  <SectionLabel style={{ marginBottom: 0 }}>Upcoming Attention</SectionLabel>
+                  {attentionItems.length > 0 && <button onClick={() => setPage("daily")} style={{ background: "transparent", border: "none", padding: 0, fontSize: 13, fontWeight: 700, color: BRASS, cursor: "pointer" }}>View all</button>}
+                </div>
+                {attentionItems.length === 0 ? (
+                  <Card><div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div></Card>
+                ) : (
+                  <Card style={{ padding: "2px 14px" }}>
+                    {attentionItems.map((it, idx) => (
+                      <AttentionRow key={it.key} icon={it.icon} accent={it.accent} title={it.title} subtitle={it.subtitle} badge={it.badge} onClick={it.onClick} isLast={idx === attentionItems.length - 1} />
+                    ))}
+                  </Card>
+                )}
+              </>
+            );
+          })()}
         </div>;
       })()}
 
