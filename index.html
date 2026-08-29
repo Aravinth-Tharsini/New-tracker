@@ -266,7 +266,7 @@ import {
   Plane, Train, Bus, Activity, Bike, Car, MapPin, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, History, Home as HomeIcon,
-  CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket,
+  CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -687,6 +687,35 @@ function planSpan(startDate, endDate) {
   const totalDays = Math.round((d2 - d1) / 86400000);
   return { totalDays, reversed: totalDays < 0, ...daysToYMD(totalDays) };
 }
+// Official Indian central government gazetted holidays (source: DoPT annual Office Memorandum).
+// Fixed-date national holidays repeat every year; festival dates are specific to the year listed
+// and should be refreshed when the next year's DoPT circular is published.
+const INDIA_GOVT_HOLIDAYS = [
+  { date: "2026-01-26", name: "Republic Day" },
+  { date: "2026-03-04", name: "Holi" },
+  { date: "2026-03-21", name: "Id-ul-Fitr" },
+  { date: "2026-03-26", name: "Ram Navami" },
+  { date: "2026-03-31", name: "Mahavir Jayanti" },
+  { date: "2026-04-03", name: "Good Friday" },
+  { date: "2026-05-01", name: "Buddha Purnima" },
+  { date: "2026-05-27", name: "Id-ul-Zuha (Bakrid)" },
+  { date: "2026-06-26", name: "Muharram" },
+  { date: "2026-08-15", name: "Independence Day" },
+  { date: "2026-08-26", name: "Id-e-Milad" },
+  { date: "2026-09-04", name: "Janmashtami" },
+  { date: "2026-10-02", name: "Gandhi Jayanti" },
+  { date: "2026-10-20", name: "Dussehra" },
+  { date: "2026-11-08", name: "Diwali" },
+  { date: "2026-11-24", name: "Guru Nanak Jayanti" },
+  { date: "2026-12-25", name: "Christmas Day" },
+  { date: "2027-01-26", name: "Republic Day" },
+];
+// Days-away label + urgency tier, used to style the countdown chip in the holidays popover.
+function daysUntil(dateStr) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + "T00:00:00");
+  return Math.round((target - today) / 86400000);
+}
 const CATEGORY_DEFS = [
   { id: "myday", label: "My Day", icon: Users },
   { id: "finance", label: "Finance", icon: Wallet },
@@ -1036,6 +1065,15 @@ function LifeTracker() {
   const [savedShoppingCategories, setSavedShoppingCategories] = useState(["Groceries", "Vegetables", "Electronics"]);
   const [remindersEnabled, setRemindersEnabled] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [showHolidays, setShowHolidays] = useState(false);
+  const upcomingHolidays = useMemo(() => {
+    return INDIA_GOVT_HOLIDAYS
+      .map((h) => ({ ...h, daysAway: daysUntil(h.date) }))
+      .filter((h) => h.daysAway >= 0)
+      .sort((a, b) => a.daysAway - b.daysAway)
+      .slice(0, 5);
+  }, []);
+  const nextHoliday = upcomingHolidays[0] || null;
   const [dataMode, setDataMode] = useState("offline");
   const [sheetUrl, setSheetUrl] = useState("");
   const [sheetUrlDraft, setSheetUrlDraft] = useState("");
@@ -2246,6 +2284,12 @@ function LifeTracker() {
               <span style={{ position: "absolute", top: -1, right: -1, width: 8, height: 8, borderRadius: "50%", background: CORAL, border: "1.5px solid var(--bg, #F5F5F7)" }} />
             )}
           </button>
+          <button onClick={() => setShowHolidays((v) => !v)} title="Upcoming Indian holidays" style={{ background: "transparent", border: "none", position: "relative", color: INK, cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}>
+            <PartyPopper size={20} strokeWidth={1.8} color={nextHoliday && nextHoliday.daysAway <= 7 ? CORAL : INK} />
+            {nextHoliday && nextHoliday.daysAway <= 7 && (
+              <span style={{ position: "absolute", top: -1, right: -1, width: 8, height: 8, borderRadius: "50%", background: CORAL, border: "1.5px solid var(--bg, #F5F5F7)" }} />
+            )}
+          </button>
           <button
             onClick={() => {
               const el = headerDateInputRef.current;
@@ -2272,6 +2316,32 @@ function LifeTracker() {
             }}
             style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
           />
+          {showHolidays && (
+            <>
+              <div onClick={() => setShowHolidays(false)} style={{ position: "fixed", inset: 0, zIndex: 40, background: "transparent" }} />
+              <div style={{ position: "absolute", top: 30, right: 0, zIndex: 41, width: 262, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 16, boxShadow: "0 8px 28px rgba(20,30,45,.16)", padding: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 9, fontSize: 13, fontWeight: 750, color: INK, fontFamily: disp }}>
+                  <PartyPopper size={14} color={BRASS} /> Upcoming Indian holidays
+                </div>
+                {upcomingHolidays.length === 0 && <div style={{ fontSize: 13, color: INK_FAINT }}>No upcoming holidays on file.</div>}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {upcomingHolidays.map((h, i) => {
+                    const soon = h.daysAway <= 7;
+                    const label = h.daysAway === 0 ? "Today" : h.daysAway === 1 ? "Tomorrow" : `In ${h.daysAway}d`;
+                    return (
+                      <div key={h.date} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 9px", borderRadius: 11, background: i === 0 ? "rgba(255,59,48,0.10)" : "transparent" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 650, color: INK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.name}</div>
+                          <div style={{ fontSize: 11.5, color: INK_FAINT }}>{formatDateLong(new Date(h.date + "T00:00:00"))}</div>
+                        </div>
+                        <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 750, color: soon ? "#FFFFFF" : BRASS, background: soon ? CORAL : "rgba(0,113,227,0.12)", borderRadius: 980, padding: "3px 8px" }}>{label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
