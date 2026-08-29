@@ -2031,31 +2031,51 @@ function LifeTracker() {
   const openEditItemForm = (item) => setItemForm({ ...blankItemForm(), ...item, groups: { ...(item.groups || {}) } });
   const closeItemForm = () => { setItemForm(null); setAddingGroup(false); setAddingSubTo(null); };
 
-  // ---- Back button: step back through the app's screens instead of closing it ----
-  // Whatever is "on top" (a confirmation modal, the holidays popup, an open add/edit form,
-  // a category drill-down, or a non-Home tab) is what Back closes first. Only pressing Back
-  // from the plain Home tab, with nothing else open, is allowed to actually exit the app.
+  // ---- Back button: real, chronological navigation history (not a guessed priority order) ----
+  // The previous approach checked a fixed list of states ("is a modal open? is a category
+  // expanded? ...") in priority order every time Back was pressed. That breaks whenever more
+  // than one of those states happens to be set at once from unrelated earlier navigation --
+  // e.g. switching tabs via the bottom nav doesn't clear the Planner tab's `catTab` or the
+  // Daily tab's `expandedDailyCategory`, so a stale leftover value could get "closed" first,
+  // silently eating a Back press instead of undoing whatever the user actually did most
+  // recently. That's a step getting skipped or answered out of order.
+  //
+  // Instead, every time the composite navigation state (page / catTab / expandedDailyCategory)
+  // actually changes, we push a *real* browser history entry carrying that exact state. Back
+  // then just reads what the browser's own history says was there a moment ago and restores
+  // that -- which by construction can never skip a step or go out of order, because it's a
+  // real sequential stack, not a recomputed guess. Modals (import confirm, holidays popup, the
+  // add/edit item form) stay outside that stack and simply close on the next Back press --
+  // standard behavior, since a modal is always the topmost layer regardless of what's under it.
+  const skipNextNavPushRef = useRef(false);
   useEffect(() => {
-    history.pushState({ appNav: true }, "");
+    history.replaceState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory } }, "");
+    // Only ever run once, on mount, to tag the initial history entry.
+    // eslint-disable-next-line
   }, []);
   useEffect(() => {
-    const handlePopState = () => {
-      let handled = false;
-      if (pendingImportData) { cancelImport(); handled = true; }
-      else if (showHolidays) { setShowHolidays(false); handled = true; }
-      else if (itemForm || addingGroup || addingSubTo) { closeItemForm(); handled = true; }
-      else if (catTab) { setCatTab(null); handled = true; }
-      else if (page !== "dashboard") { setPage("dashboard"); handled = true; }
-      if (handled) {
-        // Re-arm the trap so the next Back press is caught too.
-        history.pushState({ appNav: true }, "");
+    if (skipNextNavPushRef.current) { skipNextNavPushRef.current = false; return; }
+    history.pushState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory } }, "");
+  }, [page, catTab, expandedDailyCategory]);
+  useEffect(() => {
+    const rearm = () => history.pushState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory } }, "");
+    const handlePopState = (e) => {
+      if (pendingImportData) { cancelImport(); rearm(); return; }
+      if (showHolidays) { setShowHolidays(false); rearm(); return; }
+      if (itemForm || addingGroup || addingSubTo) { closeItemForm(); rearm(); return; }
+      const snap = e.state && e.state.snapshot;
+      if (snap) {
+        skipNextNavPushRef.current = true;
+        setPage(snap.page);
+        setCatTab(snap.catTab);
+        setExpandedDailyCategory(snap.expandedDailyCategory);
       }
-      // Nothing was open and we're already on the Home tab — let this Back proceed
-      // normally, which is the one case where the app should actually close.
+      // No snapshot left in history and nothing open -- let this Back proceed normally,
+      // which is the one case where the app should actually close.
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [page, catTab, itemForm, addingGroup, addingSubTo, showHolidays, pendingImportData]);
+  }, [page, catTab, expandedDailyCategory, itemForm, addingGroup, addingSubTo, showHolidays, pendingImportData]);
 
   const saveItemForm = () => {
     if (!itemForm.name.trim()) return;
