@@ -1981,7 +1981,7 @@ function LifeTracker() {
   const [showTravelHistory, setShowTravelHistory] = useState(false);
   const [editingTravelId, setEditingTravelId] = useState(null);
   const [travelTimeInputMode, setTravelTimeInputMode] = useState("24h");
-  const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", amount: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [] });
+  const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", arrivalTime: "", amount: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [] });
   const [travelForm, setTravelForm] = useState(blankTravelForm());
   const [newTravelNoteText, setNewTravelNoteText] = useState("");
   const toggleTravelReminder = (offset) => setTravelForm((f) => ({ ...f, reminderOffsets: f.reminderOffsets.includes(offset) ? f.reminderOffsets.filter((o) => o !== offset) : [...f.reminderOffsets, offset] }));
@@ -1995,7 +1995,7 @@ function LifeTracker() {
   const openEditTravel = (t) => {
     setTravelForm({
       mode: t.mode || "Train", fromLocation: t.fromLocation || "", toLocation: t.toLocation || "",
-      travelDate: t.travelDate || "", travelTime: t.travelTime || "", amount: t.amount != null ? String(t.amount) : "",
+      travelDate: t.travelDate || "", travelTime: t.travelTime || "", arrivalTime: t.arrivalTime || "", amount: t.amount != null ? String(t.amount) : "",
       bookingDetails: t.bookingDetails || "", reminderOffsets: t.reminderOffsets || (t.reminderOffset ? [t.reminderOffset] : ["1d"]),
       paymentStatus: t.paymentStatus || "Not Paid", notes: (t.notes || []).map((n) => ({ ...n })),
     });
@@ -2007,7 +2007,7 @@ function LifeTracker() {
     if (!travelForm.fromLocation.trim() || !travelForm.toLocation.trim() || !travelForm.travelDate) return;
     const base = {
       mode: travelForm.mode, fromLocation: travelForm.fromLocation.trim(), toLocation: travelForm.toLocation.trim(),
-      travelDate: travelForm.travelDate, travelTime: travelForm.travelTime, amount: parseFloat(travelForm.amount) || 0,
+      travelDate: travelForm.travelDate, travelTime: travelForm.travelTime, arrivalTime: travelForm.arrivalTime, amount: parseFloat(travelForm.amount) || 0,
       bookingDetails: travelForm.bookingDetails.trim(), reminderOffsets: travelForm.reminderOffsets, paymentStatus: travelForm.paymentStatus,
       notes: travelForm.notes || [],
     };
@@ -3029,36 +3029,49 @@ function LifeTracker() {
                                   {due && <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, display: "inline-flex", alignItems: "center", gap: 3 }}><Bell size={11} /> Active</span>}
                                 </div>
 
-                                <div style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 14, padding: "10px 12px", marginBottom: 10 }}>
-                                  <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                <div style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 14, padding: "12px 13px", marginBottom: 10 }}>
+                                  <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
                                     <Ticket size={13} /> Trip booking details
                                   </div>
-                                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                                      <MapPin size={14} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 2 }} />
-                                      <div style={{ fontSize: 14, color: INK, fontWeight: 600, lineHeight: 1.4, wordBreak: "break-word" }}>{t.fromLocation} &rarr; {t.toLocation}</div>
+                                  {/* Ticket-style route: From/departure on the left, To/arrival on the right, with the
+                                      journey line between them — date/time are already shown above so they're not
+                                      repeated here, only what's specific to the booking. */}
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: t.bookingDetails ? 10 : 0 }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 2 }}>From</div>
+                                      <div style={{ fontSize: 17, color: INK, fontWeight: 750, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.fromLocation}</div>
+                                      {t.travelTime && <div style={{ fontFamily: mono, fontSize: 13, color: BRASS, fontWeight: 700, marginTop: 3 }}>{fmtTimeString12(t.travelTime)}</div>}
                                     </div>
-                                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                                      <CalendarDays size={14} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 2 }} />
-                                      <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.4 }}>
-                                        {formatDMY(t.travelDate)}{t.travelTime ? ` \u00b7 ${fmtTimeString12(t.travelTime)} (${timeOfDayLabel(t.travelTime)})` : ""}
-                                      </div>
+                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, padding: "0 2px" }}>
+                                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: BRASS_DIM }} />
+                                      <div style={{ width: 28, height: 1.5, background: `repeating-linear-gradient(to right, ${BRASS_DIM} 0, ${BRASS_DIM} 3px, transparent 3px, transparent 6px)`, margin: "3px 0" }} />
+                                      <TravelModeIcon mode={t.mode} size={14} color={BRASS} />
                                     </div>
-                                    {t.amount > 0 && (
-                                      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                                        <Wallet size={14} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 2 }} />
-                                        <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.4 }}>
-                                          {inr(t.amount)} &middot; <span style={{ color: t.paymentStatus === "Already Paid" ? TEAL : CORAL, fontWeight: 700 }}>{t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}</span>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {t.bookingDetails && (
-                                      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                                        <FileJson size={14} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 2 }} />
-                                        <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.5, wordBreak: "break-word" }}>{t.bookingDetails}</div>
-                                      </div>
-                                    )}
+                                    <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
+                                      <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 2 }}>To</div>
+                                      <div style={{ fontSize: 17, color: INK, fontWeight: 750, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.toLocation}</div>
+                                      {t.arrivalTime && <div style={{ fontFamily: mono, fontSize: 13, color: TEAL, fontWeight: 700, marginTop: 3 }}>{fmtTimeString12(t.arrivalTime)}</div>}
+                                    </div>
                                   </div>
+                                  {t.amount > 0 && (
+                                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8 }}>
+                                      <Wallet size={14} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 2 }} />
+                                      <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.4 }}>
+                                        {inr(t.amount)} &middot; <span style={{ color: t.paymentStatus === "Already Paid" ? TEAL : CORAL, fontWeight: 700 }}>{t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {/* Ticket/booking reference gets its own highlighted block — larger, clearly set apart
+                                      from the route info above, since this is the detail people actually need to find fast. */}
+                                  {t.bookingDetails && (
+                                    <div style={{ background: hexA(BRASS, darkMode ? 0.16 : 0.09), border: `1.5px solid ${hexA(BRASS, 0.28)}`, borderRadius: 12, padding: "10px 11px", marginTop: 10 }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                                        <FileJson size={13} color={BRASS} />
+                                        <span style={{ fontSize: 11, color: BRASS, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>Booking reference</span>
+                                      </div>
+                                      <div style={{ fontSize: 16, color: INK, fontWeight: 650, lineHeight: 1.4, wordBreak: "break-word" }}>{t.bookingDetails}</div>
+                                    </div>
+                                  )}
                                 </div>
 
                                 {(t.notes && t.notes.length > 0) && (() => {
@@ -3729,6 +3742,14 @@ function LifeTracker() {
                             <Time24Input value={travelForm.travelTime} onChange={(v) => setTravelForm({ ...travelForm, travelTime: v })} style={{ fontFamily: mono }} />
                           ) : (
                             <Time12Input value={travelForm.travelTime} onChange={(v) => setTravelForm({ ...travelForm, travelTime: v })} style={{ fontFamily: mono }} />
+                          )}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Arrival time (optional)</div>
+                          {travelTimeInputMode === "24h" ? (
+                            <Time24Input value={travelForm.arrivalTime} onChange={(v) => setTravelForm({ ...travelForm, arrivalTime: v })} style={{ fontFamily: mono }} />
+                          ) : (
+                            <Time12Input value={travelForm.arrivalTime} onChange={(v) => setTravelForm({ ...travelForm, arrivalTime: v })} style={{ fontFamily: mono }} />
                           )}
                         </div>
                         <TextField type="number" placeholder="Amount" value={travelForm.amount} onChange={(e) => setTravelForm({ ...travelForm, amount: e.target.value })} style={{ fontFamily: mono }} />
