@@ -312,6 +312,7 @@ import {
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, History, Home as HomeIcon,
   CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper, Trophy,
+  Fuel, Store, MessageSquare, Sunrise, Cookie,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -986,7 +987,11 @@ const TODAY_CARD_ACCENT = {
 // Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
 const DAILY_EXPENSE_GROUPS = Object.fromEntries(Object.entries(DEFAULT_EXPENSE_GROUPS).filter(([g]) => !REPAYMENT_LINKED_EXPENSE_GROUPS.includes(g)));
-const EXPENSE_GROUP_ICON = { Food: UtensilsCrossed, Grocery: ShoppingBag, Fuel: Car, "Health Care": HeartPulse, Travel: Plane, Shopping: ShoppingBag, Other: Receipt };
+const EXPENSE_GROUP_ICON = { Food: UtensilsCrossed, Grocery: ShoppingBag, Fuel: Fuel, "Health Care": HeartPulse, Travel: Plane, Shopping: ShoppingBag, Other: Receipt };
+// Each expense category gets its own always-on accent color (not just a highlight-when-selected
+// tint), so the picker reads as a row of distinct colored tiles the way it does in the reference design.
+const EXPENSE_GROUP_COLOR = { Food: "#0071E3", Grocery: "#34C759", Fuel: "#FF9500", "Health Care": "#FF3B30", Travel: "#AF52DE", Shopping: "#32ADE6", Other: "#8E8E93" };
+const MEAL_TYPE_ICON = { Breakfast: Sunrise, Lunch: Sun, Dinner: Moon, Tea: Coffee, Snacks: Cookie };
 
 // Travel cards use the icon selected for that trip mode.
 function TravelModeIcon({ mode, size = 18, color = BRASS, style }) {
@@ -1160,8 +1165,13 @@ function ProgressBar({ pct, color = BRASS }) { return <div style={{ height: 8, b
 function ActionButton({ onClick, label, icon: Icon, tone = BRASS, big, spinning }) {
   return <button onClick={onClick} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, background: tone, border: "none", color: "#FFFFFF", borderRadius: 980, padding: big ? "13px 24px" : "10px 17px", fontSize: big ? 16 : 14, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}><Icon size={big ? 17 : 15} className={spinning ? "spin-icon" : undefined} /> {label}</button>;
 }
-function ChipButton({ onClick, label, active }) {
-  return <button onClick={onClick} style={{ background: active ? BRASS : PANEL_2, border: "none", color: active ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "8px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{label}</button>;
+function ChipButton({ onClick, label, active, icon: Icon }) {
+  return (
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 6, background: active ? BRASS : PANEL_2, border: "none", color: active ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+      {Icon && <Icon size={14} strokeWidth={2.3} />}
+      {label}
+    </button>
+  );
 }
 // Wraps an ActionButton so it stays a fixed, neatly centered width instead of stretching edge-to-edge.
 function CenteredButton({ children, maxWidth = 280, widthPct = "58%" }) {
@@ -3411,47 +3421,59 @@ function LifeTracker() {
                             </Card>
                           )}
                           <Card style={{ marginBottom: 8, borderRadius: 20 }}>
-                            <SectionLabel>Log an expense</SectionLabel>
+                            <SectionLabel>Log an Expense</SectionLabel>
                             <div>
-                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 7, fontWeight: 600 }}>Category</div>
-                              <div className="no-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
+                              <div className="no-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
                                 {groupKeys.map((g) => {
                                   const GIcon = EXPENSE_GROUP_ICON[g] || Receipt;
+                                  const gColor = EXPENSE_GROUP_COLOR[g] || BRASS;
                                   const sel = activeGroup === g;
                                   return (
-                                    <button key={g} onClick={() => setFlow("dailyExpense", { group: g, sub: null })} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 60 }}>
-                                      <div style={{ width: 46, height: 46, borderRadius: 13, background: sel ? hexA(BRASS, darkMode ? 0.22 : 0.14) : PANEL_2, border: `1.5px solid ${sel ? BRASS : LINE}`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: sel ? `0 3px 10px ${hexA(BRASS, 0.18)}` : "none", transition: "all .18s ease" }}>
-                                        <GIcon size={19} color={sel ? BRASS : INK_DIM} />
+                                    <button key={g} onClick={() => setFlow("dailyExpense", { group: g, sub: null })} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 62 }}>
+                                      <div style={{ width: 52, height: 52, borderRadius: 16, background: hexA(gColor, darkMode ? 0.22 : 0.13), border: sel ? `2px solid ${gColor}` : "2px solid transparent", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: sel ? `0 3px 10px ${hexA(gColor, 0.28)}` : "none", transition: "all .18s ease" }}>
+                                        <GIcon size={22} color={gColor} strokeWidth={2.2} />
                                       </div>
-                                      <span style={{ fontSize: 11, fontWeight: sel ? 700 : 500, color: sel ? BRASS : INK_FAINT, whiteSpace: "nowrap" }}>{g}</span>
+                                      <span style={{ fontSize: 12, fontWeight: sel ? 700 : 500, color: sel ? gColor : INK_DIM, whiteSpace: "nowrap" }}>{g}</span>
                                     </button>
                                   );
                                 })}
                               </div>
 
                               {subOptions.length > 0 && (
-                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 11 }}>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
                                   {subOptions.map((s) => (
-                                    <ChipButton key={s} label={s} active={activeSub === s} onClick={() => setFlow("dailyExpense", { sub: s })} />
+                                    <ChipButton key={s} label={s} icon={MEAL_TYPE_ICON[s]} active={activeSub === s} onClick={() => setFlow("dailyExpense", { sub: s })} />
                                   ))}
                                 </div>
                               )}
 
-                              <div style={{ textAlign: "center", padding: "16px 0 4px", borderTop: `1px solid ${LINE}`, marginTop: 12, background: hexA(BRASS, darkMode ? 0.08 : 0.05), borderRadius: 14, marginLeft: -2, marginRight: -2 }}>
-                                <div style={{ fontSize: 11, color: INK_FAINT, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3, fontWeight: 700 }}>Amount</div>
-                                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 3 }}>
-                                  <span style={{ fontFamily: mono, fontSize: 18, color: BRASS_DIM }}>&#8377;</span>
-                                  <input type="number" inputMode="decimal" placeholder="0" value={flow.amount || ""} onChange={(e) => setFlow("dailyExpense", { amount: e.target.value })} style={{ background: "transparent", border: "none", outline: "none", textAlign: "center", color: BRASS, fontFamily: mono, fontSize: 30, fontWeight: 700, width: 140 }} />
+                              <div style={{ textAlign: "center", padding: "18px 0 16px", marginTop: 16, background: PANEL_2, borderRadius: 16 }}>
+                                <div style={{ fontSize: 12, color: INK_FAINT, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontWeight: 700 }}>Amount</div>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                                  <span style={{ fontFamily: mono, fontSize: 20, color: BRASS, fontWeight: 700 }}>&#8377;</span>
+                                  <input type="number" inputMode="decimal" placeholder="0" value={flow.amount || ""} onChange={(e) => setFlow("dailyExpense", { amount: e.target.value })} style={{ background: "transparent", border: "none", outline: "none", textAlign: "center", color: INK, fontFamily: disp, fontSize: 34, fontWeight: 700, width: 160 }} />
                                 </div>
                               </div>
 
-                              <div style={{ display: "flex", gap: 7, marginTop: 11, flexWrap: "wrap" }}>
-                                <TextField placeholder="Vendor (optional)" value={flow.vendor || ""} onChange={(e) => setFlow("dailyExpense", { vendor: e.target.value })} style={{ flex: "1 1 140px" }} />
-                                <TextField placeholder="Remarks (optional)" value={flow.remarks || ""} onChange={(e) => setFlow("dailyExpense", { remarks: e.target.value })} style={{ flex: "1 1 140px" }} />
+                              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                                <div style={{ position: "relative", flex: "1 1 140px" }}>
+                                  <Store size={16} color={INK_FAINT} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                                  <TextField placeholder="Vendor (optional)" value={flow.vendor || ""} onChange={(e) => setFlow("dailyExpense", { vendor: e.target.value })} style={{ paddingLeft: 34, borderRadius: 12, padding: "12px 11px 12px 34px" }} />
+                                </div>
+                                <div style={{ position: "relative", flex: "1 1 140px" }}>
+                                  <MessageSquare size={16} color={INK_FAINT} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                                  <TextField placeholder="Remarks (optional)" value={flow.remarks || ""} onChange={(e) => setFlow("dailyExpense", { remarks: e.target.value })} style={{ paddingLeft: 34, borderRadius: 12, padding: "12px 11px 12px 34px" }} />
+                                </div>
                               </div>
 
-                              <div style={{ marginTop: 11 }}>
-                                <ActionButton onClick={() => canLog && confirmExpense({ id: "dailyExpense", groups: DAILY_EXPENSE_GROUPS })} label="Save expense" icon={Check} tone={canLog ? TEAL : LINE} big />
+                              <div style={{ marginTop: 14 }}>
+                                <button
+                                  onClick={() => canLog && confirmExpense({ id: "dailyExpense", groups: DAILY_EXPENSE_GROUPS })}
+                                  disabled={!canLog}
+                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: canLog ? BRASS : LINE, border: "none", color: "#FFFFFF", borderRadius: 980, padding: "15px 0", fontSize: 16.5, cursor: canLog ? "pointer" : "default", fontFamily: disp, fontWeight: 700 }}
+                                >
+                                  <Check size={18} strokeWidth={2.6} /> Save Expense
+                                </button>
                               </div>
                             </div>
                           </Card>
