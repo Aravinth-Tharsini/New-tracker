@@ -335,7 +335,19 @@ function pad2(n) { return String(n).padStart(2, "0"); }
 // Converts a "#RRGGBB" hex color into an rgba() string at the given alpha, so category accent
 // colors can be used as soft tinted backgrounds that still read correctly in dark mode.
 function hexA(hex, alpha) {
-  const h = String(hex || "").replace("#", "");
+  let h = String(hex || "");
+  // Accent colors like BRASS/TEAL/CORAL are stored as CSS custom properties
+  // ("var(--brass)") so they can flip between light/dark values automatically.
+  // Resolve that to the real hex value first, otherwise the parse below silently
+  // fails and every tinted background renders black instead of the accent color.
+  if (h.startsWith("var(")) {
+    try {
+      const varName = h.match(/--[\w-]+/)[0];
+      const resolved = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+      if (resolved) h = resolved;
+    } catch (e) { /* keep original string if resolution fails */ }
+  }
+  h = h.replace("#", "");
   const r = parseInt(h.substring(0, 2), 16) || 0;
   const g = parseInt(h.substring(2, 4), 16) || 0;
   const b = parseInt(h.substring(4, 6), 16) || 0;
