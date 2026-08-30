@@ -1242,6 +1242,16 @@ function LifeTracker() {
   const [savedShoppingCategories, setSavedShoppingCategories] = useState(() => readPersistedSync("savedShoppingCategories", ["Groceries", "Vegetables", "Electronics"]));
   const [remindersEnabled, setRemindersEnabled] = useState(() => readPersistedSync("remindersEnabled", false));
   const [darkMode, setDarkMode] = useState(() => readPersistedSync("darkMode", false));
+  // BRASS/BRASS_DIM/TEAL/CORAL are CSS custom-property references ("var(--brass)") so solid
+  // colors and borders can flip instantly with the theme. But hexA() needs a real "#RRGGBB"
+  // string to compute an alpha-tinted background, and a CSS var string doesn't parse as hex.
+  // These mirror the literal values from the [data-theme] stylesheet below, recomputed here so
+  // every hexA(BRASS_HEX, ...) / hexA(TEAL_HEX, ...) / hexA(CORAL_HEX, ...) call resolves to the correct
+  // color for the current theme instead of silently parsing as black.
+  const BRASS_HEX = darkMode ? "#0A84FF" : "#0071E3";
+  const BRASS_DIM_HEX = darkMode ? "#123153" : "#B9DBFB";
+  const TEAL_HEX = darkMode ? "#30D158" : "#34C759";
+  const CORAL_HEX = darkMode ? "#FF453A" : "#FF3B30";
   const [showHolidays, setShowHolidays] = useState(false);
   const upcomingHolidays = useMemo(() => {
     return INDIA_GOVT_HOLIDAYS
@@ -2868,7 +2878,7 @@ function LifeTracker() {
               { key: "expense", icon: Wallet, label: "Add Expense", accent: TODAY_CARD_ACCENT.expense, onClick: () => { setExpandedDailyCategory("expense"); setPage("daily"); } },
               ...pendingItemsToday.slice(0, 3).map((i) => ({
                 key: i.id, icon: ICON_MAP[i.icon] || Activity, label: i.name,
-                accent: TODAY_CARD_ACCENT[i.category] || BRASS,
+                accent: TODAY_CARD_ACCENT[i.category] || BRASS_HEX,
                 onClick: () => { setExpandedDailyCategory(i.category); setActiveTab(i.id); setPage("daily"); },
               })),
             ];
@@ -2913,7 +2923,7 @@ function LifeTracker() {
               ...todaysRepaymentReminders.slice(0, 1).map((r) => ({
                 key: "repay-" + r.id, icon: CreditCard, accent: TODAY_CARD_ACCENT.expense, title: "Finance",
                 subtitle: `${r.name || r.category}${r.dueDate ? ` \u00b7 ${formatDMY(r.dueDate)}` : ""}`,
-                badge: <span style={{ fontSize: 12.5, fontWeight: 750, color: CORAL, background: hexA(CORAL, 0.14), borderRadius: 999, minWidth: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 7px" }}>{dueRepayments}</span>,
+                badge: <span style={{ fontSize: 12.5, fontWeight: 750, color: CORAL, background: hexA(CORAL_HEX, 0.14), borderRadius: 999, minWidth: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 7px" }}>{dueRepayments}</span>,
                 onClick: () => { setExpandedDailyCategory("expense"); setDailyHighlightId(r.id); setPage("daily"); },
               })),
               ...todaysTravelPlans.slice(0, 1).map((t) => ({
@@ -2923,9 +2933,9 @@ function LifeTracker() {
                 onClick: () => { setExpandedDailyCategory("trip"); setDailyHighlightId(t.id); setPage("daily"); },
               })),
               ...(goalCat ? [{
-                key: "goal-" + goalCat.id, icon: Target, accent: TODAY_CARD_ACCENT[goalCat.id] || TEAL, title: `${goalCat.label} Goal`,
+                key: "goal-" + goalCat.id, icon: Target, accent: TODAY_CARD_ACCENT[goalCat.id] || TEAL_HEX, title: `${goalCat.label} Goal`,
                 subtitle: `${goalCat.label} \u00b7 ${Math.round((goalCat.done / goalCat.total) * 100)}% completed`,
-                badge: <RingProgress pct={(goalCat.done / goalCat.total) * 100} color={TEAL} size={32} />,
+                badge: <RingProgress pct={(goalCat.done / goalCat.total) * 100} color={TEAL_HEX} size={32} />,
                 onClick: () => { setPage("categories"); setCatTab(goalCat.id); },
               }] : []),
               ...(pendingActivities > 0 && pendingActivityTarget ? [{
@@ -2979,7 +2989,7 @@ function LifeTracker() {
           const countLabel = cat.id === "trip" ? `${totalCount} upcoming${todaysTravelPlans.length ? ` \u00b7 ${todaysTravelPlans.length} due` : ""}` : cat.id === "myday" ? `${totalCount} planned${todaysMyDayEvents.length ? ` \u00b7 ${todaysMyDayEvents.length} today` : ""}` : cat.id === "shopping" ? `${totalCount} planned${shoppingDueCount ? ` \u00b7 ${shoppingDueCount} reminder today` : ""}` : cat.id === "expense" ? `${todaysExpenseCount} logged \u00b7 ${inr(todaysExpenseTotal)}${expenseDueCount ? ` \u00b7 ${expenseDueCount} due` : ""}` : `${doneCount}/${totalCount} done`;
           const trackableCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval").length;
           const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "myday" ? todaysMyDayEvents.length : cat.id === "shopping" ? shoppingDueCount : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
-          const accent = TODAY_CARD_ACCENT[cat.id] || BRASS;
+          const accent = TODAY_CARD_ACCENT[cat.id] || BRASS_HEX;
           return { cat, expanded, CatIcon: cat.icon, itemsForCat, pendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent };
         });
         // Purely a display aggregate for the hero progress ring below \u2014 sums the same
@@ -3000,7 +3010,7 @@ function LifeTracker() {
               {heroTrackable > 0 && (
                 <div className="today-hero-ring">
                   <svg viewBox="0 0 64 64" width="58" height="58">
-                    <circle cx="32" cy="32" r={heroRingR} fill="none" stroke={hexA(BRASS, darkMode ? 0.28 : 0.14)} strokeWidth="6" />
+                    <circle cx="32" cy="32" r={heroRingR} fill="none" stroke={hexA(BRASS_HEX, darkMode ? 0.28 : 0.14)} strokeWidth="6" />
                     <circle
                       cx="32" cy="32" r={heroRingR} fill="none" stroke={BRASS} strokeWidth="6" strokeLinecap="round"
                       strokeDasharray={heroRingCirc} strokeDashoffset={heroRingCirc * (1 - heroPct)}
@@ -3112,9 +3122,9 @@ function LifeTracker() {
                         <button
                           className="today-focus-card is-open"
                           onClick={() => setExpandedDailyCategory(null)}
-                          style={{ background: hexA(BRASS, darkMode ? 0.20 : 0.10), cursor: "pointer" }}
+                          style={{ background: hexA(BRASS_HEX, darkMode ? 0.20 : 0.10), cursor: "pointer" }}
                         >
-                          <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0, "--icon-tint": hexA(BRASS, darkMode ? 0.24 : 0.14), "--icon-tint-border": hexA(BRASS, 0.3) }}>
+                          <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0, "--icon-tint": hexA(BRASS_HEX, darkMode ? 0.24 : 0.14), "--icon-tint-border": hexA(BRASS_HEX, 0.3) }}>
                             <CatIcon size={32} color={BRASS} strokeWidth={2.2} />
                             {badge}
                           </div>
@@ -3133,9 +3143,9 @@ function LifeTracker() {
                             const dayLabel = dayLabelFor(t.travelDate, today);
                             const highlighted = dailyHighlightId === t.id;
                             return (
-                              <div id={`daily-activity-${t.id}`} key={t.id} style={{ background: highlighted ? hexA(BRASS, 0.10) : PANEL, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : (due ? BRASS_DIM : LINE)}`, borderRadius: 18, padding: "14px 15px", boxShadow: CARD_SHADOW, transition: "background .3s ease, border-color .3s ease" }}>
+                              <div id={`daily-activity-${t.id}`} key={t.id} style={{ background: highlighted ? hexA(BRASS_HEX, 0.10) : PANEL, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : (due ? BRASS_DIM : LINE)}`, borderRadius: 18, padding: "14px 15px", boxShadow: CARD_SHADOW, transition: "background .3s ease, border-color .3s ease" }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                                  <div style={{ width: 38, height: 38, borderRadius: 12, background: hexA(BRASS, darkMode ? 0.20 : 0.12), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <div style={{ width: 38, height: 38, borderRadius: 12, background: hexA(BRASS_HEX, darkMode ? 0.20 : 0.12), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                     <TravelModeIcon mode={t.mode} size={19} color={BRASS} />
                                   </div>
                                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -3148,13 +3158,13 @@ function LifeTracker() {
                                   {dayLabel && (
                                     <span style={{ fontSize: 12.5, fontWeight: 700, color: "#FFFFFF", background: BRASS, borderRadius: 980, padding: "3px 9px" }}>{dayLabel}</span>
                                   )}
-                                  <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS, 0.10), borderRadius: 980, padding: "3px 9px" }}>{formatDMY(t.travelDate)}</span>
+                                  <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS_HEX, 0.10), borderRadius: 980, padding: "3px 9px" }}>{formatDMY(t.travelDate)}</span>
                                   {t.travelTime && (
-                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: TEAL, background: hexA(TEAL, 0.12), borderRadius: 980, padding: "3px 9px" }}>{fmtTimeString12(t.travelTime)} &middot; {timeOfDayLabel(t.travelTime)}</span>
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: TEAL, background: hexA(TEAL_HEX, 0.12), borderRadius: 980, padding: "3px 9px" }}>{fmtTimeString12(t.travelTime)} &middot; {timeOfDayLabel(t.travelTime)}</span>
                                   )}
                                   {t.amount > 0 && <span style={{ fontSize: 12.5, fontWeight: 700, color: INK_DIM, background: PANEL_2, borderRadius: 980, padding: "3px 9px" }}>{inr(t.amount)}</span>}
                                   {t.amount > 0 && (
-                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: t.paymentStatus === "Already Paid" ? TEAL : CORAL, background: t.paymentStatus === "Already Paid" ? hexA(TEAL, 0.12) : hexA(CORAL, 0.10), borderRadius: 980, padding: "3px 9px" }}>
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: t.paymentStatus === "Already Paid" ? TEAL : CORAL, background: t.paymentStatus === "Already Paid" ? hexA(TEAL_HEX, 0.12) : hexA(CORAL_HEX, 0.10), borderRadius: 980, padding: "3px 9px" }}>
                                       {t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}
                                     </span>
                                   )}
@@ -3202,7 +3212,7 @@ function LifeTracker() {
                                   {/* Ticket/booking reference gets its own highlighted block — larger, clearly set apart
                                       from the route info above, since this is the detail people actually need to find fast. */}
                                   {t.bookingDetails && (
-                                    <div style={{ background: hexA(BRASS, darkMode ? 0.16 : 0.09), border: `1.5px solid ${hexA(BRASS, 0.28)}`, borderRadius: 12, padding: "10px 11px", marginTop: 10 }}>
+                                    <div style={{ background: hexA(BRASS_HEX, darkMode ? 0.16 : 0.09), border: `1.5px solid ${hexA(BRASS_HEX, 0.28)}`, borderRadius: 12, padding: "10px 11px", marginTop: 10 }}>
                                       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                                         <FileJson size={13} color={BRASS} />
                                         <span style={{ fontSize: 11, color: BRASS, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>Booking reference</span>
@@ -3240,7 +3250,7 @@ function LifeTracker() {
                                   <div style={{ display: "flex", gap: 7, width: "100%" }}>
                                     {t.amount > 0 && t.paymentStatus !== "Already Paid" && !t.expenseLogged && <button onClick={() => logTravelExpense(t)} style={{ flex: 1, minWidth: 0, minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, background: TEAL, border: "none", borderRadius: 11, padding: "0 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}><Wallet size={14} /> Log</button>}
                                     <button onClick={() => completeTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, background: BRASS, border: "none", borderRadius: 11, padding: "0 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}><Check size={14} /> Done</button>
-                                    <button onClick={() => dismissTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, minHeight: 40, background: hexA(CORAL, 0.10), border: `1px solid ${CORAL}`, borderRadius: 11, padding: "0 5px", color: CORAL, cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}>Dismiss</button>
+                                    <button onClick={() => dismissTravelPlan(t.id)} style={{ flex: 1, minWidth: 0, minHeight: 40, background: hexA(CORAL_HEX, 0.10), border: `1px solid ${CORAL}`, borderRadius: 11, padding: "0 5px", color: CORAL, cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}>Dismiss</button>
                                   </div>
                                 ) : (
                                   <div style={{ fontSize: 12, color: INK_FAINT, textAlign: "center", padding: "5px 0" }}>
@@ -3262,9 +3272,9 @@ function LifeTracker() {
                             const dLabel = !isRecurring ? dayLabelForExt(e.eventDate, today) : "";
                             const highlighted = dailyHighlightId === e.id;
                             return (
-                              <div id={`daily-activity-${e.id}`} key={e.id} style={{ background: highlighted ? hexA(BRASS, 0.10) : PANEL, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : (occursToday ? BRASS_DIM : LINE)}`, borderRadius: 18, padding: "14px 15px", boxShadow: CARD_SHADOW, transition: "background .3s ease, border-color .3s ease" }}>
+                              <div id={`daily-activity-${e.id}`} key={e.id} style={{ background: highlighted ? hexA(BRASS_HEX, 0.10) : PANEL, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : (occursToday ? BRASS_DIM : LINE)}`, borderRadius: 18, padding: "14px 15px", boxShadow: CARD_SHADOW, transition: "background .3s ease, border-color .3s ease" }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                                  <div style={{ width: 38, height: 38, borderRadius: 12, background: hexA(BRASS, darkMode ? 0.20 : 0.12), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  <div style={{ width: 38, height: 38, borderRadius: 12, background: hexA(BRASS_HEX, darkMode ? 0.20 : 0.12), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                     <Users size={18} color={BRASS} />
                                   </div>
                                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -3278,12 +3288,12 @@ function LifeTracker() {
                                     <span style={{ fontSize: 12.5, fontWeight: 700, color: "#FFFFFF", background: dLabel === "Yesterday" ? CORAL : BRASS, borderRadius: 980, padding: "3px 9px" }}>{dLabel}</span>
                                   )}
                                   {isRecurring ? (
-                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS, 0.10), borderRadius: 980, padding: "3px 9px" }}>Repeats {e.repeatDays.join(", ")}</span>
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS_HEX, 0.10), borderRadius: 980, padding: "3px 9px" }}>Repeats {e.repeatDays.join(", ")}</span>
                                   ) : (
-                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS, 0.10), borderRadius: 980, padding: "3px 9px" }}>{formatDMY(e.eventDate)}</span>
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS_HEX, 0.10), borderRadius: 980, padding: "3px 9px" }}>{formatDMY(e.eventDate)}</span>
                                   )}
                                   {e.eventTime && (
-                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: TEAL, background: hexA(TEAL, 0.12), borderRadius: 980, padding: "3px 9px" }}>{fmtTimeString12(e.eventTime)} &middot; {timeOfDayLabel(e.eventTime)}</span>
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: TEAL, background: hexA(TEAL_HEX, 0.12), borderRadius: 980, padding: "3px 9px" }}>{fmtTimeString12(e.eventTime)} &middot; {timeOfDayLabel(e.eventTime)}</span>
                                   )}
                                   {e.location && <span style={{ fontSize: 12.5, fontWeight: 700, color: INK_DIM, background: PANEL_2, borderRadius: 980, padding: "3px 9px" }}>{e.location}</span>}
                                   {occursToday && e.reminderEnabled && <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, display: "inline-flex", alignItems: "center", gap: 3 }}><Bell size={11} /> Active</span>}
@@ -3296,7 +3306,7 @@ function LifeTracker() {
                                 <div style={{ display: "flex", gap: 7, width: "100%" }}>
                                   <button onClick={() => toggleMyDayCompleted(e.id)} style={{ flex: 1, minWidth: 0, minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, background: BRASS, border: "none", borderRadius: 11, padding: "0 5px", color: "#FFFFFF", cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}><Check size={14} /> Done</button>
                                   <button onClick={() => { openEditMyDay(e); setCatTab("myday"); setPage("categories"); }} style={{ flex: 1, minWidth: 0, minHeight: 40, background: "transparent", border: `1px solid ${LINE}`, borderRadius: 11, padding: "0 5px", color: INK_DIM, cursor: "pointer", fontSize: 13.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><Pencil size={13} /> Edit</button>
-                                  <button onClick={() => deleteMyDayEvent(e.id)} style={{ flex: 1, minWidth: 0, minHeight: 40, background: hexA(CORAL, 0.10), border: `1px solid ${CORAL}`, borderRadius: 11, padding: "0 5px", color: CORAL, cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}>Delete</button>
+                                  <button onClick={() => deleteMyDayEvent(e.id)} style={{ flex: 1, minWidth: 0, minHeight: 40, background: hexA(CORAL_HEX, 0.10), border: `1px solid ${CORAL}`, borderRadius: 11, padding: "0 5px", color: CORAL, cursor: "pointer", fontSize: 13.5, fontWeight: 700 }}>Delete</button>
                                 </div>
                               </div>
                             );
@@ -3311,7 +3321,7 @@ function LifeTracker() {
                           <SectionLabel>Today's shopping reminders</SectionLabel>
                           {todaysShoppingLists.length === 0 ? (
                             <div style={{ textAlign: "center", padding: "20px 6px 6px" }}>
-                              <div style={{ width: 44, height: 44, borderRadius: "50%", background: hexA(BRASS, 0.12), display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px" }}>
+                              <div style={{ width: 44, height: 44, borderRadius: "50%", background: hexA(BRASS_HEX, 0.12), display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px" }}>
                                 <ShoppingBag size={22} color={BRASS} />
                               </div>
                               <div style={{ color: INK_FAINT, fontSize: 14 }}>No shopping reminder for today.</div>
@@ -3325,7 +3335,7 @@ function LifeTracker() {
                                   <div id={`daily-activity-${l.id}`} key={l.id} onClick={() => setExpandedDailyShoppingId(open ? null : l.id)} style={{ background: PANEL_2, border: `1px solid ${open ? BRASS : BRASS_DIM}`, borderRadius: 18, padding: open ? "13px 12px" : "11px 12px", cursor: "pointer", transition: "all .24s ease", boxShadow: open ? "0 10px 28px rgba(20, 30, 45, .08)" : "0 1px 2px rgba(20,30,45,.04), 0 3px 10px rgba(20,30,45,.05)" }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
                                       <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
-                                        <div style={{ width: open ? 62 : 48, height: open ? 62 : 48, borderRadius: 18, background: hexA(BRASS, darkMode ? 0.20 : 0.10), display: "grid", placeItems: "center", flexShrink: 0, transition: "all .24s ease" }}><ShoppingBag size={open ? 31 : 24} color={BRASS} /></div>
+                                        <div style={{ width: open ? 62 : 48, height: open ? 62 : 48, borderRadius: 18, background: hexA(BRASS_HEX, darkMode ? 0.20 : 0.10), display: "grid", placeItems: "center", flexShrink: 0, transition: "all .24s ease" }}><ShoppingBag size={open ? 31 : 24} color={BRASS} /></div>
                                         <div style={{ minWidth: 0 }}>
                                           <div style={{ fontSize: open ? 20 : 16, fontWeight: 700, color: INK, lineHeight: 1.15 }}>{l.shopName || "Shopping"}</div>
                                           <div style={{ fontSize: open ? 14 : 12, color: INK_DIM, marginTop: open ? 6 : 4, display: "flex", alignItems: "center", gap: 5 }}><Bell size={open ? 18 : 13} color={BRASS} /> Reminder today{l.reminderTime ? ` · ${fmtTimeString12(l.reminderTime)}` : ""}</div>
@@ -3378,7 +3388,7 @@ function LifeTracker() {
                                   const overdue = r.dueDate && r.dueDate < today;
                                   const highlighted = dailyHighlightId === r.id;
                                   return (
-                                    <div id={`daily-activity-${r.id}`} key={r.id} style={{ background: highlighted ? hexA(BRASS, 0.10) : PANEL_2, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : (overdue ? CORAL : LINE)}`, borderRadius: 14, padding: "10px 12px", transition: "background .3s ease, border-color .3s ease" }}>
+                                    <div id={`daily-activity-${r.id}`} key={r.id} style={{ background: highlighted ? hexA(BRASS_HEX, 0.10) : PANEL_2, border: `${highlighted ? 2 : 1}px solid ${highlighted ? BRASS : (overdue ? CORAL : LINE)}`, borderRadius: 14, padding: "10px 12px", transition: "background .3s ease, border-color .3s ease" }}>
                                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
                                         <div style={{ flex: 1 }}>
                                           <div style={{ fontSize: 15, color: INK, fontWeight: 650 }}>{r.name || r.category}</div>
@@ -3438,7 +3448,7 @@ function LifeTracker() {
                               <div className="no-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
                                 {groupKeys.map((g) => {
                                   const GIcon = EXPENSE_GROUP_ICON[g] || Receipt;
-                                  const gColor = EXPENSE_GROUP_COLOR[g] || BRASS;
+                                  const gColor = EXPENSE_GROUP_COLOR[g] || BRASS_HEX;
                                   const sel = activeGroup === g;
                                   return (
                                     <button key={g} onClick={() => setFlow("dailyExpense", { group: g, sub: null })} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: "transparent", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, width: 62 }}>
@@ -3520,7 +3530,7 @@ function LifeTracker() {
                     {expanded && cat.id !== "trip" && cat.id !== "expense" && cat.id !== "myday" && cat.id !== "shopping" && pendingItemsForCat.length === 0 && (
                       <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
                         <Card style={{ textAlign: "center", padding: "30px 18px", borderRadius: 22, background: `linear-gradient(160deg, ${PANEL} 0%, ${PANEL_2} 100%)` }}>
-                          <div style={{ width: 56, height: 56, borderRadius: "50%", background: hexA(TEAL, darkMode ? 0.2 : 0.12), display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", boxShadow: `0 4px 14px ${hexA(TEAL, 0.18)}` }}>
+                          <div style={{ width: 56, height: 56, borderRadius: "50%", background: hexA(TEAL_HEX, darkMode ? 0.2 : 0.12), display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", boxShadow: `0 4px 14px ${hexA(TEAL_HEX, 0.18)}` }}>
                             <Check size={28} color={TEAL} strokeWidth={2.6} />
                           </div>
                           <div style={{ fontSize: 16, fontWeight: 750, color: INK, marginBottom: 4, fontFamily: disp }}>All done for today</div>
@@ -3757,7 +3767,7 @@ function LifeTracker() {
           )}
           {!expandedDailyCategory && (
             <div style={{ margin: "14px 16px 0", padding: "16px 18px", borderRadius: 18, background: darkMode ? "linear-gradient(120deg, #1E2A3D 0%, #22283A 100%)" : "linear-gradient(120deg, #E7EEFB 0%, #ECE7FA 100%)", border: `1px solid ${LINE}`, display: "flex", alignItems: "center", gap: 14, position: "relative", overflow: "hidden" }}>
-              <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 12, background: hexA(BRASS, darkMode ? 0.22 : 0.12), display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 12, background: hexA(BRASS_HEX, darkMode ? 0.22 : 0.12), display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Sparkles size={17} color={BRASS} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -3907,7 +3917,7 @@ function LifeTracker() {
                         {(() => {
                           const durMin = travelDurationMinutes(travelForm.travelTime, travelForm.arrivalTime);
                           return durMin != null ? (
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, background: hexA(BRASS, 0.09), border: `1px solid ${hexA(BRASS, 0.22)}`, borderRadius: 8, padding: "6px 10px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, background: hexA(BRASS_HEX, 0.09), border: `1px solid ${hexA(BRASS_HEX, 0.22)}`, borderRadius: 8, padding: "6px 10px" }}>
                               <Clock size={13} color={BRASS} />
                               <span style={{ fontSize: 13, color: BRASS, fontWeight: 700 }}>Travel duration: {fmtDuration(durMin)}</span>
                             </div>
