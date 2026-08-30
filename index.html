@@ -814,7 +814,12 @@ function myDayEventOccursOn(ev, dateStr) {
     const wd = weekdayLabel(new Date(dateStr));
     return ev.repeatDays.includes(wd);
   }
-  return ev.eventDate === dateStr;
+  if (!ev.eventDate) return false;
+  // Same lead-window rule as travel plans: a My Day entry starts showing on the Daily tab
+  // from its reminder date onward, not only on the exact event date.
+  const lead = maxReminderLeadDays(ev.reminderOffsets && ev.reminderOffsets.length ? ev.reminderOffsets : []);
+  const remindFrom = addDays(ev.eventDate, -lead);
+  return dateStr >= remindFrom && dateStr <= ev.eventDate;
 }
 function shoppingItemFinalAmount(it) {
   const price = Number(it.price) || 0;
@@ -913,8 +918,11 @@ function shoppingReminderOccursToday(list, todayStr) {
 const GOAL_CATEGORY_DEFS = CATEGORY_DEFS.filter((c) => ["finance", "career", "health"].includes(c.id));
 const DAILY_TAB_CATEGORY_DEFS = [
   { id: "myday", label: "My Day", icon: Users },
-  { id: "health", label: "Health Care", icon: HeartPulse },
+  { id: "expense", label: "Expense", icon: Receipt },
+  { id: "shopping", label: "Shopping", icon: ShoppingBag },
+  { id: "trip", label: "Trips", icon: Plane },
   { id: "career", label: "Career Growth", icon: Briefcase },
+  { id: "health", label: "Health Care", icon: HeartPulse },
   { id: "activity", label: "Routine", icon: Activity },
 ];
 const TODAY_CARD_META = {
