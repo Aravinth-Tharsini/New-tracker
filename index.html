@@ -889,12 +889,8 @@ function shoppingReminderOccursToday(list, todayStr) {
 }
 const GOAL_CATEGORY_DEFS = CATEGORY_DEFS.filter((c) => ["finance", "career", "health"].includes(c.id));
 const DAILY_TAB_CATEGORY_DEFS = [
-  { id: "myday", label: "My Day", icon: Users },
-  { id: "expense", label: "Expense", icon: Receipt },
-  { id: "shopping", label: "Shopping", icon: ShoppingBag },
-  { id: "trip", label: "Trips", icon: Plane },
+  { id: "health", label: "Health Care", icon: HeartPulse },
   { id: "career", label: "Career Growth", icon: Briefcase },
-  { id: "health", label: "Health", icon: HeartPulse },
   { id: "activity", label: "Routine", icon: Activity },
 ];
 const TODAY_CARD_META = {
