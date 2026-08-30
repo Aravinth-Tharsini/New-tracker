@@ -98,6 +98,15 @@ button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
   to   { opacity: 1; }
 }
 
+/* ===== Celebration pop-up: pops in, holds briefly, fades out on its own ===== */
+@keyframes celebrationPop {
+  0%   { opacity: 0; transform: translateX(-50%) scale(0.75) translateY(-6px); }
+  12%  { opacity: 1; transform: translateX(-50%) scale(1.05) translateY(0); }
+  20%  { opacity: 1; transform: translateX(-50%) scale(1) translateY(0); }
+  82%  { opacity: 1; transform: translateX(-50%) scale(1) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) scale(0.92) translateY(-4px); }
+}
+
 /* Respect users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1166,6 +1175,14 @@ function LifeTracker() {
   const [pendingImportData, setPendingImportData] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
   const undoTimerRef = useRef(null);
+  const [celebration, setCelebration] = useState(null);
+  const celebrationTimerRef = useRef(null);
+  const celebrate = (message) => {
+    if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current);
+    setCelebration({ message: message || "Nice work!", key: Date.now() });
+    celebrationTimerRef.current = setTimeout(() => setCelebration(null), 1400);
+  };
+  useEffect(() => () => { if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current); }, []);
   const fileInputRef = useRef(null);
   const headerDateInputRef = useRef(null);
   const syncTimerRef = useRef(null);
@@ -1455,6 +1472,7 @@ function LifeTracker() {
     if (item && /wake\s*-?\s*up/i.test(item.name)) {
       setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, wakeUpTime: nowIso } }; });
     }
+    celebrate(item ? `${item.name} done!` : "Task complete!");
     goNext(id);
   };
   const editInstantTime = (id, hhmm) => {
@@ -1471,6 +1489,7 @@ function LifeTracker() {
       const durationMin = rec.startTime ? Math.round((endNow - new Date(rec.startTime)) / 60000) : null;
       return { ...prev, [today]: { ...log, [id]: { ...rec, status: "done", endTime: endNow.toISOString(), durationMin } } };
     });
+    celebrate("Task complete!");
     goNext(id);
   };
   const logTimeSpent = (id, minutes) => {
@@ -1482,6 +1501,7 @@ function LifeTracker() {
       const log = prev[today] || defaultLog();
       return { ...prev, [today]: { ...log, [id]: { status: "done", startTime, endTime: endNow.toISOString(), durationMin: min } } };
     });
+    celebrate("Task complete!");
     goNext(id);
   };
   const logInterval = (item) => {
@@ -1743,18 +1763,22 @@ function LifeTracker() {
   };
   const cancelGoalForm = () => { setShowAddGoal(false); setEditingGoalId(null); setGoalForm(blankGoalForm()); };
   const deleteGoal = (id) => { setGoals((prev) => prev.filter((g) => g.id !== id)); setSelectedGoalId((prev) => prev === id ? null : prev); };
-  const toggleGoalDone = (id) => setGoals((prev) => prev.map((g) => {
-    if (g.id !== id) return g;
-    if (g.category === "finance" && Number(g.targetAmount) > 0) {
-      const target = Number(g.targetAmount) || 0;
-      const currentSaved = Number(g.savedAmount) || 0;
-      if (!g.done) {
-        return { ...g, savedAmount: target, done: true, completedDate: dateKey(), completedAt: new Date().toISOString() };
+  const toggleGoalDone = (id) => {
+    const g0 = goals.find((g) => g.id === id);
+    if (g0 && !g0.done) celebrate(`${g0.title || "Goal"} achieved!`);
+    setGoals((prev) => prev.map((g) => {
+      if (g.id !== id) return g;
+      if (g.category === "finance" && Number(g.targetAmount) > 0) {
+        const target = Number(g.targetAmount) || 0;
+        const currentSaved = Number(g.savedAmount) || 0;
+        if (!g.done) {
+          return { ...g, savedAmount: target, done: true, completedDate: dateKey(), completedAt: new Date().toISOString() };
+        }
+        return { ...g, done: false, completedDate: "" };
       }
-      return { ...g, done: false, completedDate: "" };
-    }
-    return { ...g, done: !g.done, completedAt: !g.done ? new Date().toISOString() : "" };
-  }));
+      return { ...g, done: !g.done, completedAt: !g.done ? new Date().toISOString() : "" };
+    }));
+  };
   const isFinanceGoalsTab = catTab === "financegoals";
   const goalCategoryKey = isFinanceGoalsTab ? "finance" : catTab;
   const categoryGoals = goals.filter((g) => g.category === goalCategoryKey).sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
@@ -1898,6 +1922,7 @@ function LifeTracker() {
   const toggleRepaymentPaid = (id) => setRepayments((prev) => {
     const r = prev.find((x) => x.id === id);
     if (!r) return prev;
+    if (!r.paid) celebrate(r.name ? `${r.name} paid!` : "Marked as paid!");
     const cls = repaymentCategoryClass(r.category);
     if (cls === "simple" && r.frequency && !r.paid) {
       const nextRecord = { ...r, id: "r" + Date.now() + Math.random().toString(36).slice(2, 6), dueDate: advanceDueDate(r.dueDate, r.frequency, r.dueDayStart), paid: false };
@@ -1968,7 +1993,7 @@ function LifeTracker() {
   const deleteTravelPlan = (id) => setTravelPlans((prev) => prev.filter((t) => t.id !== id));
   // Dismiss does not delete the trip. It moves the trip to Travel History with Cancelled status.
   const dismissTravelPlan = (id) => setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, dismissed: true, completed: false, status: "Cancelled", dismissedAt: new Date().toISOString() } : t)));
-  const completeTravelPlan = (id) => setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, dismissed: false, status: "Completed", completedAt: new Date().toISOString() } : t)));
+  const completeTravelPlan = (id) => { celebrate("Trip completed!"); setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, dismissed: false, status: "Completed", completedAt: new Date().toISOString() } : t))); };
   const toggleTravelNoteDone = (planId, noteId) => setTravelPlans((prev) => prev.map((t) => (t.id !== planId ? t : { ...t, notes: (t.notes || []).map((n) => (n.id !== noteId ? n : { ...n, done: !n.done })) })));
 
   // ---- My Day: meetings and other special activities, with an editable reminder ----
@@ -2006,7 +2031,11 @@ function LifeTracker() {
     cancelMyDayForm();
   };
   const deleteMyDayEvent = (id) => setMyDayEvents((prev) => prev.filter((e) => e.id !== id));
-  const toggleMyDayCompleted = (id) => setMyDayEvents((prev) => prev.map((e) => (e.id !== id ? e : { ...e, completed: !e.completed, completedAt: !e.completed ? new Date().toISOString() : null })));
+  const toggleMyDayCompleted = (id) => {
+    const e0 = myDayEvents.find((e) => e.id === id);
+    if (e0 && !e0.completed) celebrate(e0.title ? `${e0.title} done!` : "Task complete!");
+    setMyDayEvents((prev) => prev.map((e) => (e.id !== id ? e : { ...e, completed: !e.completed, completedAt: !e.completed ? new Date().toISOString() : null })));
+  };
   const logTravelExpense = (plan) => {
     if (!plan || Number(plan.amount) <= 0) return;
     const alreadyLogged = Object.values(dailyLogs).some((log) => (log.expenses || []).some((e) => e.linkedTravelId === plan.id));
@@ -5246,6 +5275,13 @@ function doPost(e) {
               </Card>
             </>
           )}
+        </div>
+      )}
+
+      {celebration && (
+        <div key={celebration.key} style={{ position: "fixed", top: "14%", left: "50%", transform: "translateX(-50%)", zIndex: 10002, pointerEvents: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, background: "#FFFFFF", border: `1px solid ${LINE}`, borderRadius: 16, padding: "14px 22px", boxShadow: CARD_SHADOW, animation: "celebrationPop 1.4s cubic-bezier(.22,.8,.25,1) both" }}>
+          <div style={{ fontSize: 32, lineHeight: 1 }}>🎉</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: INK, fontFamily: disp, whiteSpace: "nowrap" }}>{celebration.message}</div>
         </div>
       )}
 
