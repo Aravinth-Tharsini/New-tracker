@@ -1172,7 +1172,7 @@ function CenteredButton({ children, maxWidth = 280, widthPct = "58%" }) {
   );
 }
 
-const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalValue: 2, periodUnit: "hours", repeatCount: 3, amount: 250, unit: "ml", requiredDurationValue: 20, requiredDurationUnit: "minutes", groups: {}, days: [], scheduledTime: "" });
+const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalValue: 2, periodUnit: "hours", amount: 250, unit: "ml", requiredDurationValue: 20, requiredDurationUnit: "minutes", groups: {}, days: [], scheduledTime: "" });
 
 function LifeTracker() {
   const [page, setPage] = useState("dashboard");
@@ -1782,7 +1782,7 @@ function LifeTracker() {
   const [editingGoalId, setEditingGoalId] = useState(null);
   const [selectedGoalId, setSelectedGoalId] = useState(null);
   const goalMonthOptionsRef = () => { const arr = []; const nowD = new Date(); for (let i = -3; i <= 12; i++) arr.push(monthKey(new Date(nowD.getFullYear(), nowD.getMonth() + i, 1))); return arr; };
-  const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", goalType: "Skill Learning", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalValue: "2", periodUnit: "hours", repeatCount: "3", intervalAmount: "1", intervalUnit: "session", requiredDurationValue: "20", requiredDurationUnit: "minutes", reminderEnabled: false, reminderMinutes: "15", notes: "" });
+  const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", goalType: "Skill Learning", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalValue: "2", periodUnit: "hours", intervalAmount: "1", intervalUnit: "session", requiredDurationValue: "20", requiredDurationUnit: "minutes", reminderEnabled: false, reminderMinutes: "15", notes: "" });
   const [goalForm, setGoalForm] = useState(blankGoalForm());
   const isRoutineCategory = ROUTINE_CATEGORIES.includes(catTab);
   const toggleSpecificDay = (day) => setGoalForm((f) => ({ ...f, specificDays: f.specificDays.includes(day) ? f.specificDays.filter((d) => d !== day) : [...f.specificDays, day] }));
@@ -1798,7 +1798,7 @@ function LifeTracker() {
       startTime: g.startTime || "", sessionMinutes: g.sessionMinutes != null ? String(g.sessionMinutes) : "30",
       trackingType: g.trackingType || "instant",
       intervalValue: g.intervalValue != null ? String(g.intervalValue) : (g.intervalHours != null ? String(g.intervalHours) : "2"),
-      periodUnit: g.periodUnit || "hours", repeatCount: g.repeatCount != null ? String(g.repeatCount) : "3",
+      periodUnit: g.periodUnit || "hours",
       intervalAmount: g.amount != null ? String(g.amount) : "1", intervalUnit: g.unit || "session",
       requiredDurationValue: g.requiredDurationValue != null ? String(g.requiredDurationValue) : "20",
       requiredDurationUnit: g.requiredDurationUnit || "minutes",
@@ -1818,7 +1818,6 @@ function LifeTracker() {
       trackingType: goalForm.trackingType || "instant",
       intervalValue: goalForm.trackingType === "interval" ? (parseFloat(goalForm.intervalValue) || 0) : undefined,
       periodUnit: goalForm.trackingType === "interval" ? (goalForm.periodUnit || "hours") : undefined,
-      repeatCount: goalForm.trackingType === "interval" ? (parseInt(goalForm.repeatCount) || 0) : undefined,
       amount: goalForm.trackingType === "interval" ? (parseFloat(goalForm.intervalAmount) || 0) : undefined,
       unit: goalForm.trackingType === "interval" ? (goalForm.intervalUnit || "") : undefined,
       requiredDurationValue: goalForm.trackingType === "duration" ? (parseFloat(goalForm.requiredDurationValue) || 0) : undefined,
@@ -2137,7 +2136,6 @@ function LifeTracker() {
     ...item,
     intervalValue: item.intervalValue != null ? item.intervalValue : (item.intervalHours != null ? item.intervalHours : 2),
     periodUnit: item.periodUnit || "hours",
-    repeatCount: item.repeatCount != null ? item.repeatCount : 3,
     groups: { ...(item.groups || {}) },
   });
   const closeItemForm = () => { setItemForm(null); setAddingGroup(false); setAddingSubTo(null); };
@@ -4108,21 +4106,9 @@ function LifeTracker() {
                             <TextField type="number" value={itemForm.intervalValue} onChange={(e) => setItemForm((f) => ({ ...f, intervalValue: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} />
                           </div>
                           <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                            {["minutes", "hours", "days"].map((u) => (
+                            {["minutes", "hours"].map((u) => (
                               <ChipButton key={u} label={u} active={itemForm.periodUnit === u} onClick={() => setItemForm((f) => ({ ...f, periodUnit: u }))} />
                             ))}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Repeat</div>
-                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                            <ChipButton label="2 times" active={itemForm.repeatCount === 2} onClick={() => setItemForm((f) => ({ ...f, repeatCount: 2 }))} />
-                            <ChipButton label="3 times" active={itemForm.repeatCount === 3} onClick={() => setItemForm((f) => ({ ...f, repeatCount: 3 }))} />
-                            <ChipButton label="Custom" active={itemForm.repeatCount !== 2 && itemForm.repeatCount !== 3} onClick={() => setItemForm((f) => ({ ...f, repeatCount: f.repeatCount === 2 || f.repeatCount === 3 ? 4 : f.repeatCount || 4 }))} />
-                            {itemForm.repeatCount !== 2 && itemForm.repeatCount !== 3 && (
-                              <TextField type="number" min="1" value={itemForm.repeatCount} onChange={(e) => setItemForm((f) => ({ ...f, repeatCount: parseInt(e.target.value) || 1 }))} style={{ width: 70, fontFamily: mono }} />
-                            )}
-                            <span style={{ fontSize: 13, color: INK_FAINT }}>times a day</span>
                           </div>
                         </div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -4957,21 +4943,9 @@ function LifeTracker() {
                                 <TextField type="number" value={goalForm.intervalValue} onChange={(e) => setGoalForm({ ...goalForm, intervalValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                               </div>
                               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                                {["minutes", "hours", "days"].map((u) => (
+                                {["minutes", "hours"].map((u) => (
                                   <ChipButton key={u} label={u} active={goalForm.periodUnit === u} onClick={() => setGoalForm({ ...goalForm, periodUnit: u })} />
                                 ))}
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Repeat</div>
-                              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                                <ChipButton label="2 times" active={goalForm.repeatCount === "2"} onClick={() => setGoalForm({ ...goalForm, repeatCount: "2" })} />
-                                <ChipButton label="3 times" active={goalForm.repeatCount === "3"} onClick={() => setGoalForm({ ...goalForm, repeatCount: "3" })} />
-                                <ChipButton label="Custom" active={goalForm.repeatCount !== "2" && goalForm.repeatCount !== "3"} onClick={() => setGoalForm({ ...goalForm, repeatCount: goalForm.repeatCount === "2" || goalForm.repeatCount === "3" ? "4" : (goalForm.repeatCount || "4") })} />
-                                {goalForm.repeatCount !== "2" && goalForm.repeatCount !== "3" && (
-                                  <TextField type="number" min="1" value={goalForm.repeatCount} onChange={(e) => setGoalForm({ ...goalForm, repeatCount: e.target.value })} style={{ width: 70, fontFamily: mono }} />
-                                )}
-                                <span style={{ fontSize: 13, color: INK_FAINT }}>times a day</span>
                               </div>
                             </div>
                             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -5023,7 +4997,7 @@ function LifeTracker() {
                           </div>
                           {ROUTINE_CATEGORIES.includes(g.category) && g.trackingType && (
                             <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 3 }}>
-                              {g.done ? "Not on Daily tab \u2014 goal closed" : g.trackingType === "instant" ? "Daily tab \u00b7 OK / Done" : g.trackingType === "duration" ? `Daily tab \u00b7 Start / Stop Timer${g.requiredDurationValue ? ` (${g.requiredDurationValue} ${g.requiredDurationUnit || "minutes"})` : ""}` : `Daily tab \u00b7 Interval Reminder (${g.amount || 0} ${g.unit || ""} every ${g.intervalValue != null ? g.intervalValue : (g.intervalHours || 0)} ${g.periodUnit || "hours"}${g.repeatCount ? `, ${g.repeatCount}\u00d7/day` : ""})`}
+                              {g.done ? "Not on Daily tab \u2014 goal closed" : g.trackingType === "instant" ? "Daily tab \u00b7 OK / Done" : g.trackingType === "duration" ? `Daily tab \u00b7 Start / Stop Timer${g.requiredDurationValue ? ` (${g.requiredDurationValue} ${g.requiredDurationUnit || "minutes"})` : ""}` : `Daily tab \u00b7 Interval Reminder (${g.amount || 0} ${g.unit || ""} every ${g.intervalValue != null ? g.intervalValue : (g.intervalHours || 0)} ${g.periodUnit || "hours"})`}
                             </div>
                           )}
                           {selectedGoalId === g.id && <div style={{ fontSize: 11, color: BRASS, marginTop: 4 }}>Selected · summary shown below</div>}
