@@ -3054,15 +3054,15 @@ function LifeTracker() {
                                       {t.travelTime && <div style={{ fontFamily: mono, fontSize: 13, color: BRASS, fontWeight: 700, marginTop: 3 }}>{fmtTimeString12(t.travelTime)}</div>}
                                     </div>
                                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, padding: "0 2px" }}>
-                                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: BRASS_DIM }} />
-                                      <div style={{ width: 28, height: 1.5, background: `repeating-linear-gradient(to right, ${BRASS_DIM} 0, ${BRASS_DIM} 3px, transparent 3px, transparent 6px)`, margin: "3px 0" }} />
-                                      <TravelModeIcon mode={t.mode} size={14} color={BRASS} />
                                       {(() => {
                                         const durMin = travelDurationMinutes(t.travelTime, t.arrivalTime);
                                         return durMin != null ? (
-                                          <div style={{ fontFamily: mono, fontSize: 10.5, color: INK_FAINT, fontWeight: 700, marginTop: 4, whiteSpace: "nowrap" }}>{fmtDuration(durMin)}</div>
+                                          <div style={{ fontFamily: mono, fontSize: 11, color: "#FFFFFF", fontWeight: 700, background: BRASS, borderRadius: 980, padding: "2px 8px", marginBottom: 5, whiteSpace: "nowrap" }}>{fmtDuration(durMin)}</div>
                                         ) : null;
                                       })()}
+                                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: BRASS_DIM }} />
+                                      <div style={{ width: 28, height: 1.5, background: `repeating-linear-gradient(to right, ${BRASS_DIM} 0, ${BRASS_DIM} 3px, transparent 3px, transparent 6px)`, margin: "3px 0" }} />
+                                      <TravelModeIcon mode={t.mode} size={14} color={BRASS} />
                                     </div>
                                     <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
                                       <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 2 }}>To</div>
