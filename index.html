@@ -492,6 +492,17 @@ function timingStatus(scheduledTime, nowDate) {
   return { label: `Late by ${fmtDuration(diff)}`, diff, color: "#D9534F" };
 }
 function fmtDuration(min) { if (min == null) return "-"; const h = Math.floor(min / 60), m = Math.round(min % 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; }
+// Minutes between a departure and arrival "HH:MM" pair. If arrival is earlier in the clock than
+// departure, the trip is assumed to cross midnight rather than treated as a negative duration.
+function travelDurationMinutes(travelTime, arrivalTime) {
+  if (!travelTime || !arrivalTime) return null;
+  const [dh, dm] = travelTime.split(":").map(Number);
+  const [ah, am] = arrivalTime.split(":").map(Number);
+  if ([dh, dm, ah, am].some((n) => Number.isNaN(n))) return null;
+  let diff = (ah * 60 + am) - (dh * 60 + dm);
+  if (diff <= 0) diff += 24 * 60;
+  return diff;
+}
 function fmtElapsed(ms) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(totalSec / 3600), m = Math.floor((totalSec % 3600) / 60), s = totalSec % 60;
@@ -3046,6 +3057,12 @@ function LifeTracker() {
                                       <div style={{ width: 7, height: 7, borderRadius: "50%", background: BRASS_DIM }} />
                                       <div style={{ width: 28, height: 1.5, background: `repeating-linear-gradient(to right, ${BRASS_DIM} 0, ${BRASS_DIM} 3px, transparent 3px, transparent 6px)`, margin: "3px 0" }} />
                                       <TravelModeIcon mode={t.mode} size={14} color={BRASS} />
+                                      {(() => {
+                                        const durMin = travelDurationMinutes(t.travelTime, t.arrivalTime);
+                                        return durMin != null ? (
+                                          <div style={{ fontFamily: mono, fontSize: 10.5, color: INK_FAINT, fontWeight: 700, marginTop: 4, whiteSpace: "nowrap" }}>{fmtDuration(durMin)}</div>
+                                        ) : null;
+                                      })()}
                                     </div>
                                     <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
                                       <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 2 }}>To</div>
@@ -3724,6 +3741,17 @@ function LifeTracker() {
                           <TextField placeholder="From location" value={travelForm.fromLocation} onChange={(e) => setTravelForm({ ...travelForm, fromLocation: e.target.value })} style={{ flex: 1 }} />
                           <TextField placeholder="To location" value={travelForm.toLocation} onChange={(e) => setTravelForm({ ...travelForm, toLocation: e.target.value })} style={{ flex: 1 }} />
                         </div>
+                        {(() => {
+                          const durMin = travelDurationMinutes(travelForm.travelTime, travelForm.arrivalTime);
+                          return durMin != null ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, background: hexA(BRASS, 0.09), border: `1px solid ${hexA(BRASS, 0.22)}`, borderRadius: 8, padding: "6px 10px" }}>
+                              <Clock size={13} color={BRASS} />
+                              <span style={{ fontSize: 13, color: BRASS, fontWeight: 700 }}>Travel duration: {fmtDuration(durMin)}</span>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, color: INK_FAINT, padding: "0 2px" }}>Duration will show once departure &amp; arrival times are set below.</div>
+                          );
+                        })()}
                         <div style={{ display: "flex", gap: 6 }}>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Travel date</div>
