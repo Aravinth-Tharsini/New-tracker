@@ -2426,6 +2426,27 @@ function LifeTracker() {
           .header-date-chevron { display: none; }
         }
         /* Today category cards: clean, visual-first UI */
+        .today-hero {
+          display: flex; align-items: center; justify-content: space-between; gap: 14px;
+          margin: 2px 16px 18px; padding: 18px 20px; border-radius: 24px;
+          background: linear-gradient(135deg, var(--panel) 0%, var(--panel-2) 100%);
+          border: 1px solid var(--line); box-shadow: var(--card-shadow);
+        }
+        .today-hero-greeting { font-size: 19px; font-weight: 800; font-family: -apple-system, ui-rounded, 'SF Pro Display', sans-serif; color: var(--ink); letter-spacing: -0.01em; }
+        .today-hero-sub { font-size: 13px; color: var(--ink-dim); margin-top: 3px; line-height: 1.4; }
+        .today-hero-ring { position: relative; flex-shrink: 0; display: grid; place-items: center; }
+        .today-hero-ring svg { display: block; }
+        .today-hero-ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .today-hero-ring-num { font-family: 'JetBrains Mono', ui-rounded, monospace; font-size: 13px; font-weight: 800; color: var(--ink); line-height: 1; }
+        .today-hero-ring-num span { font-weight: 600; color: var(--ink-faint); }
+        .today-hero-ring-caption { font-size: 9px; color: var(--ink-faint); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+        .today-empty-state { margin: 0 16px; padding: 40px 20px; text-align: center; background: linear-gradient(160deg, var(--panel) 0%, var(--panel-2) 100%); border-radius: 24px; box-shadow: var(--card-shadow); border: 1px solid var(--line); }
+        .today-empty-icon { width: 58px; height: 58px; border-radius: 18px; background: rgba(10,132,255,0.14); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+        .today-expanded-header { display: flex; align-items: center; gap: 12px; padding: 2px 16px 16px; }
+        .today-expanded-header-text { min-width: 0; flex: 1; }
+        .today-expanded-header-title { font-size: 19px; font-weight: 800; font-family: -apple-system, ui-rounded, 'SF Pro Display', sans-serif; color: var(--ink); letter-spacing: -0.01em; line-height: 1.2; }
+        .today-expanded-header-sub { font-size: 12.5px; color: var(--ink-dim); margin-top: 2px; font-weight: 600; }
+        .today-expanded-header .today-focus-card.is-open { margin-right: 0 !important; flex-shrink: 0; }
         .today-expand-enter { animation: todaySlideIn .48s cubic-bezier(.22,.8,.25,1) both; overflow: hidden; }
         @keyframes todaySlideIn {
           from { opacity: 0; transform: translateY(-8px); max-height: 0; }
@@ -2512,15 +2533,16 @@ function LifeTracker() {
           position: relative; display: flex; flex-direction: column; align-items: flex-start; text-align: left;
           width: 100%; border-radius: 22px; border: 1px solid rgba(0,0,0,.04); cursor: pointer;
           padding: 16px 15px 52px; box-shadow: 0 1px 2px rgba(20,30,45,.04), 0 6px 18px rgba(20,30,45,.05);
-          transition: transform .18s ease, box-shadow .18s ease;
+          transition: transform .18s cubic-bezier(.22,.8,.25,1), box-shadow .18s ease;
         }
-        .today-cardv2:active { transform: scale(.965); }
+        .today-cardv2:active { transform: scale(.965); box-shadow: 0 1px 2px rgba(20,30,45,.04), 0 3px 10px rgba(20,30,45,.06); }
         .daily-input-tab:active { transform: scale(.965); }
         .today-cardv2-icon-wrap {
           position: relative; width: 48px; height: 48px; border-radius: 15px;
           display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-bottom: 11px;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.35);
         }
-        .today-cardv2-title { font-size: 16px; font-weight: 750; line-height: 1.2; }
+        .today-cardv2-title { font-size: 16px; font-weight: 750; line-height: 1.2; letter-spacing: -0.005em; }
         .today-cardv2-desc { font-size: 11.5px; color: var(--ink-dim); line-height: 1.35; margin-top: 3px; min-height: 30px; }
         .today-cardv2-divider { width: 100%; height: 1px; background: var(--line); margin: 9px 0 11px; }
         .today-cardv2-stats { display: flex; align-items: stretch; gap: 10px; width: 100%; }
@@ -2531,7 +2553,9 @@ function LifeTracker() {
         .today-cardv2-arrow {
           position: absolute; right: 14px; bottom: 14px; width: 38px; height: 38px; border-radius: 999px;
           display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(20,30,45,.08);
+          transition: transform .18s ease;
         }
+        .today-cardv2:active .today-cardv2-arrow { transform: scale(.9); }
         @media(min-width:700px){
           .today-category-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px !important; }
         }
@@ -2938,24 +2962,50 @@ function LifeTracker() {
           const accent = TODAY_CARD_ACCENT[cat.id] || BRASS;
           return { cat, expanded, CatIcon: cat.icon, itemsForCat, pendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent };
         });
+        // Purely a display aggregate for the hero progress ring below \u2014 sums the same
+        // per-category done/trackable numbers already computed above, nothing new is tracked.
+        const heroTrackable = categoryStats.reduce((s, cs) => s + (cs.trackableCount || 0), 0);
+        const heroDone = categoryStats.reduce((s, cs) => s + (cs.doneCount || 0), 0);
+        const heroPct = heroTrackable > 0 ? Math.min(1, heroDone / heroTrackable) : 0;
+        const heroRingR = 26;
+        const heroRingCirc = 2 * Math.PI * heroRingR;
         return (
         <div key="daily-page" className="daily-page-content" style={{ padding: "6px 0 14px", flex: 1, minHeight: 0, width: "100%" }}>
           {!expandedDailyCategory && (
-            <div style={{ padding: "0 16px", marginBottom: 14 }}>
-              <div style={{ fontSize: 15, color: INK, marginBottom: 2 }}>{greeting}! 👋</div>
-              <div style={{ fontSize: 13, color: INK_DIM }}>Plan better, stay consistent, achieve your goals.</div>
+            <div className="today-hero">
+              <div className="today-hero-text">
+                <div className="today-hero-greeting">{greeting} <span aria-hidden="true">👋</span></div>
+                <div className="today-hero-sub">Plan better, stay consistent, achieve your goals.</div>
+              </div>
+              {heroTrackable > 0 && (
+                <div className="today-hero-ring">
+                  <svg viewBox="0 0 64 64" width="58" height="58">
+                    <circle cx="32" cy="32" r={heroRingR} fill="none" stroke={hexA(BRASS, darkMode ? 0.28 : 0.14)} strokeWidth="6" />
+                    <circle
+                      cx="32" cy="32" r={heroRingR} fill="none" stroke={BRASS} strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={heroRingCirc} strokeDashoffset={heroRingCirc * (1 - heroPct)}
+                      transform="rotate(-90 32 32)" style={{ transition: "stroke-dashoffset .5s ease" }}
+                    />
+                  </svg>
+                  <div className="today-hero-ring-label">
+                    <div className="today-hero-ring-num">{heroDone}<span>/{heroTrackable}</span></div>
+                    <div className="today-hero-ring-caption">done</div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {availableDailyCategories.length === 0 ? (
-            <div style={{ margin: "0 16px", padding: "36px 18px", textAlign: "center", background: PANEL, borderRadius: 22, boxShadow: CARD_SHADOW, border: `1px solid ${LINE}` }}>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", background: hexA(BRASS, 0.12), display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+            <div className="today-empty-state">
+              <div className="today-empty-icon">
                 <CalendarDays size={28} color={BRASS} strokeWidth={2.2} />
               </div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: INK, marginBottom: 5 }}>Nothing to track yet</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: INK, marginBottom: 5, fontFamily: disp }}>Nothing to track yet</div>
               <div style={{ fontSize: 13, color: INK_DIM, lineHeight: 1.5 }}>Go to <span style={{ color: BRASS, fontWeight: 600 }}>Planner</span> to add a My Day plan or Trip, or set up Daily Routine, Career growth, or Healthcare goals.</div>
             </div>
           ) : (
             <div className="today-category-grid" style={{ padding: "0 16px" }}>
+
               {categoryStats.map((cs) => {
                 const { cat, expanded, CatIcon, itemsForCat, pendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent } = cs;
                 const badge = attentionCount > 0 && (
@@ -3038,16 +3088,22 @@ function LifeTracker() {
                         </div>
                       </button>
                     ) : (
-                      <button
-                        className="today-focus-card is-open"
-                        onClick={() => setExpandedDailyCategory(null)}
-                        style={{ background: hexA(BRASS, darkMode ? 0.20 : 0.10), cursor: "pointer" }}
-                      >
-                        <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0, "--icon-tint": hexA(BRASS, darkMode ? 0.24 : 0.14), "--icon-tint-border": hexA(BRASS, 0.3) }}>
-                          <CatIcon size={32} color={BRASS} strokeWidth={2.2} />
-                          {badge}
+                      <div className="today-expanded-header">
+                        <button
+                          className="today-focus-card is-open"
+                          onClick={() => setExpandedDailyCategory(null)}
+                          style={{ background: hexA(BRASS, darkMode ? 0.20 : 0.10), cursor: "pointer" }}
+                        >
+                          <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0, "--icon-tint": hexA(BRASS, darkMode ? 0.24 : 0.14), "--icon-tint-border": hexA(BRASS, 0.3) }}>
+                            <CatIcon size={32} color={BRASS} strokeWidth={2.2} />
+                            {badge}
+                          </div>
+                        </button>
+                        <div className="today-expanded-header-text">
+                          <div className="today-expanded-header-title">{cat.label}</div>
+                          <div className="today-expanded-header-sub">{countLabel}</div>
                         </div>
-                      </button>
+                      </div>
                     )}
                     {expanded && cat.id === "trip" && (
                       <div className="today-expand-enter" style={{ marginTop: 8, paddingTop: 2 }}>
@@ -3431,11 +3487,11 @@ function LifeTracker() {
                     })()}
                     {expanded && cat.id !== "trip" && cat.id !== "expense" && cat.id !== "myday" && cat.id !== "shopping" && pendingItemsForCat.length === 0 && (
                       <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
-                        <Card style={{ textAlign: "center", padding: "26px 18px" }}>
-                          <div style={{ width: 52, height: 52, borderRadius: "50%", background: "rgba(52,199,89,0.12)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                            <Check size={26} color={TEAL} strokeWidth={2.6} />
+                        <Card style={{ textAlign: "center", padding: "30px 18px", borderRadius: 22, background: `linear-gradient(160deg, ${PANEL} 0%, ${PANEL_2} 100%)` }}>
+                          <div style={{ width: 56, height: 56, borderRadius: "50%", background: hexA(TEAL, darkMode ? 0.2 : 0.12), display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", boxShadow: `0 4px 14px ${hexA(TEAL, 0.18)}` }}>
+                            <Check size={28} color={TEAL} strokeWidth={2.6} />
                           </div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: INK, marginBottom: 4 }}>All done for today</div>
+                          <div style={{ fontSize: 16, fontWeight: 750, color: INK, marginBottom: 4, fontFamily: disp }}>All done for today</div>
                           <div style={{ fontSize: 13, color: INK_FAINT }}>Nothing left to track here.</div>
                         </Card>
                       </div>
@@ -3444,13 +3500,13 @@ function LifeTracker() {
                       <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
               {/* Progress header: a single glance at how far through today's category you are,
                   replacing the need to count status pills across the old tile row. */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, padding: "0 2px" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: INK_DIM }}>{doneCount} of {trackableCount} done</div>
-                <div style={{ flex: 1, height: 6, background: PANEL_2, borderRadius: 999, margin: "0 10px", overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14, padding: "10px 13px", borderRadius: 14, background: hexA(accent, darkMode ? 0.14 : 0.07) }}>
+                <div style={{ fontSize: 13, fontWeight: 750, color: INK, flexShrink: 0 }}>{doneCount} <span style={{ color: INK_DIM, fontWeight: 600 }}>of {trackableCount} done</span></div>
+                <div style={{ flex: 1, height: 6, background: hexA(accent, darkMode ? 0.22 : 0.14), borderRadius: 999, overflow: "hidden" }}>
                   <div style={{ width: `${trackableCount ? Math.round((doneCount / trackableCount) * 100) : 0}%`, height: "100%", background: accent, borderRadius: 999, transition: "width .3s ease" }} />
                 </div>
                 {streaks[activeTab] > 0 && (
-                  <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 12.5, fontWeight: 700, color: BRASS, fontFamily: mono, flexShrink: 0 }}><Flame size={12} /> {streaks[activeTab]}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 12.5, fontWeight: 750, color: BRASS, fontFamily: mono, flexShrink: 0 }}><Flame size={12} /> {streaks[activeTab]}</span>
                 )}
               </div>
               {/* Compact pill strip: icon + name only, with a colored ring for status, so the eye
@@ -3472,10 +3528,10 @@ function LifeTracker() {
                       }}
                       className="daily-input-tab"
                     >
-                      <div style={{ width: 52, height: 52, borderRadius: "50%", background: active ? hexA(accent, darkMode ? 0.24 : 0.13) : PANEL, display: "flex", alignItems: "center", justifyContent: "center", border: `2.5px solid ${ringColor}`, boxShadow: active ? `0 4px 12px ${hexA(accent, 0.2)}` : "none", transition: "border-color .18s ease, background .18s ease" }}>
-                        <RoutineActivityIcon icon={item.icon} size={20} title={item.name} />
+                      <div style={{ width: 54, height: 54, borderRadius: "50%", background: active ? hexA(accent, darkMode ? 0.26 : 0.14) : PANEL, display: "flex", alignItems: "center", justifyContent: "center", border: `2.5px solid ${ringColor}`, boxShadow: active ? `0 4px 14px ${hexA(accent, 0.25)}` : "0 1px 3px rgba(20,30,45,.06)", transition: "border-color .18s ease, background .18s ease, box-shadow .18s ease" }}>
+                        <RoutineActivityIcon icon={item.icon} size={21} title={item.name} />
                       </div>
-                      <div style={{ fontSize: 11.5, fontWeight: active ? 700 : 600, color: active ? accent : INK_DIM, maxWidth: 66, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                      <div style={{ fontSize: 11.5, fontWeight: active ? 750 : 600, color: active ? accent : INK_DIM, maxWidth: 66, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
                     </button>
                   );
                 })}
