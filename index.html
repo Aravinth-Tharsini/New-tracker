@@ -546,6 +546,14 @@ function isIntervalDue(item, log, nowMs) {
   const nextDueMs = lastTime ? new Date(lastTime).getTime() + intervalPeriodMs(item) : nowMs;
   return nowMs >= nextDueMs;
 }
+// Optional target length for a Start/Stop Timer item, e.g. "20 minutes" or "45 seconds".
+// Returns null when the item has no required duration set (timer just counts elapsed time freely).
+const REQUIRED_DURATION_UNIT_MS = { seconds: 1000, minutes: 60000, hours: 3600000 };
+function requiredDurationMs(item) {
+  if (!item.requiredDurationValue || !item.requiredDurationUnit) return null;
+  const ms = Number(item.requiredDurationValue) * (REQUIRED_DURATION_UNIT_MS[item.requiredDurationUnit] || 60000);
+  return ms > 0 ? ms : null;
+}
 function computeStreak(dailyLogs, itemId) {
   let streak = 0;
   let d = new Date();
@@ -1164,7 +1172,7 @@ function CenteredButton({ children, maxWidth = 280, widthPct = "58%" }) {
   );
 }
 
-const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalValue: 2, periodUnit: "hours", repeatCount: 3, amount: 250, unit: "ml", groups: {}, days: [], scheduledTime: "" });
+const blankItemForm = () => ({ id: null, name: "", type: "instant", icon: "Target", intervalValue: 2, periodUnit: "hours", repeatCount: 3, amount: 250, unit: "ml", requiredDurationValue: 20, requiredDurationUnit: "minutes", groups: {}, days: [], scheduledTime: "" });
 
 function LifeTracker() {
   const [page, setPage] = useState("dashboard");
@@ -1455,6 +1463,7 @@ function LifeTracker() {
       id: `goal-${g.id}`, name: g.title, type: g.trackingType, category: g.category,
       icon: GOAL_TRACK_ICON[g.category] || "Target",
       intervalHours: g.intervalHours, intervalValue: g.intervalValue, periodUnit: g.periodUnit, repeatCount: g.repeatCount, amount: g.amount, unit: g.unit,
+      requiredDurationValue: g.requiredDurationValue, requiredDurationUnit: g.requiredDurationUnit,
     }))
     .filter(isItemValid), [goals]);
   const validItems = useMemo(() => [
@@ -1773,7 +1782,7 @@ function LifeTracker() {
   const [editingGoalId, setEditingGoalId] = useState(null);
   const [selectedGoalId, setSelectedGoalId] = useState(null);
   const goalMonthOptionsRef = () => { const arr = []; const nowD = new Date(); for (let i = -3; i <= 12; i++) arr.push(monthKey(new Date(nowD.getFullYear(), nowD.getMonth() + i, 1))); return arr; };
-  const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", goalType: "Skill Learning", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalValue: "2", periodUnit: "hours", repeatCount: "3", intervalAmount: "1", intervalUnit: "session", reminderEnabled: false, reminderMinutes: "15", notes: "" });
+  const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", goalType: "Skill Learning", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalValue: "2", periodUnit: "hours", repeatCount: "3", intervalAmount: "1", intervalUnit: "session", requiredDurationValue: "20", requiredDurationUnit: "minutes", reminderEnabled: false, reminderMinutes: "15", notes: "" });
   const [goalForm, setGoalForm] = useState(blankGoalForm());
   const isRoutineCategory = ROUTINE_CATEGORIES.includes(catTab);
   const toggleSpecificDay = (day) => setGoalForm((f) => ({ ...f, specificDays: f.specificDays.includes(day) ? f.specificDays.filter((d) => d !== day) : [...f.specificDays, day] }));
@@ -1791,6 +1800,8 @@ function LifeTracker() {
       intervalValue: g.intervalValue != null ? String(g.intervalValue) : (g.intervalHours != null ? String(g.intervalHours) : "2"),
       periodUnit: g.periodUnit || "hours", repeatCount: g.repeatCount != null ? String(g.repeatCount) : "3",
       intervalAmount: g.amount != null ? String(g.amount) : "1", intervalUnit: g.unit || "session",
+      requiredDurationValue: g.requiredDurationValue != null ? String(g.requiredDurationValue) : "20",
+      requiredDurationUnit: g.requiredDurationUnit || "minutes",
       reminderEnabled: !!g.reminderEnabled, reminderMinutes: g.reminderMinutes != null ? String(g.reminderMinutes) : "15", notes: g.notes || "",
     });
     setEditingGoalId(g.id);
@@ -1810,6 +1821,8 @@ function LifeTracker() {
       repeatCount: goalForm.trackingType === "interval" ? (parseInt(goalForm.repeatCount) || 0) : undefined,
       amount: goalForm.trackingType === "interval" ? (parseFloat(goalForm.intervalAmount) || 0) : undefined,
       unit: goalForm.trackingType === "interval" ? (goalForm.intervalUnit || "") : undefined,
+      requiredDurationValue: goalForm.trackingType === "duration" ? (parseFloat(goalForm.requiredDurationValue) || 0) : undefined,
+      requiredDurationUnit: goalForm.trackingType === "duration" ? (goalForm.requiredDurationUnit || "minutes") : undefined,
       reminderEnabled: !!goalForm.reminderEnabled, reminderMinutes: parseInt(goalForm.reminderMinutes) || 15, notes: goalForm.notes || "",
     } : {};
     const newGoalId = editingGoalId || ("g" + Date.now());
@@ -3543,12 +3556,19 @@ function LifeTracker() {
                     );
                   }
                   if (item.type === "duration") {
+                    const targetMs = requiredDurationMs(item);
                     return (
                       <Card key={item.id} style={{ textAlign: "center", padding: "19px 12px", borderTop: `3px solid ${accent}` }}>
                         {rec.status === "done" ? (
                           <>
                             <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 5 }}>{item.name} completed</div>
-                            <div style={{ fontFamily: mono, fontSize: 18, color: TEAL, fontWeight: 600 }}>{fmtDuration(rec.durationMin)}</div>
+                            <div style={{ fontFamily: mono, fontSize: 18, color: TEAL, fontWeight: 600, marginBottom: 8 }}>{fmtDuration(rec.durationMin)}</div>
+                            {rec.startTime && rec.endTime && (
+                              <div style={{ display: "flex", justifyContent: "center", gap: 14, fontSize: 13, color: INK_DIM }}>
+                                <div><span style={{ color: INK_FAINT }}>Started</span> <span style={{ fontFamily: mono, fontWeight: 600, color: INK }}>{fmtTime(rec.startTime)}</span></div>
+                                <div><span style={{ color: INK_FAINT }}>Ended</span> <span style={{ fontFamily: mono, fontWeight: 600, color: INK }}>{fmtTime(rec.endTime)}</span></div>
+                              </div>
+                            )}
                             {item.scheduledTime && rec.startTime && (() => {
                               const status = timingStatus(item.scheduledTime, new Date(rec.startTime));
                               return status && (
@@ -3557,10 +3577,22 @@ function LifeTracker() {
                             })()}
                           </>
                         ) : rec.status === "in_progress" ? (
-                          <><RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{fmtElapsed(now - new Date(rec.startTime))}</div><CenteredButton><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></CenteredButton></>
+                          <>
+                            <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
+                            <div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: targetMs ? 4 : 10 }}>
+                              {fmtElapsed(now - new Date(rec.startTime))}{targetMs ? <span style={{ fontSize: 16, color: INK_FAINT }}> / {fmtElapsed(targetMs)}</span> : null}
+                            </div>
+                            {targetMs && (
+                              <div style={{ marginBottom: 12 }}>
+                                <ProgressBar pct={Math.round(((now - new Date(rec.startTime)) / targetMs) * 100)} color={accent} />
+                              </div>
+                            )}
+                            <CenteredButton><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></CenteredButton>
+                          </>
                         ) : (
                           <>
-                            <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: 10 }}>Start when {item.name.toLowerCase()} begins</div>
+                            <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: targetMs ? 3 : 10 }}>Start when {item.name.toLowerCase()} begins</div>
+                            {targetMs && <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 10 }}>Target &middot; {item.requiredDurationValue} {item.requiredDurationUnit}</div>}
                             {item.scheduledTime && (() => {
                               const status = timingStatus(item.scheduledTime, now);
                               return (
@@ -4042,6 +4074,22 @@ function LifeTracker() {
                           <div style={{ flex: "0 1 70px" }}><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Unit</div><TextField value={itemForm.unit} onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value }))} style={{ width: "100%" }} /></div>
                         </div>
                       </>
+                    )}
+
+                    {itemForm.type === "duration" && (
+                      <div>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Required duration (optional)</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
+                          <div style={{ flex: "1 1 70px" }}>
+                            <TextField type="number" value={itemForm.requiredDurationValue} onChange={(e) => setItemForm((f) => ({ ...f, requiredDurationValue: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                            {["seconds", "minutes", "hours"].map((u) => (
+                              <ChipButton key={u} label={u} active={itemForm.requiredDurationUnit === u} onClick={() => setItemForm((f) => ({ ...f, requiredDurationUnit: u }))} />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     )}
 
                     {(itemForm.type === "instant" || itemForm.type === "duration") && (
@@ -4830,6 +4878,21 @@ function LifeTracker() {
                             <ChipButton label="Interval Reminder" active={goalForm.trackingType === "interval"} onClick={() => setGoalForm({ ...goalForm, trackingType: "interval" })} />
                           </div>
                         </div>
+                        {goalForm.trackingType === "duration" && (
+                          <div>
+                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Required duration (optional)</div>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
+                              <div style={{ flex: "1 1 70px" }}>
+                                <TextField type="number" value={goalForm.requiredDurationValue} onChange={(e) => setGoalForm({ ...goalForm, requiredDurationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              </div>
+                              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                                {["seconds", "minutes", "hours"].map((u) => (
+                                  <ChipButton key={u} label={u} active={goalForm.requiredDurationUnit === u} onClick={() => setGoalForm({ ...goalForm, requiredDurationUnit: u })} />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {goalForm.trackingType === "interval" && (
                           <>
                             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
@@ -4904,7 +4967,7 @@ function LifeTracker() {
                           </div>
                           {ROUTINE_CATEGORIES.includes(g.category) && g.trackingType && (
                             <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 3 }}>
-                              {g.done ? "Not on Daily tab \u2014 goal closed" : g.trackingType === "instant" ? "Daily tab \u00b7 OK / Done" : g.trackingType === "duration" ? "Daily tab \u00b7 Start / Stop Timer" : `Daily tab \u00b7 Interval Reminder (${g.amount || 0} ${g.unit || ""} every ${g.intervalValue != null ? g.intervalValue : (g.intervalHours || 0)} ${g.periodUnit || "hours"}${g.repeatCount ? `, ${g.repeatCount}\u00d7/day` : ""})`}
+                              {g.done ? "Not on Daily tab \u2014 goal closed" : g.trackingType === "instant" ? "Daily tab \u00b7 OK / Done" : g.trackingType === "duration" ? `Daily tab \u00b7 Start / Stop Timer${g.requiredDurationValue ? ` (${g.requiredDurationValue} ${g.requiredDurationUnit || "minutes"})` : ""}` : `Daily tab \u00b7 Interval Reminder (${g.amount || 0} ${g.unit || ""} every ${g.intervalValue != null ? g.intervalValue : (g.intervalHours || 0)} ${g.periodUnit || "hours"}${g.repeatCount ? `, ${g.repeatCount}\u00d7/day` : ""})`}
                             </div>
                           )}
                           {selectedGoalId === g.id && <div style={{ fontSize: 11, color: BRASS, marginTop: 4 }}>Selected · summary shown below</div>}
