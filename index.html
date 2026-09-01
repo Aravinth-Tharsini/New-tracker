@@ -2060,6 +2060,8 @@ function LifeTracker() {
   const [showTravelHistory, setShowTravelHistory] = useState(false);
   const [editingTravelId, setEditingTravelId] = useState(null);
   const [travelTimeInputMode, setTravelTimeInputMode] = useState("24h");
+  const travelFormRef = useRef(null);
+  const travelCardRefs = useRef({});
   const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", arrivalTime: "", amount: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [] });
   const [travelForm, setTravelForm] = useState(blankTravelForm());
   const [newTravelNoteText, setNewTravelNoteText] = useState("");
@@ -2080,8 +2082,27 @@ function LifeTracker() {
     });
     setEditingTravelId(t.id);
     setShowAddTravel(true);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (travelFormRef.current) travelFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 60);
+    });
   };
-  const cancelTravelForm = () => { setShowAddTravel(false); setEditingTravelId(null); setTravelForm(blankTravelForm()); setNewTravelNoteText(""); };
+  const cancelTravelForm = () => {
+    const wasEditingId = editingTravelId;
+    setShowAddTravel(false);
+    setEditingTravelId(null);
+    setTravelForm(blankTravelForm());
+    setNewTravelNoteText("");
+    if (wasEditingId) {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const el = travelCardRefs.current[wasEditingId];
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 60);
+      });
+    }
+  };
   const addTravelPlan = () => {
     if (!travelForm.fromLocation.trim() || !travelForm.toLocation.trim() || !travelForm.travelDate) return;
     const base = {
@@ -2396,6 +2417,7 @@ function LifeTracker() {
   }, []);
 
   const travelFormCard = (
+                  <div ref={travelFormRef}>
                     <Card style={{ marginBottom: 9 }}>
                       <SectionLabel>{editingTravelId ? "Edit trip" : "New trip"}</SectionLabel>
                       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2493,6 +2515,7 @@ function LifeTracker() {
                         </div>
                       </div>
                     </Card>
+                  </div>
   );
 
   return (
@@ -4033,7 +4056,8 @@ function LifeTracker() {
                         return <React.Fragment key={t.id}>{travelFormCard}</React.Fragment>;
                       }
                       return (
-                      <Card key={t.id} style={{ display: "flex", alignItems: "flex-start", gap: 5 }}>
+                      <div key={t.id} ref={(el) => { travelCardRefs.current[t.id] = el; }}>
+                      <Card style={{ display: "flex", alignItems: "flex-start", gap: 5 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 15, fontWeight: 600, color: INK }}><TravelModeIcon mode={t.mode} size={18} color={BRASS} style={{ flexShrink: 0 }} /><span>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</span></div>
                           <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3, display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
@@ -4064,6 +4088,7 @@ function LifeTracker() {
                           <IconAction onClick={() => deleteTravelPlan(t.id)}><Trash2 size={15} /></IconAction>
                         </div>
                       </Card>
+                      </div>
                       );
                     })}
                     {sortedTravelPlans.filter((t) => !t.completed && !t.dismissed).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{sortedTravelPlans.some((t) => t.completed || t.dismissed) ? "All trips are completed or cancelled — check History." : "No trips added yet."}</div>}
