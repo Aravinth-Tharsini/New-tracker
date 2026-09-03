@@ -2916,7 +2916,7 @@ function LifeTracker() {
                   </div>
   );
 
-  const shoppingFormCard = (
+  const shoppingFormCard = !shoppingForm ? null : (
                   <div ref={shoppingFormRef}>
                 <Card>
                   <SectionLabel>{shoppingForm.id ? "Edit shopping list" : "New shopping list"}</SectionLabel>
@@ -3018,7 +3018,7 @@ function LifeTracker() {
                   </div>
   );
 
-  const itemFormCard = (
+  const itemFormCard = !itemForm ? null : (
                   <div ref={itemFormRef}>
                 <Card>
                   <SectionLabel>{itemForm.id ? "Edit routine" : "New routine"}</SectionLabel>
