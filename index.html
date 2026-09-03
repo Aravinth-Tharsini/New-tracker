@@ -1692,6 +1692,10 @@ function LifeTracker() {
   const blankShoppingItem = () => ({ id: "si" + Date.now() + Math.random().toString(36).slice(2, 7), name: "", category: savedShoppingCategories[0] || "", unit: "each", price: "", discountPct: "", qty: "1" });
   const blankShoppingForm = () => ({ id: null, shopName: "", location: "", shoppingDate: "", reminderDate: "", reminderTime: "", items: [blankShoppingItem()] });
   const [shoppingForm, setShoppingForm] = useState(null);
+  const shoppingFormRef = useRef(null);
+  const shoppingCardRefs = useRef({});
+  const scrollToShoppingForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (shoppingFormRef.current) shoppingFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 120); }); };
+  const scrollBackToShoppingCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = shoppingCardRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }); };
   const [previewShoppingId, setPreviewShoppingId] = useState(null);
   const [expandedDailyShoppingId, setExpandedDailyShoppingId] = useState(null);
   // Keep Today → Shopping compact by default. The full item list opens only after the user taps that shopping card.
@@ -1699,7 +1703,7 @@ function LifeTracker() {
     if (page !== "dashboard" || expandedDailyCategory !== "shopping") setExpandedDailyShoppingId(null);
   }, [page, expandedDailyCategory]);
   const openNewShoppingForm = () => setShoppingForm(blankShoppingForm());
-  const openEditShoppingForm = (list) => setShoppingForm({ id: list.id, shopName: list.shopName, location: list.location || "", shoppingDate: list.shoppingDate || "", reminderDate: list.reminderDate || list.shoppingDate || "", reminderTime: list.reminderTime || "", items: list.items.map((it) => ({ ...it })) });
+  const openEditShoppingForm = (list) => { setShoppingForm({ id: list.id, shopName: list.shopName, location: list.location || "", shoppingDate: list.shoppingDate || "", reminderDate: list.reminderDate || list.shoppingDate || "", reminderTime: list.reminderTime || "", items: list.items.map((it) => ({ ...it })) }); scrollToShoppingForm(); };
   // Daily Shopping edit should always take the user back to Planner → Shopping, not open a second editor inside Today.
   const openShoppingEditorFromDaily = (list) => {
     openEditShoppingForm(list);
@@ -1708,7 +1712,7 @@ function LifeTracker() {
     setCatTab("shopping");
     setPage("categories");
   };
-  const closeShoppingForm = () => setShoppingForm(null);
+  const closeShoppingForm = () => { const wasEditingId = shoppingForm && shoppingForm.id; setShoppingForm(null); if (wasEditingId) scrollBackToShoppingCard(wasEditingId); };
   const updateShoppingItem = (itemId, patch) => setShoppingForm((f) => ({ ...f, items: f.items.map((it) => (it.id !== itemId ? it : { ...it, ...patch })) }));
   const addShoppingItem = () => setShoppingForm((f) => ({ ...f, items: [...f.items, blankShoppingItem()] }));
   const removeShoppingItem = (itemId) => setShoppingForm((f) => ({ ...f, items: f.items.filter((it) => it.id !== itemId) }));
@@ -1727,7 +1731,9 @@ function LifeTracker() {
     } else {
       setShoppingLists((prev) => [...prev, { id: "sl" + Date.now(), shopName, location: (shoppingForm.location || "").trim(), shoppingDate: shoppingForm.shoppingDate || "", reminderDate: shoppingForm.reminderDate || shoppingForm.shoppingDate || "", reminderTime: shoppingForm.reminderTime || "", items: cleanItems, status: "planning", createdAt: new Date().toISOString(), paidAt: null }]);
     }
+    const wasEditingShoppingId = shoppingForm.id;
     setShoppingForm(null);
+    if (wasEditingShoppingId) scrollBackToShoppingCard(wasEditingShoppingId);
   };
   // Delete permanently removes a list. Done/Cancel keep the list in Shopping History.
   const deleteShoppingList = (id) => setShoppingLists((prev) => prev.filter((l) => l.id !== id));
@@ -1814,6 +1820,10 @@ function LifeTracker() {
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState(null);
   const [selectedGoalId, setSelectedGoalId] = useState(null);
+  const goalFormRef = useRef(null);
+  const goalCardRefs = useRef({});
+  const scrollToGoalForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (goalFormRef.current) goalFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 60); }); };
+  const scrollBackToGoalCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = goalCardRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }); };
   const goalMonthOptionsRef = () => { const arr = []; const nowD = new Date(); for (let i = -3; i <= 12; i++) arr.push(monthKey(new Date(nowD.getFullYear(), nowD.getMonth() + i, 1))); return arr; };
   const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", goalType: "Skill Learning", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalValue: "2", periodUnit: "hours", intervalAmount: "1", intervalUnit: "session", requiredDurationValue: "20", requiredDurationUnit: "minutes", reminderEnabled: false, reminderMinutes: "15", notes: "" });
   const [goalForm, setGoalForm] = useState(blankGoalForm());
@@ -1839,6 +1849,7 @@ function LifeTracker() {
     });
     setEditingGoalId(g.id);
     setShowAddGoal(true);
+    scrollToGoalForm();
   };
   const addGoal = () => {
     if (!goalForm.title.trim()) return;
@@ -1858,6 +1869,7 @@ function LifeTracker() {
       reminderEnabled: !!goalForm.reminderEnabled, reminderMinutes: parseInt(goalForm.reminderMinutes) || 15, notes: goalForm.notes || "",
     } : {};
     const newGoalId = editingGoalId || ("g" + Date.now());
+    const wasEditingGoalId = editingGoalId;
     if (editingGoalId) {
       setGoals((prev) => prev.map((g) => g.id !== editingGoalId ? g : { ...g, title: fullTitle, sequence: parseInt(goalForm.sequence) || 0, targetAmount: isFinanceGoalsTab ? parseFloat(goalForm.targetAmount) || 0 : undefined, savedAmount: isFinanceGoalsTab ? Math.min(Number(g.savedAmount) || 0, parseFloat(goalForm.targetAmount) || 0) : undefined, ...routineFields }));
     } else {
@@ -1867,8 +1879,13 @@ function LifeTracker() {
     setGoalForm(blankGoalForm());
     setEditingGoalId(null);
     setShowAddGoal(false);
+    if (wasEditingGoalId) scrollBackToGoalCard(wasEditingGoalId);
   };
-  const cancelGoalForm = () => { setShowAddGoal(false); setEditingGoalId(null); setGoalForm(blankGoalForm()); };
+  const cancelGoalForm = () => {
+    const wasEditingGoalId = editingGoalId;
+    setShowAddGoal(false); setEditingGoalId(null); setGoalForm(blankGoalForm());
+    if (wasEditingGoalId) scrollBackToGoalCard(wasEditingGoalId);
+  };
   const deleteGoal = (id) => { setGoals((prev) => prev.filter((g) => g.id !== id)); setSelectedGoalId((prev) => prev === id ? null : prev); };
   const toggleGoalDone = (id) => {
     const g0 = goals.find((g) => g.id === id);
@@ -1916,6 +1933,10 @@ function LifeTracker() {
   const [financeGoalView, setFinanceGoalView] = useState("expenses");
   const [showAddRepayment, setShowAddRepayment] = useState(false);
   const [editingRepaymentId, setEditingRepaymentId] = useState(null);
+  const repaymentFormRef = useRef(null);
+  const repaymentCardRefs = useRef({});
+  const scrollToRepaymentForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (repaymentFormRef.current) repaymentFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 60); }); };
+  const scrollBackToRepaymentCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = repaymentCardRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }); };
   const blankRepaymentForm = () => ({
     category: REPAYMENT_CATEGORIES[0], name: "", remarks: "",
     loanAmount: "", interestRate: "", interestRateUnit: "annum", durationValue: "", durationUnit: "Months",
@@ -1941,8 +1962,13 @@ function LifeTracker() {
     });
     setEditingRepaymentId(r.id);
     setShowAddRepayment(true);
+    scrollToRepaymentForm();
   };
-  const cancelRepaymentForm = () => { setShowAddRepayment(false); setEditingRepaymentId(null); setRepaymentForm(blankRepaymentForm()); };
+  const cancelRepaymentForm = () => {
+    const wasEditingId = editingRepaymentId;
+    setShowAddRepayment(false); setEditingRepaymentId(null); setRepaymentForm(blankRepaymentForm());
+    if (wasEditingId) scrollBackToRepaymentCard(wasEditingId);
+  };
   const addRepayment = () => {
     const cls = repaymentCategoryClass(repaymentForm.category);
     if (cls === "gold") {
@@ -2009,9 +2035,11 @@ function LifeTracker() {
         setRepayments((prev) => [...prev, { id: "r" + Date.now(), ...base, paid: false }]);
       }
     }
+    const wasEditingRepaymentId = editingRepaymentId;
     setRepaymentForm(blankRepaymentForm());
     setEditingRepaymentId(null);
     setShowAddRepayment(false);
+    if (wasEditingRepaymentId) scrollBackToRepaymentCard(wasEditingRepaymentId);
   };
   const deleteRepayment = (id) => setRepayments((prev) => prev.filter((r) => r.id !== id));
   const advanceDueDate = (dueDate, frequency, dueDayStart) => {
@@ -2128,6 +2156,10 @@ function LifeTracker() {
   const [showAddMyDay, setShowAddMyDay] = useState(false);
   const [showMyDayHistory, setShowMyDayHistory] = useState(false);
   const [editingMyDayId, setEditingMyDayId] = useState(null);
+  const myDayFormRef = useRef(null);
+  const myDayCardRefs = useRef({});
+  const scrollToMyDayForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (myDayFormRef.current) myDayFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 120); }); };
+  const scrollBackToMyDayCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = myDayCardRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }); };
   const blankMyDayForm = () => ({ type: "Meeting", title: "", eventDate: dateKey(), eventTime: "", location: "", notes: "", repeatDays: [], reminderOffsets: ["none"], reminderEnabled: true, reminderMinutes: "15" });
   const [myDayForm, setMyDayForm] = useState(blankMyDayForm());
   const toggleMyDayRepeatDay = (day) => setMyDayForm((f) => ({ ...f, repeatDays: f.repeatDays.includes(day) ? f.repeatDays.filter((d) => d !== day) : [...f.repeatDays, day] }));
@@ -2141,8 +2173,13 @@ function LifeTracker() {
     });
     setEditingMyDayId(ev.id);
     setShowAddMyDay(true);
+    scrollToMyDayForm();
   };
-  const cancelMyDayForm = () => { setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm()); };
+  const cancelMyDayForm = () => {
+    const wasEditingId = editingMyDayId;
+    setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm());
+    if (wasEditingId) scrollBackToMyDayCard(wasEditingId);
+  };
   const addMyDayEvent = () => {
     if (!myDayForm.title.trim()) return;
     const base = {
@@ -2184,15 +2221,26 @@ function LifeTracker() {
   const [newGroupName, setNewGroupName] = useState("");
   const [addingSubTo, setAddingSubTo] = useState(null);
   const [newSubName, setNewSubName] = useState("");
+  const itemFormRef = useRef(null);
+  const itemCardRefs = useRef({});
+  const scrollToItemForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (itemFormRef.current) itemFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 60); }); };
+  const scrollBackToItemCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = itemCardRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }); };
   const openNewItemForm = () => setItemForm(blankItemForm());
-  const openEditItemForm = (item) => setItemForm({
-    ...blankItemForm(),
-    ...item,
-    intervalValue: item.intervalValue != null ? item.intervalValue : (item.intervalHours != null ? item.intervalHours : 2),
-    periodUnit: item.periodUnit || "hours",
-    groups: { ...(item.groups || {}) },
-  });
-  const closeItemForm = () => { setItemForm(null); setAddingGroup(false); setAddingSubTo(null); };
+  const openEditItemForm = (item) => {
+    setItemForm({
+      ...blankItemForm(),
+      ...item,
+      intervalValue: item.intervalValue != null ? item.intervalValue : (item.intervalHours != null ? item.intervalHours : 2),
+      periodUnit: item.periodUnit || "hours",
+      groups: { ...(item.groups || {}) },
+    });
+    scrollToItemForm();
+  };
+  const closeItemForm = () => {
+    const wasEditingId = itemForm && itemForm.id;
+    setItemForm(null); setAddingGroup(false); setAddingSubTo(null);
+    if (wasEditingId) scrollBackToItemCard(wasEditingId);
+  };
 
   // ---- Back button: real, chronological navigation history (not a guessed priority order) ----
   // The previous approach checked a fixed list of states ("is a modal open? is a category
@@ -2515,6 +2563,570 @@ function LifeTracker() {
                         </div>
                       </div>
                     </Card>
+                  </div>
+  );
+
+  const goalFormCard = (
+                  <div ref={goalFormRef}>
+                <Card style={{ marginBottom: 9 }}>
+                  <SectionLabel>{editingGoalId ? "Edit goal" : "New goal"}</SectionLabel>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <TextField placeholder="Goal title" value={goalForm.title} onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })} />
+                    {isRoutineCategory && (
+                      <div>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Goal type</div>
+                        <Select value={goalForm.goalType} onChange={(e) => setGoalForm({ ...goalForm, goalType: e.target.value })} style={{ width: "100%" }}>
+                          <option>Skill Learning</option><option>Certification</option><option>Project</option><option>Job Preparation</option><option>Course</option><option>Reading</option><option>Other</option>
+                        </Select>
+                      </div>
+                    )}
+                    {!isRoutineCategory && (
+                      <div>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Month</div>
+                        <Select value={goalForm.month} onChange={(e) => setGoalForm({ ...goalForm, month: e.target.value })} style={{ width: "100%" }}>
+                          {goalMonthOptions.map((mk) => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+                        </Select>
+                      </div>
+                    )}
+                    <div>
+                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Sequence number</div>
+                      <TextField type="number" placeholder="1" value={goalForm.sequence} onChange={(e) => setGoalForm({ ...goalForm, sequence: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                    </div>
+                    {isFinanceGoalsTab && (
+                      <TextField placeholder="Target amount" type="number" value={goalForm.targetAmount} onChange={(e) => setGoalForm({ ...goalForm, targetAmount: e.target.value })} style={{ fontFamily: mono }} />
+                    )}
+                    {isRoutineCategory && (
+                      <>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Start date</div>
+                            <TextField type="date" value={goalForm.startDate} onChange={(e) => setGoalForm({ ...goalForm, startDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Expected year</div>
+                            <TextField type="date" value={goalForm.expectedYear} onChange={(e) => setGoalForm({ ...goalForm, expectedYear: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Frequency</div>
+                          <Select value={goalForm.frequency} onChange={(e) => setGoalForm({ ...goalForm, frequency: e.target.value })} style={{ width: "100%" }}>
+                            <option value="Daily">Today</option>
+                            <option value="Weekly">Weekly</option>
+                            <option value="Monthly">Monthly</option>
+                          </Select>
+                        </div>
+                        {goalForm.frequency === "Weekly" && (
+                          <>
+                            <div>
+                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Days per week</div>
+                              <TextField type="number" min="0" max="7" value={goalForm.daysPerWeek} onChange={(e) => setGoalForm({ ...goalForm, daysPerWeek: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Specific days (optional — overrides count above)</div>
+                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                {WEEKDAYS.map((day) => {
+                                  const sel = goalForm.specificDays.includes(day);
+                                  return <button key={day} onClick={() => toggleSpecificDay(day)} style={{ background: sel ? "rgba(0,113,227,0.15)" : PANEL_2, border: `1px solid ${sel ? BRASS : LINE}`, color: sel ? BRASS : INK_DIM, borderRadius: 6, padding: "4px 7px", fontSize: 13, cursor: "pointer" }}>{day}</button>;
+                                })}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Start time</div>
+                            <TextField type="time" value={goalForm.startTime} onChange={(e) => setGoalForm({ ...goalForm, startTime: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Time per session (min)</div>
+                            <TextField type="number" value={goalForm.sessionMinutes} onChange={(e) => setGoalForm({ ...goalForm, sessionMinutes: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Track activity on Daily tab as</div>
+                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                            <ChipButton label="OK / Done" active={goalForm.trackingType === "instant"} onClick={() => setGoalForm({ ...goalForm, trackingType: "instant" })} />
+                            <ChipButton label="Start / Stop Timer" active={goalForm.trackingType === "duration"} onClick={() => setGoalForm({ ...goalForm, trackingType: "duration" })} />
+                            <ChipButton label="Interval Reminder" active={goalForm.trackingType === "interval"} onClick={() => setGoalForm({ ...goalForm, trackingType: "interval" })} />
+                          </div>
+                        </div>
+                        {goalForm.trackingType === "duration" && (
+                          <div>
+                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Required duration (optional)</div>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
+                              <div style={{ flex: "1 1 70px" }}>
+                                <TextField type="number" value={goalForm.requiredDurationValue} onChange={(e) => setGoalForm({ ...goalForm, requiredDurationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              </div>
+                              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                                {["seconds", "minutes", "hours"].map((u) => (
+                                  <ChipButton key={u} label={u} active={goalForm.requiredDurationUnit === u} onClick={() => setGoalForm({ ...goalForm, requiredDurationUnit: u })} />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {goalForm.trackingType === "interval" && (
+                          <>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
+                              <div style={{ flex: "1 1 70px" }}>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Every</div>
+                                <TextField type="number" value={goalForm.intervalValue} onChange={(e) => setGoalForm({ ...goalForm, intervalValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              </div>
+                              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                                {["minutes", "hours"].map((u) => (
+                                  <ChipButton key={u} label={u} active={goalForm.periodUnit === u} onClick={() => setGoalForm({ ...goalForm, periodUnit: u })} />
+                                ))}
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              <div style={{ flex: "1 1 90px" }}>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Amount</div>
+                                <TextField type="number" value={goalForm.intervalAmount} onChange={(e) => setGoalForm({ ...goalForm, intervalAmount: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              </div>
+                              <div style={{ flex: "0 1 70px" }}>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Unit</div>
+                                <TextField value={goalForm.intervalUnit} onChange={(e) => setGoalForm({ ...goalForm, intervalUnit: e.target.value })} style={{ width: "100%" }} />
+                              </div>
+                            </div>
+                          </>
+                        )}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "7px 0" }}>
+                          <div style={{ fontSize: 13, color: INK_FAINT }}>Reminder before session</div>
+                          <button type="button" onClick={() => setGoalForm({ ...goalForm, reminderEnabled: !goalForm.reminderEnabled })} style={{ background: goalForm.reminderEnabled ? "rgba(0,113,227,0.12)" : PANEL_2, border: `1px solid ${goalForm.reminderEnabled ? BRASS : LINE}`, borderRadius: 7, padding: "5px 8px", color: goalForm.reminderEnabled ? BRASS : INK_DIM, cursor: "pointer", fontSize: 13 }}>{goalForm.reminderEnabled ? "On" : "Off"}</button>
+                        </div>
+                        {goalForm.reminderEnabled && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <TextField type="number" min="1" value={goalForm.reminderMinutes} onChange={(e) => setGoalForm({ ...goalForm, reminderMinutes: e.target.value })} style={{ width: 90, fontFamily: mono }} />
+                            <span style={{ fontSize: 13, color: INK_FAINT }}>minutes before</span>
+                          </div>
+                        )}
+                        <div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Notes / target outcome</div>
+                          <TextField placeholder="Example: Complete basic English conversation" value={goalForm.notes} onChange={(e) => setGoalForm({ ...goalForm, notes: e.target.value })} />
+                        </div>
+                      </>
+                    )}
+                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+                      <button onClick={addGoal} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{editingGoalId ? "Save changes" : "Save goal"}</button>
+                      <button onClick={cancelGoalForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
+                    </div>
+                  </div>
+                </Card>
+                  </div>
+  );
+
+  const repaymentFormCard = (
+                  <div ref={repaymentFormRef}>
+                    <Card style={{ marginBottom: 9 }}>
+                      <SectionLabel>{editingRepaymentId ? "Edit repayment" : "New repayment"}</SectionLabel>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <Select value={repaymentForm.category} onChange={(e) => setRepaymentForm({ ...blankRepaymentForm(), category: e.target.value })}>
+                          {REPAYMENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </Select>
+                        <TextField placeholder="Lender / details (e.g. HDFC)" value={repaymentForm.name} onChange={(e) => setRepaymentForm({ ...repaymentForm, name: e.target.value })} />
+
+                        {(repaymentCategoryClass(repaymentForm.category) === "loan" || repaymentCategoryClass(repaymentForm.category) === "gold") && (
+                          <TextField placeholder="Loan purpose" value={repaymentForm.purpose} onChange={(e) => setRepaymentForm({ ...repaymentForm, purpose: e.target.value })} />
+                        )}
+
+                        {(repaymentCategoryClass(repaymentForm.category) === "gold" || repaymentCategoryClass(repaymentForm.category) === "loan") ? (
+                          <>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Loan amount</div><TextField type="number" value={repaymentForm.loanAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, loanAmount: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Interest rate %</div>
+                                <div style={{ display: "flex", gap: 3 }}>
+                                  <TextField type="number" value={repaymentForm.interestRate} onChange={(e) => setRepaymentForm({ ...repaymentForm, interestRate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                                  <Select value={repaymentForm.interestRateUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, interestRateUnit: e.target.value })} style={{ width: 92 }}>
+                                    <option value="annum">% / year</option>
+                                    <option value="month">% / month</option>
+                                  </Select>
+                                </div>
+                              </div>
+                            </div>
+                            {repaymentCategoryClass(repaymentForm.category) === "gold" && (
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <TextField placeholder="Gold weight (g)" value={repaymentForm.goldWeight} onChange={(e) => setRepaymentForm({ ...repaymentForm, goldWeight: e.target.value })} style={{ flex: 1 }} />
+                                <TextField placeholder="Location" value={repaymentForm.location} onChange={(e) => setRepaymentForm({ ...repaymentForm, location: e.target.value })} style={{ flex: 1 }} />
+                              </div>
+                            )}
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Duration</div><TextField type="number" value={repaymentForm.durationValue} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Unit</div>
+                                <Select value={repaymentForm.durationUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationUnit: e.target.value })} style={{ width: "100%" }}>
+                                  <option value="Weeks">Weeks</option>
+                                  <option value="Months">Months</option>
+                                  <option value="Years">Years</option>
+                                </Select>
+                              </div>
+                            </div>
+                            {repaymentCategoryClass(repaymentForm.category) === "loan" && (
+                              <TextField type="number" placeholder="EMI amount" value={repaymentForm.emiAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, emiAmount: e.target.value })} style={{ fontFamily: mono }} />
+                            )}
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Received date</div>
+                                <TextField type="date" value={repaymentForm.receivedDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, receivedDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Due date</div>
+                                <TextField type="date" value={repaymentForm.dueDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              </div>
+                            </div>
+                            {repaymentForm.loanAmount && (
+                              <div style={{ fontSize: 13, color: INK_FAINT, background: PANEL_2, borderRadius: 7, padding: "6px 8px" }}>
+                                {(() => { const c = computeLoanInterest(repaymentForm.loanAmount, repaymentForm.interestRate, repaymentForm.interestRateUnit, repaymentForm.durationValue, repaymentForm.durationUnit); return <>Interest {inr(c.interest)} &middot; Total repayment {inr(c.totalRepayment)}</>; })()}
+                              </div>
+                            )}
+                          </>
+                        ) : repaymentCategoryClass(repaymentForm.category) === "recharge" ? (
+                          <>
+                            <TextField type="number" placeholder="Plan amount" value={repaymentForm.planAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, planAmount: e.target.value })} style={{ fontFamily: mono }} />
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Plan duration</div><TextField type="number" value={repaymentForm.durationValue} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Unit</div>
+                                <Select value={repaymentForm.durationUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationUnit: e.target.value })} style={{ width: "100%" }}>
+                                  <option value="Days">Days</option>
+                                  <option value="Weeks">Weeks</option>
+                                  <option value="Months">Months</option>
+                                  <option value="Years">Years</option>
+                                </Select>
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Start date</div>
+                              <TextField type="date" value={repaymentForm.startDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, startDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                            </div>
+                            {repaymentForm.planAmount && repaymentForm.startDate && (
+                              <div style={{ fontSize: 13, color: INK_FAINT, background: PANEL_2, borderRadius: 7, padding: "6px 8px" }}>
+                                {(() => { const c = computeRechargePlan(repaymentForm.planAmount, repaymentForm.durationValue, repaymentForm.durationUnit, repaymentForm.startDate); return <>Next repayment {c.nextDate || "-"} &middot; Avg daily cost {inr(c.avgDailyCost)}</>; })()}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <TextField type="number" placeholder="Amount" value={repaymentForm.amount} onChange={(e) => setRepaymentForm({ ...repaymentForm, amount: e.target.value })} style={{ fontFamily: mono }} />
+                        )}
+
+                        {repaymentCategoryClass(repaymentForm.category) === "simple" && (
+                          <>
+                            <div>
+                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Next due date</div>
+                              <TextField type="date" value={repaymentForm.dueDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Payment frequency</div>
+                              <Select value={repaymentForm.frequency} onChange={(e) => setRepaymentForm({ ...repaymentForm, frequency: e.target.value })} style={{ width: "100%" }}>
+                                <option value="Daily">Today</option>
+                                <option value="Weekly">Weekly</option>
+                                <option value="Monthly">Monthly</option>
+                                <option value="Yearly">Yearly</option>
+                              </Select>
+                            </div>
+                            {(repaymentForm.frequency === "Monthly" || repaymentForm.frequency === "Yearly") && (
+                              <div>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Due window (day of month, e.g. 1 to 10)</div>
+                                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                  <TextField type="number" min="1" max="31" placeholder="From" value={repaymentForm.dueDayStart} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDayStart: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
+                                  <span style={{ color: INK_FAINT, fontSize: 14 }}>to</span>
+                                  <TextField type="number" min="1" max="31" placeholder="To" value={repaymentForm.dueDayEnd} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDayEnd: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        <div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Remind me before due date</div>
+                          <Select value={repaymentForm.reminderOffset} onChange={(e) => setRepaymentForm({ ...repaymentForm, reminderOffset: e.target.value })} style={{ width: "100%" }}>
+                            {REMINDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </Select>
+                        </div>
+                        <TextField placeholder="Remarks (optional)" value={repaymentForm.remarks} onChange={(e) => setRepaymentForm({ ...repaymentForm, remarks: e.target.value })} />
+                        <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+                          <button onClick={addRepayment} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{editingRepaymentId ? "Save changes" : "Save"}</button>
+                          <button onClick={cancelRepaymentForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+  );
+
+  const myDayFormCard = (
+                  <div ref={myDayFormRef}>
+                <Card style={{ marginBottom: 9 }}>
+                  <SectionLabel>{editingMyDayId ? "Edit plan" : "New plan"}</SectionLabel>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <Select value={myDayForm.type} onChange={(e) => setMyDayForm({ ...myDayForm, type: e.target.value })}>
+                      {MYDAY_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </Select>
+                    <TextField placeholder="Title (e.g. Team standup, Doctor visit)" value={myDayForm.title} onChange={(e) => setMyDayForm({ ...myDayForm, title: e.target.value })} />
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <div style={{ flex: "1 1 140px" }}>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>{myDayForm.repeatDays.length > 0 ? "Starts from" : "Date"}</div>
+                        <TextField type="date" value={myDayForm.eventDate} onChange={(e) => setMyDayForm({ ...myDayForm, eventDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                      </div>
+                      <div style={{ flex: "1 1 160px" }}>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Time (optional)</div>
+                        <Time12Input value={myDayForm.eventTime} onChange={(v) => setMyDayForm({ ...myDayForm, eventTime: v })} style={{ fontFamily: mono }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Repeat on days (leave blank for a one-time plan)</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {WEEKDAYS.map((day) => {
+                          const sel = myDayForm.repeatDays.includes(day);
+                          return (
+                            <button key={day} type="button" onClick={() => toggleMyDayRepeatDay(day)} style={{ background: sel ? BRASS : PANEL_2, border: "none", color: sel ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "6px 9px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{day}</button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <TextField placeholder="Location / link (optional)" value={myDayForm.location} onChange={(e) => setMyDayForm({ ...myDayForm, location: e.target.value })} />
+                    <TextField placeholder="Notes (optional)" value={myDayForm.notes} onChange={(e) => setMyDayForm({ ...myDayForm, notes: e.target.value })} />
+                    {myDayForm.repeatDays.length === 0 && (
+                      <div>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Also remind me before the date (pick as many as you like)</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {REMINDER_OPTIONS.map((o) => {
+                            const sel = myDayForm.reminderOffsets.includes(o.value);
+                            return (
+                              <button key={o.value} type="button" onClick={() => toggleMyDayReminderOffset(o.value)} style={{ background: sel ? BRASS : PANEL_2, border: "none", color: sel ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "6px 9px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{o.label}</button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ fontSize: 13, color: INK_FAINT }}>{myDayForm.repeatDays.length > 0 ? "Remind me before it starts, each time" : "Also remind me at a set time on the day"}</div>
+                      <button type="button" onClick={() => setMyDayForm({ ...myDayForm, reminderEnabled: !myDayForm.reminderEnabled })} style={{ background: myDayForm.reminderEnabled ? "rgba(0,113,227,0.12)" : PANEL_2, border: `1px solid ${myDayForm.reminderEnabled ? BRASS : LINE}`, borderRadius: 7, padding: "5px 8px", color: myDayForm.reminderEnabled ? BRASS : INK_DIM, cursor: "pointer", fontSize: 13 }}>{myDayForm.reminderEnabled ? "On" : "Off"}</button>
+                    </div>
+                    {myDayForm.reminderEnabled && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <TextField type="number" min="1" value={myDayForm.reminderMinutes} onChange={(e) => setMyDayForm({ ...myDayForm, reminderMinutes: e.target.value })} style={{ width: 90, fontFamily: mono }} />
+                        <span style={{ fontSize: 13, color: INK_FAINT }}>minutes before start time{myDayForm.eventTime ? "" : " (set a time above for this to work)"}</span>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+                      <button onClick={addMyDayEvent} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{editingMyDayId ? "Save changes" : "Save plan"}</button>
+                      <button onClick={cancelMyDayForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
+                    </div>
+                  </div>
+                </Card>
+                  </div>
+  );
+
+  const shoppingFormCard = (
+                  <div ref={shoppingFormRef}>
+                <Card>
+                  <SectionLabel>{shoppingForm.id ? "Edit shopping list" : "New shopping list"}</SectionLabel>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ flex: "1 1 160px" }}>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Shop name</div>
+                        <TextField list="shop-name-suggestions" placeholder="e.g. Big Bazaar" value={shoppingForm.shopName} onChange={(e) => setShoppingForm((f) => ({ ...f, shopName: e.target.value }))} style={{ width: "100%", boxSizing: "border-box" }} />
+                        <datalist id="shop-name-suggestions">{savedShopNames.map((s) => <option key={s} value={s} />)}</datalist>
+                      </div>
+                      <div style={{ flex: "1 1 160px" }}>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Location</div>
+                        <TextField placeholder="e.g. MG Road" value={shoppingForm.location} onChange={(e) => setShoppingForm((f) => ({ ...f, location: e.target.value }))} style={{ width: "100%", boxSizing: "border-box" }} />
+                      </div>
+                      <div style={{ flex: "1 1 160px" }}>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Planned shopping date</div>
+                        <TextField type="date" value={shoppingForm.shoppingDate} onChange={(e) => setShoppingForm((f) => ({ ...f, shoppingDate: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                      </div>
+                      <div style={{ flex: "1 1 160px" }}>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Reminder date</div>
+                        <TextField type="date" value={shoppingForm.reminderDate || ""} onChange={(e) => setShoppingForm((f) => ({ ...f, reminderDate: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                      </div>
+                      <div style={{ flex: "1 1 140px" }}>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Reminder time</div>
+                        <TextField type="time" value={shoppingForm.reminderTime || ""} onChange={(e) => setShoppingForm((f) => ({ ...f, reminderTime: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                      </div>
+                    </div>
+
+                    <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 14 }}>
+                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Items</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {shoppingForm.items.map((it, idx) => {
+                          const finalAmt = shoppingItemFinalAmount(it);
+                          return (
+                            <div key={it.id} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 11, padding: 14, display: "flex", flexDirection: "column", gap: 9, boxSizing: "border-box" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: INK_FAINT, textTransform: "uppercase", letterSpacing: "0.05em" }}>Item {idx + 1}</span>
+                                <IconAction onClick={() => removeShoppingItem(it.id)} style={{ width: 28, height: 28, minWidth: 28, borderRadius: 7 }}><Trash2 size={15} /></IconAction>
+                              </div>
+
+                              <div>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Item name</div>
+                                <TextField placeholder="e.g. Tomatoes" value={it.name} onChange={(e) => updateShoppingItem(it.id, { name: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }} />
+                              </div>
+
+                              <div>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Category</div>
+                                <TextField list="shopping-category-suggestions" placeholder="e.g. Vegetables" value={it.category} onChange={(e) => updateShoppingItem(it.id, { category: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }} />
+                              </div>
+
+                              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8 }}>
+                                <div>
+                                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Unit</div>
+                                  <Select value={it.unit} onChange={(e) => updateShoppingItem(it.id, { unit: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }}>
+                                    <option value="each">Each</option>
+                                    <option value="kg">Kg</option>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Quantity</div>
+                                  <TextField type="number" inputMode="decimal" placeholder="1" value={it.qty} onChange={(e) => updateShoppingItem(it.id, { qty: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                                </div>
+                              </div>
+
+                              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8 }}>
+                                <div>
+                                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>MRP / Price</div>
+                                  <TextField type="number" inputMode="decimal" placeholder="0" value={it.price} onChange={(e) => updateShoppingItem(it.id, { price: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Discount %</div>
+                                  <TextField type="number" inputMode="decimal" placeholder="0" value={it.discountPct} onChange={(e) => updateShoppingItem(it.id, { discountPct: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                                </div>
+                              </div>
+
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, color: INK_DIM, borderTop: `1px solid ${LINE}`, paddingTop: 10, marginTop: 2 }}>
+                                <span>Final amount</span>
+                                <span style={{ fontFamily: mono, fontWeight: 700, fontSize: 17, color: BRASS }}>{inr(finalAmt)}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <datalist id="shopping-category-suggestions">{savedShoppingCategories.map((c) => <option key={c} value={c} />)}</datalist>
+                      </div>
+                      <button onClick={addShoppingItem} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px dashed ${LINE}`, color: BRASS, borderRadius: 7, padding: "8px 9px", fontSize: 15, cursor: "pointer", marginTop: 9, width: "100%", justifyContent: "center", boxSizing: "border-box" }}><Plus size={15} /> Add item</button>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
+                      <span style={{ fontSize: 14, color: INK_FAINT }}>Estimated total bill</span>
+                      <span style={{ fontFamily: mono, fontSize: 20, fontWeight: 600, color: BRASS }}>{inr(shoppingFormTotal)}</span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end", marginTop: 2 }}>
+                      <button onClick={saveShoppingForm} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{shoppingForm.id ? "Save changes" : "Save list"}</button>
+                      <button onClick={closeShoppingForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
+                    </div>
+                  </div>
+                </Card>
+                  </div>
+  );
+
+  const itemFormCard = (
+                  <div ref={itemFormRef}>
+                <Card>
+                  <SectionLabel>{itemForm.id ? "Edit routine" : "New routine"}</SectionLabel>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <TextField placeholder="Name" value={itemForm.name} onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))} />
+                    <Select value={itemForm.type} onChange={(e) => setItemForm((f) => ({ ...f, type: e.target.value }))}>
+                      {TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </Select>
+                    <div>
+                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 6 }}>Icon</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 7, width: "100%", boxSizing: "border-box" }}>
+                        {ICON_NAMES.map((name) => {
+                          const sel = itemForm.icon === name;
+                          return (
+                            <button
+                              key={name}
+                              type="button"
+                              aria-label={name}
+                              title={name}
+                              onClick={() => setItemForm((f) => ({ ...f, icon: name }))}
+                              style={{
+                                position: "relative",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                height: 54,
+                                minWidth: 0,
+                                borderRadius: 11,
+                                background: sel ? "rgba(0,113,227,0.12)" : PANEL_2,
+                                border: `1px solid ${sel ? BRASS : LINE}`,
+                                cursor: "pointer",
+                                overflow: "hidden"
+                              }}
+                            >
+                              <RoutineActivityIcon icon={name} size={24} />
+                              {sel && <div style={{ position: "absolute", top: 4, right: 4, width: 14, height: 14, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Check size={9} color={BG} /></div>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {itemForm.type === "interval" && (
+                      <>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
+                          <div style={{ flex: "1 1 70px" }}>
+                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Every</div>
+                            <TextField type="number" value={itemForm.intervalValue} onChange={(e) => setItemForm((f) => ({ ...f, intervalValue: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                            {["minutes", "hours"].map((u) => (
+                              <ChipButton key={u} label={u} active={itemForm.periodUnit === u} onClick={() => setItemForm((f) => ({ ...f, periodUnit: u }))} />
+                            ))}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <div style={{ flex: "1 1 90px" }}><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Amount</div><TextField type="number" value={itemForm.amount} onChange={(e) => setItemForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} /></div>
+                          <div style={{ flex: "0 1 70px" }}><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Unit</div><TextField value={itemForm.unit} onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value }))} style={{ width: "100%" }} /></div>
+                        </div>
+                      </>
+                    )}
+
+                    {itemForm.type === "duration" && (
+                      <div>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Required duration (optional)</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
+                          <div style={{ flex: "1 1 70px" }}>
+                            <TextField type="number" value={itemForm.requiredDurationValue} onChange={(e) => setItemForm((f) => ({ ...f, requiredDurationValue: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} />
+                          </div>
+                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                            {["seconds", "minutes", "hours"].map((u) => (
+                              <ChipButton key={u} label={u} active={itemForm.requiredDurationUnit === u} onClick={() => setItemForm((f) => ({ ...f, requiredDurationUnit: u }))} />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {(itemForm.type === "instant" || itemForm.type === "duration") && (
+                      <div>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Scheduled time (optional — used for reminders)</div>
+                        <TextField
+                          type="time"
+                          value={itemForm.scheduledTime || ""}
+                          onChange={(e) => setItemForm((f) => ({ ...f, scheduledTime: e.target.value }))}
+                          style={{ fontFamily: mono, width: "100%" }}
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 6 }}>Days (leave blank for every day)</div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {WEEKDAYS.map((day) => {
+                          const sel = itemForm.days.includes(day);
+                          return (
+                            <button key={day} onClick={() => setItemForm((f) => ({ ...f, days: f.days.includes(day) ? f.days.filter((d) => d !== day) : [...f.days, day] }))} style={{ background: sel ? BRASS : PANEL_2, border: "none", color: sel ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "6px 9px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{day}</button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end", marginTop: 5 }}>
+                      <button onClick={saveItemForm} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>Save</button>
+                      <button onClick={closeItemForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
+                    </div>
+                  </div>
+                </Card>
                   </div>
   );
 
@@ -4095,18 +4707,23 @@ function LifeTracker() {
                   </div>}
                 </>
               )}
-              {catTab === "activity" && (!itemForm ? (
+              {catTab === "activity" && (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <SectionLabel>Daily routine</SectionLabel>
                     <button onClick={openNewItemForm} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add routine</button>
                   </div>
                   <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Only items with their required fields filled in show up on the Daily tab.</div>
+                  {itemForm && !itemForm.id && itemFormCard}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {dailyItems.map((item, idx) => {
                       const valid = isItemValid(item);
+                      if (itemForm && itemForm.id === item.id) {
+                        return <React.Fragment key={item.id}>{itemFormCard}</React.Fragment>;
+                      }
                       return (
-                        <Card key={item.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <div key={item.id} ref={(el) => { itemCardRefs.current[item.id] = el; }}>
+                        <Card style={{ display: "flex", alignItems: "center", gap: 5 }}>
                           <RoutineActivityIcon icon={item.icon} size={18} title={item.name} style={{ flexShrink: 0, marginRight: 4 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 15 }}>{item.name || <span style={{ color: INK_FAINT }}>(unnamed)</span>}</div>
@@ -4126,125 +4743,17 @@ function LifeTracker() {
                             <IconAction onClick={() => deleteItem(item.id)}><Trash2 size={15} /></IconAction>
                           </div>
                         </Card>
+                        </div>
                       );
                     })}
                     {dailyItems.length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>No routines yet.</div>}
                   </div>
                 </>
-              ) : (
-                <Card>
-                  <SectionLabel>{itemForm.id ? "Edit routine" : "New routine"}</SectionLabel>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <TextField placeholder="Name" value={itemForm.name} onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))} />
-                    <Select value={itemForm.type} onChange={(e) => setItemForm((f) => ({ ...f, type: e.target.value }))}>
-                      {TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </Select>
-                    <div>
-                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 6 }}>Icon</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 7, width: "100%", boxSizing: "border-box" }}>
-                        {ICON_NAMES.map((name) => {
-                          const sel = itemForm.icon === name;
-                          return (
-                            <button
-                              key={name}
-                              type="button"
-                              aria-label={name}
-                              title={name}
-                              onClick={() => setItemForm((f) => ({ ...f, icon: name }))}
-                              style={{
-                                position: "relative",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                height: 54,
-                                minWidth: 0,
-                                borderRadius: 11,
-                                background: sel ? "rgba(0,113,227,0.12)" : PANEL_2,
-                                border: `1px solid ${sel ? BRASS : LINE}`,
-                                cursor: "pointer",
-                                overflow: "hidden"
-                              }}
-                            >
-                              <RoutineActivityIcon icon={name} size={24} />
-                              {sel && <div style={{ position: "absolute", top: 4, right: 4, width: 14, height: 14, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Check size={9} color={BG} /></div>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {itemForm.type === "interval" && (
-                      <>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
-                          <div style={{ flex: "1 1 70px" }}>
-                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Every</div>
-                            <TextField type="number" value={itemForm.intervalValue} onChange={(e) => setItemForm((f) => ({ ...f, intervalValue: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} />
-                          </div>
-                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                            {["minutes", "hours"].map((u) => (
-                              <ChipButton key={u} label={u} active={itemForm.periodUnit === u} onClick={() => setItemForm((f) => ({ ...f, periodUnit: u }))} />
-                            ))}
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          <div style={{ flex: "1 1 90px" }}><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Amount</div><TextField type="number" value={itemForm.amount} onChange={(e) => setItemForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} /></div>
-                          <div style={{ flex: "0 1 70px" }}><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Unit</div><TextField value={itemForm.unit} onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value }))} style={{ width: "100%" }} /></div>
-                        </div>
-                      </>
-                    )}
-
-                    {itemForm.type === "duration" && (
-                      <div>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Required duration (optional)</div>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
-                          <div style={{ flex: "1 1 70px" }}>
-                            <TextField type="number" value={itemForm.requiredDurationValue} onChange={(e) => setItemForm((f) => ({ ...f, requiredDurationValue: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", fontFamily: mono }} />
-                          </div>
-                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                            {["seconds", "minutes", "hours"].map((u) => (
-                              <ChipButton key={u} label={u} active={itemForm.requiredDurationUnit === u} onClick={() => setItemForm((f) => ({ ...f, requiredDurationUnit: u }))} />
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {(itemForm.type === "instant" || itemForm.type === "duration") && (
-                      <div>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Scheduled time (optional — used for reminders)</div>
-                        <TextField
-                          type="time"
-                          value={itemForm.scheduledTime || ""}
-                          onChange={(e) => setItemForm((f) => ({ ...f, scheduledTime: e.target.value }))}
-                          style={{ fontFamily: mono, width: "100%" }}
-                        />
-                      </div>
-                    )}
-
-                    <div>
-                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 6 }}>Days (leave blank for every day)</div>
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        {WEEKDAYS.map((day) => {
-                          const sel = itemForm.days.includes(day);
-                          return (
-                            <button key={day} onClick={() => setItemForm((f) => ({ ...f, days: f.days.includes(day) ? f.days.filter((d) => d !== day) : [...f.days, day] }))} style={{ background: sel ? BRASS : PANEL_2, border: "none", color: sel ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "6px 9px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{day}</button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end", marginTop: 5 }}>
-                      <button onClick={saveItemForm} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>Save</button>
-                      <button onClick={closeItemForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </>
+              )}
+                </>
           ) : catTab === "shopping" ? (
             <>
-              {!shoppingForm ? (
-                <>
+              <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <SectionLabel>Shopping lists</SectionLabel>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -4252,6 +4761,7 @@ function LifeTracker() {
                       <button onClick={openNewShoppingForm} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> New list</button>
                     </div>
                   </div>
+                  {shoppingForm && !shoppingForm.id && shoppingFormCard}
                   {historyExpanded && shoppingHistoryLists.length > 0 && (
                     <div className="history-open-anim" style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                       {shoppingHistoryLists.slice(0, historyVisibleCount).map((l) => {
@@ -4284,8 +4794,12 @@ function LifeTracker() {
                       const statusColor = list.status === "done" ? BRASS : INK_FAINT;
                       const statusLabel = list.status === "paid" ? "Paid" : list.status === "done" ? "Done \u2014 ready to pay" : "Planning";
                       const previewing = previewShoppingId === list.id;
+                      if (shoppingForm && shoppingForm.id === list.id) {
+                        return <React.Fragment key={list.id}>{shoppingFormCard}</React.Fragment>;
+                      }
                       return (
-                        <Card key={list.id}>
+                        <div key={list.id} ref={(el) => { shoppingCardRefs.current[list.id] = el; }}>
+                        <Card>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>{list.shopName}</div>
@@ -4324,110 +4838,12 @@ function LifeTracker() {
                             </div>
                           )}
                         </Card>
+                        </div>
                       );
                     })}
                     {shoppingLists.filter((l) => !["paid", "completed", "cancelled"].includes(l.status) && !l.dismissed).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{shoppingHistoryLists.length ? "All shopping lists are completed or cancelled — check History." : "No shopping lists yet."}</div>}
                   </div>
                 </>
-              ) : (
-                <Card>
-                  <SectionLabel>{shoppingForm.id ? "Edit shopping list" : "New shopping list"}</SectionLabel>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <div style={{ flex: "1 1 160px" }}>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Shop name</div>
-                        <TextField list="shop-name-suggestions" placeholder="e.g. Big Bazaar" value={shoppingForm.shopName} onChange={(e) => setShoppingForm((f) => ({ ...f, shopName: e.target.value }))} style={{ width: "100%", boxSizing: "border-box" }} />
-                        <datalist id="shop-name-suggestions">{savedShopNames.map((s) => <option key={s} value={s} />)}</datalist>
-                      </div>
-                      <div style={{ flex: "1 1 160px" }}>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Location</div>
-                        <TextField placeholder="e.g. MG Road" value={shoppingForm.location} onChange={(e) => setShoppingForm((f) => ({ ...f, location: e.target.value }))} style={{ width: "100%", boxSizing: "border-box" }} />
-                      </div>
-                      <div style={{ flex: "1 1 160px" }}>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Planned shopping date</div>
-                        <TextField type="date" value={shoppingForm.shoppingDate} onChange={(e) => setShoppingForm((f) => ({ ...f, shoppingDate: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
-                      </div>
-                      <div style={{ flex: "1 1 160px" }}>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Reminder date</div>
-                        <TextField type="date" value={shoppingForm.reminderDate || ""} onChange={(e) => setShoppingForm((f) => ({ ...f, reminderDate: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
-                      </div>
-                      <div style={{ flex: "1 1 140px" }}>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Reminder time</div>
-                        <TextField type="time" value={shoppingForm.reminderTime || ""} onChange={(e) => setShoppingForm((f) => ({ ...f, reminderTime: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
-                      </div>
-                    </div>
-
-                    <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 14 }}>
-                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Items</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {shoppingForm.items.map((it, idx) => {
-                          const finalAmt = shoppingItemFinalAmount(it);
-                          return (
-                            <div key={it.id} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 11, padding: 14, display: "flex", flexDirection: "column", gap: 9, boxSizing: "border-box" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: INK_FAINT, textTransform: "uppercase", letterSpacing: "0.05em" }}>Item {idx + 1}</span>
-                                <IconAction onClick={() => removeShoppingItem(it.id)} style={{ width: 28, height: 28, minWidth: 28, borderRadius: 7 }}><Trash2 size={15} /></IconAction>
-                              </div>
-
-                              <div>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Item name</div>
-                                <TextField placeholder="e.g. Tomatoes" value={it.name} onChange={(e) => updateShoppingItem(it.id, { name: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }} />
-                              </div>
-
-                              <div>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Category</div>
-                                <TextField list="shopping-category-suggestions" placeholder="e.g. Vegetables" value={it.category} onChange={(e) => updateShoppingItem(it.id, { category: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }} />
-                              </div>
-
-                              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8 }}>
-                                <div>
-                                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Unit</div>
-                                  <Select value={it.unit} onChange={(e) => updateShoppingItem(it.id, { unit: e.target.value })} style={{ width: "100%", boxSizing: "border-box" }}>
-                                    <option value="each">Each</option>
-                                    <option value="kg">Kg</option>
-                                  </Select>
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Quantity</div>
-                                  <TextField type="number" inputMode="decimal" placeholder="1" value={it.qty} onChange={(e) => updateShoppingItem(it.id, { qty: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
-                                </div>
-                              </div>
-
-                              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8 }}>
-                                <div>
-                                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>MRP / Price</div>
-                                  <TextField type="number" inputMode="decimal" placeholder="0" value={it.price} onChange={(e) => updateShoppingItem(it.id, { price: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Discount %</div>
-                                  <TextField type="number" inputMode="decimal" placeholder="0" value={it.discountPct} onChange={(e) => updateShoppingItem(it.id, { discountPct: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
-                                </div>
-                              </div>
-
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, color: INK_DIM, borderTop: `1px solid ${LINE}`, paddingTop: 10, marginTop: 2 }}>
-                                <span>Final amount</span>
-                                <span style={{ fontFamily: mono, fontWeight: 700, fontSize: 17, color: BRASS }}>{inr(finalAmt)}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        <datalist id="shopping-category-suggestions">{savedShoppingCategories.map((c) => <option key={c} value={c} />)}</datalist>
-                      </div>
-                      <button onClick={addShoppingItem} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px dashed ${LINE}`, color: BRASS, borderRadius: 7, padding: "8px 9px", fontSize: 15, cursor: "pointer", marginTop: 9, width: "100%", justifyContent: "center", boxSizing: "border-box" }}><Plus size={15} /> Add item</button>
-                    </div>
-
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
-                      <span style={{ fontSize: 14, color: INK_FAINT }}>Estimated total bill</span>
-                      <span style={{ fontFamily: mono, fontSize: 20, fontWeight: 600, color: BRASS }}>{inr(shoppingFormTotal)}</span>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end", marginTop: 2 }}>
-                      <button onClick={saveShoppingForm} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{shoppingForm.id ? "Save changes" : "Save list"}</button>
-                      <button onClick={closeShoppingForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                    </div>
-                  </div>
-                </Card>
-              )}
             </>
           ) : catTab === "myday" ? (
             <>
@@ -4436,74 +4852,18 @@ function LifeTracker() {
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>{sortedMyDayEvents.some((e) => e.completed) && <button onClick={() => setShowMyDayHistory((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: showMyDayHistory ? TEAL : "transparent", border: `1px solid ${showMyDayHistory ? TEAL : BRASS_DIM}`, color: showMyDayHistory ? "#FFFFFF" : BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", transition: "all .25s ease" }}><History size={14} /> History</button>}<button onClick={() => (showAddMyDay ? cancelMyDayForm() : setShowAddMyDay(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add plan</button></div>
               </div>
               <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Meetings and any other special activity for a day. Set a reminder and edit the plan any time.</div>
-              {showAddMyDay && (
-                <Card style={{ marginBottom: 9 }}>
-                  <SectionLabel>{editingMyDayId ? "Edit plan" : "New plan"}</SectionLabel>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <Select value={myDayForm.type} onChange={(e) => setMyDayForm({ ...myDayForm, type: e.target.value })}>
-                      {MYDAY_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </Select>
-                    <TextField placeholder="Title (e.g. Team standup, Doctor visit)" value={myDayForm.title} onChange={(e) => setMyDayForm({ ...myDayForm, title: e.target.value })} />
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <div style={{ flex: "1 1 140px" }}>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>{myDayForm.repeatDays.length > 0 ? "Starts from" : "Date"}</div>
-                        <TextField type="date" value={myDayForm.eventDate} onChange={(e) => setMyDayForm({ ...myDayForm, eventDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                      </div>
-                      <div style={{ flex: "1 1 160px" }}>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Time (optional)</div>
-                        <Time12Input value={myDayForm.eventTime} onChange={(v) => setMyDayForm({ ...myDayForm, eventTime: v })} style={{ fontFamily: mono }} />
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Repeat on days (leave blank for a one-time plan)</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                        {WEEKDAYS.map((day) => {
-                          const sel = myDayForm.repeatDays.includes(day);
-                          return (
-                            <button key={day} type="button" onClick={() => toggleMyDayRepeatDay(day)} style={{ background: sel ? BRASS : PANEL_2, border: "none", color: sel ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "6px 9px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{day}</button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <TextField placeholder="Location / link (optional)" value={myDayForm.location} onChange={(e) => setMyDayForm({ ...myDayForm, location: e.target.value })} />
-                    <TextField placeholder="Notes (optional)" value={myDayForm.notes} onChange={(e) => setMyDayForm({ ...myDayForm, notes: e.target.value })} />
-                    {myDayForm.repeatDays.length === 0 && (
-                      <div>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Also remind me before the date (pick as many as you like)</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                          {REMINDER_OPTIONS.map((o) => {
-                            const sel = myDayForm.reminderOffsets.includes(o.value);
-                            return (
-                              <button key={o.value} type="button" onClick={() => toggleMyDayReminderOffset(o.value)} style={{ background: sel ? BRASS : PANEL_2, border: "none", color: sel ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "6px 9px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{o.label}</button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{ fontSize: 13, color: INK_FAINT }}>{myDayForm.repeatDays.length > 0 ? "Remind me before it starts, each time" : "Also remind me at a set time on the day"}</div>
-                      <button type="button" onClick={() => setMyDayForm({ ...myDayForm, reminderEnabled: !myDayForm.reminderEnabled })} style={{ background: myDayForm.reminderEnabled ? "rgba(0,113,227,0.12)" : PANEL_2, border: `1px solid ${myDayForm.reminderEnabled ? BRASS : LINE}`, borderRadius: 7, padding: "5px 8px", color: myDayForm.reminderEnabled ? BRASS : INK_DIM, cursor: "pointer", fontSize: 13 }}>{myDayForm.reminderEnabled ? "On" : "Off"}</button>
-                    </div>
-                    {myDayForm.reminderEnabled && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <TextField type="number" min="1" value={myDayForm.reminderMinutes} onChange={(e) => setMyDayForm({ ...myDayForm, reminderMinutes: e.target.value })} style={{ width: 90, fontFamily: mono }} />
-                        <span style={{ fontSize: 13, color: INK_FAINT }}>minutes before start time{myDayForm.eventTime ? "" : " (set a time above for this to work)"}</span>
-                      </div>
-                    )}
-                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
-                      <button onClick={addMyDayEvent} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{editingMyDayId ? "Save changes" : "Save plan"}</button>
-                      <button onClick={cancelMyDayForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                    </div>
-                  </div>
-                </Card>
-              )}
+              {showAddMyDay && !editingMyDayId && myDayFormCard}
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                 {sortedMyDayEvents.filter((e) => !e.completed).map((e) => {
                   const isRecurring = e.repeatDays && e.repeatDays.length > 0;
                   const dayLabel = !isRecurring ? dayLabelForExt(e.eventDate, today) : "";
                   const offsetLabels = (e.reminderOffsets || []).filter((v) => v !== "none").map((v) => (REMINDER_OPTIONS.find((o) => o.value === v) || {}).label).filter(Boolean);
+                  if (showAddMyDay && editingMyDayId === e.id) {
+                    return <React.Fragment key={e.id}>{myDayFormCard}</React.Fragment>;
+                  }
                   return (
-                    <Card key={e.id} style={{ display: "flex", alignItems: "flex-start", gap: 5 }}>
+                    <div key={e.id} ref={(el) => { myDayCardRefs.current[e.id] = el; }}>
+                    <Card style={{ display: "flex", alignItems: "flex-start", gap: 5 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{e.type} &middot; {e.title}</div>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3, display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
@@ -4525,6 +4885,7 @@ function LifeTracker() {
                         <IconAction onClick={() => deleteMyDayEvent(e.id)}><Trash2 size={15} /></IconAction>
                       </div>
                     </Card>
+                    </div>
                   );
                 })}
                 {sortedMyDayEvents.filter((e) => !e.completed).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{sortedMyDayEvents.some((e) => e.completed) ? "All plans are marked done \u2014 add a new one above." : "Nothing planned yet. Add a meeting or activity."}</div>}
@@ -4644,146 +5005,17 @@ function LifeTracker() {
                     <SectionLabel>Repayment due</SectionLabel>
                     <button onClick={() => (showAddRepayment ? cancelRepaymentForm() : setShowAddRepayment(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add</button>
                   </div>
-                  {showAddRepayment && (
-                    <Card style={{ marginBottom: 9 }}>
-                      <SectionLabel>{editingRepaymentId ? "Edit repayment" : "New repayment"}</SectionLabel>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        <Select value={repaymentForm.category} onChange={(e) => setRepaymentForm({ ...blankRepaymentForm(), category: e.target.value })}>
-                          {REPAYMENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </Select>
-                        <TextField placeholder="Lender / details (e.g. HDFC)" value={repaymentForm.name} onChange={(e) => setRepaymentForm({ ...repaymentForm, name: e.target.value })} />
-
-                        {(repaymentCategoryClass(repaymentForm.category) === "loan" || repaymentCategoryClass(repaymentForm.category) === "gold") && (
-                          <TextField placeholder="Loan purpose" value={repaymentForm.purpose} onChange={(e) => setRepaymentForm({ ...repaymentForm, purpose: e.target.value })} />
-                        )}
-
-                        {(repaymentCategoryClass(repaymentForm.category) === "gold" || repaymentCategoryClass(repaymentForm.category) === "loan") ? (
-                          <>
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Loan amount</div><TextField type="number" value={repaymentForm.loanAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, loanAmount: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Interest rate %</div>
-                                <div style={{ display: "flex", gap: 3 }}>
-                                  <TextField type="number" value={repaymentForm.interestRate} onChange={(e) => setRepaymentForm({ ...repaymentForm, interestRate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                                  <Select value={repaymentForm.interestRateUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, interestRateUnit: e.target.value })} style={{ width: 92 }}>
-                                    <option value="annum">% / year</option>
-                                    <option value="month">% / month</option>
-                                  </Select>
-                                </div>
-                              </div>
-                            </div>
-                            {repaymentCategoryClass(repaymentForm.category) === "gold" && (
-                              <div style={{ display: "flex", gap: 6 }}>
-                                <TextField placeholder="Gold weight (g)" value={repaymentForm.goldWeight} onChange={(e) => setRepaymentForm({ ...repaymentForm, goldWeight: e.target.value })} style={{ flex: 1 }} />
-                                <TextField placeholder="Location" value={repaymentForm.location} onChange={(e) => setRepaymentForm({ ...repaymentForm, location: e.target.value })} style={{ flex: 1 }} />
-                              </div>
-                            )}
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Duration</div><TextField type="number" value={repaymentForm.durationValue} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Unit</div>
-                                <Select value={repaymentForm.durationUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationUnit: e.target.value })} style={{ width: "100%" }}>
-                                  <option value="Weeks">Weeks</option>
-                                  <option value="Months">Months</option>
-                                  <option value="Years">Years</option>
-                                </Select>
-                              </div>
-                            </div>
-                            {repaymentCategoryClass(repaymentForm.category) === "loan" && (
-                              <TextField type="number" placeholder="EMI amount" value={repaymentForm.emiAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, emiAmount: e.target.value })} style={{ fontFamily: mono }} />
-                            )}
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Received date</div>
-                                <TextField type="date" value={repaymentForm.receivedDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, receivedDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Due date</div>
-                                <TextField type="date" value={repaymentForm.dueDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                              </div>
-                            </div>
-                            {repaymentForm.loanAmount && (
-                              <div style={{ fontSize: 13, color: INK_FAINT, background: PANEL_2, borderRadius: 7, padding: "6px 8px" }}>
-                                {(() => { const c = computeLoanInterest(repaymentForm.loanAmount, repaymentForm.interestRate, repaymentForm.interestRateUnit, repaymentForm.durationValue, repaymentForm.durationUnit); return <>Interest {inr(c.interest)} &middot; Total repayment {inr(c.totalRepayment)}</>; })()}
-                              </div>
-                            )}
-                          </>
-                        ) : repaymentCategoryClass(repaymentForm.category) === "recharge" ? (
-                          <>
-                            <TextField type="number" placeholder="Plan amount" value={repaymentForm.planAmount} onChange={(e) => setRepaymentForm({ ...repaymentForm, planAmount: e.target.value })} style={{ fontFamily: mono }} />
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <div style={{ flex: 1 }}><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Plan duration</div><TextField type="number" value={repaymentForm.durationValue} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} /></div>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Unit</div>
-                                <Select value={repaymentForm.durationUnit} onChange={(e) => setRepaymentForm({ ...repaymentForm, durationUnit: e.target.value })} style={{ width: "100%" }}>
-                                  <option value="Days">Days</option>
-                                  <option value="Weeks">Weeks</option>
-                                  <option value="Months">Months</option>
-                                  <option value="Years">Years</option>
-                                </Select>
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Start date</div>
-                              <TextField type="date" value={repaymentForm.startDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, startDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                            </div>
-                            {repaymentForm.planAmount && repaymentForm.startDate && (
-                              <div style={{ fontSize: 13, color: INK_FAINT, background: PANEL_2, borderRadius: 7, padding: "6px 8px" }}>
-                                {(() => { const c = computeRechargePlan(repaymentForm.planAmount, repaymentForm.durationValue, repaymentForm.durationUnit, repaymentForm.startDate); return <>Next repayment {c.nextDate || "-"} &middot; Avg daily cost {inr(c.avgDailyCost)}</>; })()}
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <TextField type="number" placeholder="Amount" value={repaymentForm.amount} onChange={(e) => setRepaymentForm({ ...repaymentForm, amount: e.target.value })} style={{ fontFamily: mono }} />
-                        )}
-
-                        {repaymentCategoryClass(repaymentForm.category) === "simple" && (
-                          <>
-                            <div>
-                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Next due date</div>
-                              <TextField type="date" value={repaymentForm.dueDate} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Payment frequency</div>
-                              <Select value={repaymentForm.frequency} onChange={(e) => setRepaymentForm({ ...repaymentForm, frequency: e.target.value })} style={{ width: "100%" }}>
-                                <option value="Daily">Today</option>
-                                <option value="Weekly">Weekly</option>
-                                <option value="Monthly">Monthly</option>
-                                <option value="Yearly">Yearly</option>
-                              </Select>
-                            </div>
-                            {(repaymentForm.frequency === "Monthly" || repaymentForm.frequency === "Yearly") && (
-                              <div>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Due window (day of month, e.g. 1 to 10)</div>
-                                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                                  <TextField type="number" min="1" max="31" placeholder="From" value={repaymentForm.dueDayStart} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDayStart: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
-                                  <span style={{ color: INK_FAINT, fontSize: 14 }}>to</span>
-                                  <TextField type="number" min="1" max="31" placeholder="To" value={repaymentForm.dueDayEnd} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDayEnd: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )}
-                        <div>
-                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Remind me before due date</div>
-                          <Select value={repaymentForm.reminderOffset} onChange={(e) => setRepaymentForm({ ...repaymentForm, reminderOffset: e.target.value })} style={{ width: "100%" }}>
-                            {REMINDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                          </Select>
-                        </div>
-                        <TextField placeholder="Remarks (optional)" value={repaymentForm.remarks} onChange={(e) => setRepaymentForm({ ...repaymentForm, remarks: e.target.value })} />
-                        <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
-                          <button onClick={addRepayment} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{editingRepaymentId ? "Save changes" : "Save"}</button>
-                          <button onClick={cancelRepaymentForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                        </div>
-                      </div>
-                    </Card>
-                  )}
+                  {showAddRepayment && !(editingRepaymentId && repayments.some((r) => r.id === editingRepaymentId && !r.paid)) && repaymentFormCard}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {sortedRepayments.filter((r) => !r.paid).map((r) => {
                       const cls = repaymentCategoryClass(r.category);
                       const overdue = !r.paid && r.dueDate && r.dueDate < today;
+                      if (showAddRepayment && editingRepaymentId === r.id) {
+                        return <React.Fragment key={r.id}>{repaymentFormCard}</React.Fragment>;
+                      }
                       return (
-                        <Card key={r.id}>
+                        <div key={r.id} ref={(el) => { repaymentCardRefs.current[r.id] = el; }}>
+                        <Card>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 16, fontWeight: 600, textDecoration: r.paid ? "line-through" : "none", color: r.paid ? INK_FAINT : INK }}>{r.name || r.category}{r.purpose ? ` \u00b7 ${r.purpose}` : ""}</div>
@@ -4842,6 +5074,7 @@ function LifeTracker() {
                           )}
                           {r.remarks && <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 5 }}>{r.remarks}</div>}
                         </Card>
+                        </div>
                       );
                     })}
                     {sortedRepayments.filter((r) => !r.paid).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{sortedRepayments.some((r) => r.paid) ? "All repayments are settled — check History." : "No repayments added yet."}</div>}
@@ -4912,158 +5145,17 @@ function LifeTracker() {
                   })()}
                 </Card>
               )}
-              {showAddGoal && (
-                <Card style={{ marginBottom: 9 }}>
-                  <SectionLabel>{editingGoalId ? "Edit goal" : "New goal"}</SectionLabel>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <TextField placeholder="Goal title" value={goalForm.title} onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })} />
-                    {isRoutineCategory && (
-                      <div>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Goal type</div>
-                        <Select value={goalForm.goalType} onChange={(e) => setGoalForm({ ...goalForm, goalType: e.target.value })} style={{ width: "100%" }}>
-                          <option>Skill Learning</option><option>Certification</option><option>Project</option><option>Job Preparation</option><option>Course</option><option>Reading</option><option>Other</option>
-                        </Select>
-                      </div>
-                    )}
-                    {!isRoutineCategory && (
-                      <div>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Month</div>
-                        <Select value={goalForm.month} onChange={(e) => setGoalForm({ ...goalForm, month: e.target.value })} style={{ width: "100%" }}>
-                          {goalMonthOptions.map((mk) => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
-                        </Select>
-                      </div>
-                    )}
-                    <div>
-                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Sequence number</div>
-                      <TextField type="number" placeholder="1" value={goalForm.sequence} onChange={(e) => setGoalForm({ ...goalForm, sequence: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                    </div>
-                    {isFinanceGoalsTab && (
-                      <TextField placeholder="Target amount" type="number" value={goalForm.targetAmount} onChange={(e) => setGoalForm({ ...goalForm, targetAmount: e.target.value })} style={{ fontFamily: mono }} />
-                    )}
-                    {isRoutineCategory && (
-                      <>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Start date</div>
-                            <TextField type="date" value={goalForm.startDate} onChange={(e) => setGoalForm({ ...goalForm, startDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Expected year</div>
-                            <TextField type="date" value={goalForm.expectedYear} onChange={(e) => setGoalForm({ ...goalForm, expectedYear: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Frequency</div>
-                          <Select value={goalForm.frequency} onChange={(e) => setGoalForm({ ...goalForm, frequency: e.target.value })} style={{ width: "100%" }}>
-                            <option value="Daily">Today</option>
-                            <option value="Weekly">Weekly</option>
-                            <option value="Monthly">Monthly</option>
-                          </Select>
-                        </div>
-                        {goalForm.frequency === "Weekly" && (
-                          <>
-                            <div>
-                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Days per week</div>
-                              <TextField type="number" min="0" max="7" value={goalForm.daysPerWeek} onChange={(e) => setGoalForm({ ...goalForm, daysPerWeek: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Specific days (optional — overrides count above)</div>
-                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                                {WEEKDAYS.map((day) => {
-                                  const sel = goalForm.specificDays.includes(day);
-                                  return <button key={day} onClick={() => toggleSpecificDay(day)} style={{ background: sel ? "rgba(0,113,227,0.15)" : PANEL_2, border: `1px solid ${sel ? BRASS : LINE}`, color: sel ? BRASS : INK_DIM, borderRadius: 6, padding: "4px 7px", fontSize: 13, cursor: "pointer" }}>{day}</button>;
-                                })}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Start time</div>
-                            <TextField type="time" value={goalForm.startTime} onChange={(e) => setGoalForm({ ...goalForm, startTime: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Time per session (min)</div>
-                            <TextField type="number" value={goalForm.sessionMinutes} onChange={(e) => setGoalForm({ ...goalForm, sessionMinutes: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Track activity on Daily tab as</div>
-                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                            <ChipButton label="OK / Done" active={goalForm.trackingType === "instant"} onClick={() => setGoalForm({ ...goalForm, trackingType: "instant" })} />
-                            <ChipButton label="Start / Stop Timer" active={goalForm.trackingType === "duration"} onClick={() => setGoalForm({ ...goalForm, trackingType: "duration" })} />
-                            <ChipButton label="Interval Reminder" active={goalForm.trackingType === "interval"} onClick={() => setGoalForm({ ...goalForm, trackingType: "interval" })} />
-                          </div>
-                        </div>
-                        {goalForm.trackingType === "duration" && (
-                          <div>
-                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Required duration (optional)</div>
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
-                              <div style={{ flex: "1 1 70px" }}>
-                                <TextField type="number" value={goalForm.requiredDurationValue} onChange={(e) => setGoalForm({ ...goalForm, requiredDurationValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                              </div>
-                              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                                {["seconds", "minutes", "hours"].map((u) => (
-                                  <ChipButton key={u} label={u} active={goalForm.requiredDurationUnit === u} onClick={() => setGoalForm({ ...goalForm, requiredDurationUnit: u })} />
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {goalForm.trackingType === "interval" && (
-                          <>
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
-                              <div style={{ flex: "1 1 70px" }}>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Every</div>
-                                <TextField type="number" value={goalForm.intervalValue} onChange={(e) => setGoalForm({ ...goalForm, intervalValue: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                              </div>
-                              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                                {["minutes", "hours"].map((u) => (
-                                  <ChipButton key={u} label={u} active={goalForm.periodUnit === u} onClick={() => setGoalForm({ ...goalForm, periodUnit: u })} />
-                                ))}
-                              </div>
-                            </div>
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                              <div style={{ flex: "1 1 90px" }}>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Amount</div>
-                                <TextField type="number" value={goalForm.intervalAmount} onChange={(e) => setGoalForm({ ...goalForm, intervalAmount: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
-                              </div>
-                              <div style={{ flex: "0 1 70px" }}>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Unit</div>
-                                <TextField value={goalForm.intervalUnit} onChange={(e) => setGoalForm({ ...goalForm, intervalUnit: e.target.value })} style={{ width: "100%" }} />
-                              </div>
-                            </div>
-                          </>
-                        )}
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "7px 0" }}>
-                          <div style={{ fontSize: 13, color: INK_FAINT }}>Reminder before session</div>
-                          <button type="button" onClick={() => setGoalForm({ ...goalForm, reminderEnabled: !goalForm.reminderEnabled })} style={{ background: goalForm.reminderEnabled ? "rgba(0,113,227,0.12)" : PANEL_2, border: `1px solid ${goalForm.reminderEnabled ? BRASS : LINE}`, borderRadius: 7, padding: "5px 8px", color: goalForm.reminderEnabled ? BRASS : INK_DIM, cursor: "pointer", fontSize: 13 }}>{goalForm.reminderEnabled ? "On" : "Off"}</button>
-                        </div>
-                        {goalForm.reminderEnabled && (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <TextField type="number" min="1" value={goalForm.reminderMinutes} onChange={(e) => setGoalForm({ ...goalForm, reminderMinutes: e.target.value })} style={{ width: 90, fontFamily: mono }} />
-                            <span style={{ fontSize: 13, color: INK_FAINT }}>minutes before</span>
-                          </div>
-                        )}
-                        <div>
-                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Notes / target outcome</div>
-                          <TextField placeholder="Example: Complete basic English conversation" value={goalForm.notes} onChange={(e) => setGoalForm({ ...goalForm, notes: e.target.value })} />
-                        </div>
-                      </>
-                    )}
-                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
-                      <button onClick={addGoal} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{editingGoalId ? "Save changes" : "Save goal"}</button>
-                      <button onClick={cancelGoalForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                    </div>
-                  </div>
-                </Card>
-              )}
+              {showAddGoal && !editingGoalId && goalFormCard}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {categoryGoals.filter((g) => !g.done).map((g) => {
                   const allocated = isFinanceGoalsTab ? (financeAllocations[g.id] || 0) : null;
                   const pct = isFinanceGoalsTab && g.targetAmount ? round((allocated / g.targetAmount) * 100) : null;
+                  if (showAddGoal && editingGoalId === g.id) {
+                    return <React.Fragment key={g.id}>{goalFormCard}</React.Fragment>;
+                  }
                   return (
-                    <Card key={g.id}>
+                    <div key={g.id} ref={(el) => { goalCardRefs.current[g.id] = el; }}>
+                    <Card>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -5234,6 +5326,7 @@ function LifeTracker() {
                         );
                       })()}
                     </Card>
+                    </div>
                   );
                 })}
                 {categoryGoals.filter((g) => !g.done).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{categoryGoals.some((g) => g.done) ? "All goals in this category are completed — check History." : "No goals yet in this category."}</div>}
