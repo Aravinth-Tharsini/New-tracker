@@ -1141,14 +1141,21 @@ function GroupedBarChart({ points, colorA = TEAL, colorB = CORAL, height = 96 })
 // Bar-style month-over-month comparison (used where a bar chart reads clearer than a line,
 // e.g. the Overview savings trend). Bars below zero automatically switch to negativeColor.
 function TrendBarChart({ points, height = 96, color = BRASS, negativeColor }) {
+  const [activeIdx, setActiveIdx] = useState(null);
   const width = 300, pad = 6, gap = 8;
   const vals = points.map((p) => Number(p.value) || 0);
   const max = Math.max(1, ...vals), min = Math.min(0, ...vals);
   const range = (max - min) || 1;
   const zeroY = pad + (1 - (0 - min) / range) * (height - pad * 2);
   const barW = points.length ? Math.max(10, (width - pad * 2 - gap * (points.length - 1)) / points.length) : 0;
+  const active = activeIdx != null ? points[activeIdx] : null;
   return (
     <div>
+      {active && (
+        <div style={{ textAlign: "center", marginBottom: 4, fontSize: 12.5, fontWeight: 700, color: (Number(active.value) || 0) < 0 ? (negativeColor || CORAL) : color, fontFamily: mono }}>
+          {active.label}: {inr(Number(active.value) || 0)}
+        </div>
+      )}
       <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height, display: "block" }} preserveAspectRatio="none">
         <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} stroke={LINE} strokeWidth="1" />
         {points.map((p, i) => {
@@ -1159,11 +1166,17 @@ function TrendBarChart({ points, height = 96, color = BRASS, negativeColor }) {
           const barTop = v >= 0 ? valueY : zeroY;
           const barBottom = v >= 0 ? zeroY : valueY;
           const h = Math.max(3, barBottom - barTop);
-          return <rect key={i} x={x} y={barTop} width={barW} height={h} rx={4} fill={barColor} />;
+          return (
+            <g key={i}>
+              <rect x={x} y={pad} width={barW} height={height - pad * 2} fill="transparent"
+                onClick={() => setActiveIdx(activeIdx === i ? null : i)} style={{ cursor: "pointer" }} />
+              <rect x={x} y={barTop} width={barW} height={h} rx={4} fill={barColor} opacity={activeIdx == null || activeIdx === i ? 1 : 0.45} style={{ pointerEvents: "none" }} />
+            </g>
+          );
         })}
       </svg>
       <div style={{ display: "flex", marginTop: 4 }}>
-        {points.map((p, i) => <span key={i} style={{ flex: 1, textAlign: "center", fontSize: 10.5, color: INK_FAINT, fontFamily: disp }}>{p.label}</span>)}
+        {points.map((p, i) => <span key={i} style={{ flex: 1, textAlign: "center", fontSize: 10.5, color: activeIdx === i ? INK : INK_FAINT, fontWeight: activeIdx === i ? 700 : 400, fontFamily: disp }}>{p.label}</span>)}
       </div>
     </div>
   );
@@ -1181,10 +1194,14 @@ function ConsistencyHeatmap({ days, color = BRASS }) {
     </div>
   );
 }
-// One row in the streaks list: icon tile, habit name, flame + day count.
-function StreakRow({ icon: Icon, accent, label, streak, isLast }) {
+// One row in the streaks list: icon tile, habit name, flame + day count. Tapping a row scopes
+// the consistency heatmap below to that item (onClick optional so this stays reusable elsewhere).
+function StreakRow({ icon: Icon, accent, label, streak, isLast, onClick, selected }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: isLast ? "none" : `1px solid ${LINE}` }}>
+    <button
+      onClick={onClick}
+      style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 6px", width: "100%", border: "none", borderBottom: isLast ? "none" : `1px solid ${LINE}`, background: selected ? hexA(accent, 0.1) : "transparent", borderRadius: selected ? 8 : 0, cursor: onClick ? "pointer" : "default", textAlign: "left", fontFamily: "inherit" }}
+    >
       <div style={{ width: 32, height: 32, borderRadius: 9, background: hexA(accent, 0.14), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
         <Icon size={16} color={accent} />
       </div>
@@ -1192,7 +1209,7 @@ function StreakRow({ icon: Icon, accent, label, streak, isLast }) {
       <div style={{ display: "flex", alignItems: "center", gap: 3, fontFamily: mono, fontWeight: 800, color: "#FF9500", fontSize: 14, flexShrink: 0 }}>
         <Flame size={14} color="#FF9500" /> {streak}
       </div>
-    </div>
+    </button>
   );
 }
 // A single life-area card: icon, label, ring progress, done/total count.
@@ -1225,7 +1242,7 @@ function AttentionRow({ icon: Icon, accent, title, subtitle, badge, onClick, isL
     </button>
   );
 }
-function SectionLabel({ children }) { return <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: INK_FAINT, marginBottom: 8, fontWeight: 700 }}>{children}</div>; }
+function SectionLabel({ children, style }) { return <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: INK_FAINT, marginBottom: 8, fontWeight: 700, ...style }}>{children}</div>; }
 // Pill-shaped segmented control used on the Insights/Progress page. "primary" = solid blue
 // gradient highlight (Day/Month/Year); "secondary" = white pill highlight on a soft track
 // (Overview/Finance/Habits), closer to the reference design.
@@ -1421,6 +1438,7 @@ function LifeTracker() {
   const [insightMonth, setInsightMonth] = useState(monthKey());
   const [insightYear, setInsightYear] = useState(String(new Date().getFullYear()));
   const [progressSubTab, setProgressSubTab] = useState("overview");
+  const [selectedStreakId, setSelectedStreakId] = useState(null);
   const [activeTab, setActiveTab] = useState(null);
   const [expandedDailyCategory, setExpandedDailyCategory] = useState(null);
   // Set when a reminder is tapped from Home's "Upcoming Attention" so the Daily tab can scroll to and
@@ -5781,7 +5799,7 @@ function LifeTracker() {
         // ---- Redesigned Progress tab: extra stats/charts on top of the existing period math above ----
         const savingsRate = periodIncome > 0 ? Math.round((periodSavings / periodIncome) * 100) : null;
         const donutData = byGroup.map(({ g, amount }) => ({ label: g, value: amount, color: EXPENSE_GROUP_COLOR[g] || "#8E8E93" }));
-        const biggestExpense = periodExpenses.slice().sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))[0];
+        const biggestExpenses = periodExpenses.slice().sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0)).slice(0, 3);
 
         // Trailing 6-month income/expense trend, independent of the selected period, for a stable "shape over time" view.
         const trendMonthKeys = Array.from({ length: 6 }, (_, i) => { const d = new Date(); d.setMonth(d.getMonth() - (5 - i)); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; });
@@ -5811,11 +5829,16 @@ function LifeTracker() {
           .filter((x) => x.streak > 0)
           .slice(0, 6);
 
-        // Last 30 days of overall completion, for the consistency heatmap.
+        // Last 30 days, for the consistency heatmap. When a streak row is selected, this scopes
+        // down to that single item's done/not-done days instead of overall completion.
         const heatmapDays = Array.from({ length: 30 }, (_, i) => {
           const d = new Date(); d.setDate(d.getDate() - (29 - i));
           const k = dateKey(d);
           const log = dailyLogs[k] || {};
+          if (selectedStreakId) {
+            const rec = log[selectedStreakId];
+            return { date: k, pct: rec && rec.status === "done" ? 100 : 0 };
+          }
           const doneN = Object.values(log).filter((r) => r && r.status === "done").length;
           const totalN = dailyItems.filter((it) => it.type !== "expense").length;
           return { date: k, pct: totalN ? (doneN / totalN) * 100 : 0 };
@@ -5861,12 +5884,15 @@ function LifeTracker() {
         const overviewStats = [
           { key: "income", label: "Income", icon: Wallet, iconColor: "#22C55E", iconBg: "rgba(34,197,94,0.14)", value: inr(periodIncome), sub: "Total earned" },
           { key: "expense", label: "Expense", icon: CreditCard, iconColor: CORAL, iconBg: hexA(CORAL, 0.14), value: inr(periodExpense), sub: "Total spent" },
-          { key: "savings", label: "Savings", icon: PiggyBank, iconColor: "#22C55E", iconBg: "rgba(34,197,94,0.14)", value: inr(periodSavings), sub: "Total saved", valueColor: periodSavings >= 0 ? TEAL : CORAL },
+          { key: "savings", label: "Savings", icon: PiggyBank, iconColor: "#22C55E", iconBg: "rgba(34,197,94,0.14)", value: inr(periodSavings), sub: savingsRate === null ? "Total saved" : `${savingsRate}% of income`, valueColor: periodSavings >= 0 ? TEAL : CORAL },
           { key: "completion", label: "Completion", icon: Target, iconColor: BRASS, iconBg: hexA(BRASS, 0.14), value: `${completionPct}%`, sub: "Goals completed", valueColor: BRASS },
         ];
         // "+X% vs last month" badge for the savings trend chart.
         const trendPrev = trendSeries[trendSeries.length - 2], trendLast = trendSeries[trendSeries.length - 1];
         const trendDelta = trendPrev && trendLast ? (trendPrev.savings !== 0 ? Math.round(((trendLast.savings - trendPrev.savings) / Math.abs(trendPrev.savings)) * 100) : (trendLast.savings === trendPrev.savings ? 0 : (trendLast.savings > trendPrev.savings ? 100 : -100))) : null;
+        // Expense-only delta (vs previous month) for the Finance tab's breakdown card. Higher
+        // expense is unfavorable, so the color is inverted relative to the savings delta above.
+        const expenseDelta = trendPrev && trendLast ? (trendPrev.expense !== 0 ? Math.round(((trendLast.expense - trendPrev.expense) / Math.abs(trendPrev.expense)) * 100) : (trendLast.expense === trendPrev.expense ? 0 : (trendLast.expense > trendPrev.expense ? 100 : -100))) : null;
 
         return (
         <div key="analysis-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
@@ -5914,17 +5940,6 @@ function LifeTracker() {
                 </Card>
               ))}
             </div>
-            <Card style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 12, animation: "statCardIn .35s ease .18s both" }}>
-              <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(147,51,234,0.14)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <Percent size={17} color="#9333EA" />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: INK_FAINT, fontWeight: 700 }}>Savings rate</div>
-                <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>Of income kept as savings</div>
-              </div>
-              <div style={{fontFamily:mono,fontSize:20,fontWeight:800,color:savingsRate===null?INK_FAINT:savingsRate>=0?TEAL:CORAL}}>{savingsRate===null?"—":`${savingsRate}%`}</div>
-            </Card>
-
             <SectionLabel>Savings trend (6 months)</SectionLabel>
             <Card style={{ marginBottom: 12 }}>
               {trendDelta !== null && (
@@ -5947,7 +5962,14 @@ function LifeTracker() {
           </>}
 
           {progressSubTab === "finance" && <>
-            <SectionLabel>Expense breakdown</SectionLabel>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+              <SectionLabel style={{ marginBottom: 0 }}>Expense breakdown</SectionLabel>
+              {expenseDelta !== null && (
+                <span style={{ fontSize: 12, fontWeight: 700, color: expenseDelta <= 0 ? TEAL : CORAL, background: hexA(expenseDelta <= 0 ? TEAL : CORAL, 0.14), borderRadius: 980, padding: "3px 9px", display: "flex", alignItems: "center", gap: 3 }}>
+                  {expenseDelta >= 0 ? "+" : ""}{expenseDelta}% vs {trendPrev.label}
+                </span>
+              )}
+            </div>
             <Card style={{ marginBottom: 12 }}>
               {byGroup.length ? <>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
@@ -5966,13 +5988,18 @@ function LifeTracker() {
               </> : <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "8px 0" }}>No expense data for this period. Log an expense to see it broken down here.</div>}
             </Card>
 
-            {biggestExpense && (
+            {biggestExpenses.length > 0 && (
               <Card style={{ marginBottom: 12 }}>
-                <div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT,marginBottom:6}}>Biggest expense this period</div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 600 }}>{biggestExpense.group || "Expense"}{biggestExpense.note ? ` · ${biggestExpense.note}` : ""}</div>
-                  <div style={{ fontFamily: mono, fontWeight: 800, color: CORAL }}>{inr(Number(biggestExpense.amount) || 0)}</div>
-                </div>
+                <div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT,marginBottom:6}}>Biggest expenses this period</div>
+                {biggestExpenses.map((e, i) => (
+                  <div key={e.id || i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderTop: i > 0 ? `1px solid ${LINE}` : "none" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: EXPENSE_GROUP_COLOR[e.group] || "#8E8E93", flexShrink: 0 }} />
+                      <div style={{ fontSize: 14.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.group || "Expense"}{e.note ? ` · ${e.note}` : ""}</div>
+                    </div>
+                    <div style={{ fontFamily: mono, fontWeight: 800, color: CORAL, flexShrink: 0, marginLeft: 8 }}>{inr(Number(e.amount) || 0)}</div>
+                  </div>
+                ))}
               </Card>
             )}
 
@@ -5995,18 +6022,34 @@ function LifeTracker() {
             <SectionLabel>Current streaks</SectionLabel>
             <Card style={{ marginBottom: 12 }}>
               {streakList.length ? streakList.map((s, i) => (
-                <StreakRow key={s.id} icon={s.icon} accent={s.accent} label={s.name} streak={s.streak} isLast={i === streakList.length - 1} />
+                <StreakRow key={s.id} icon={s.icon} accent={s.accent} label={s.name} streak={s.streak} isLast={i === streakList.length - 1}
+                  selected={selectedStreakId === s.id} onClick={() => setSelectedStreakId(selectedStreakId === s.id ? null : s.id)} />
               )) : <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "6px 0" }}>No active streaks yet — mark a habit done a couple of days in a row to start one.</div>}
             </Card>
 
-            <SectionLabel>Last 30 days</SectionLabel>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+              <SectionLabel style={{ marginBottom: 0 }}>{selectedStreakId ? `Last 30 days — ${streakList.find((s) => s.id === selectedStreakId)?.name || ""}` : "Last 30 days"}</SectionLabel>
+              {selectedStreakId && <button onClick={() => setSelectedStreakId(null)} style={{ background: "transparent", border: "none", color: BRASS, fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>Show all</button>}
+            </div>
             <Card style={{ marginBottom: 12 }}>
-              <ConsistencyHeatmap days={heatmapDays} color={BRASS} />
+              <ConsistencyHeatmap days={heatmapDays} color={selectedStreakId ? (streakList.find((s) => s.id === selectedStreakId)?.accent || BRASS) : BRASS} />
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: INK_FAINT }}>
                 <span>{heatmapDays[0]?.date}</span>
                 <span>Today</span>
               </div>
             </Card>
+
+            {areaStats.length > 0 && areaStats.every((a) => a.total > 0 && a.pct >= 100) && (
+              <Card style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 12, background: `linear-gradient(120deg, ${hexA(TEAL, 0.14)} 0%, ${hexA(BRASS, 0.08)} 100%)` }}>
+                <div style={{ width: 40, height: 40, borderRadius: "50%", background: hexA(TEAL, 0.18), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <span style={{ fontSize: 20 }}>🎉</span>
+                </div>
+                <div>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: INK }}>All areas complete!</div>
+                  <div style={{ fontSize: 12.5, color: INK_DIM, marginTop: 1 }}>Every life area is at 100% for {fmtPeriod}. Great consistency.</div>
+                </div>
+              </Card>
+            )}
           </>}
 
         </div>
