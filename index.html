@@ -695,7 +695,9 @@ const DEFAULT_EXPENSE_GROUPS = {
 };
 // Groups whose payments are driven from the saved Repayment Due data instead of manual entry;
 // these are hidden from the "Today's Expense" category picker and shown in their own Repayment section.
-const REPAYMENT_LINKED_EXPENSE_GROUPS = ["EMI", "Electricity Bill", "Recharge"];
+// EMI is intentionally left out of this list (even though it also appears in the Repayments Due
+// section) so it's still selectable for a quick one-off manual entry.
+const REPAYMENT_LINKED_EXPENSE_GROUPS = ["Electricity Bill", "Recharge"];
 const REPAYMENT_CATEGORY_TO_EXPENSE_GROUP = { "EMI": "EMI", "Loan": "EMI", "Gold Loan": "EMI", "Electricity": "Electricity Bill", "Mobile Recharge": "Recharge", "Rent": "Other", "Other": "Other" };
 
 function isItemValid(item) {
@@ -1023,10 +1025,10 @@ const TODAY_CARD_ACCENT = {
 // Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
 const DAILY_EXPENSE_GROUPS = Object.fromEntries(Object.entries(DEFAULT_EXPENSE_GROUPS).filter(([g]) => !REPAYMENT_LINKED_EXPENSE_GROUPS.includes(g)));
-const EXPENSE_GROUP_ICON = { Food: UtensilsCrossed, Grocery: ShoppingBag, Fuel: Fuel, "Health Care": HeartPulse, Travel: Plane, Shopping: ShoppingBag, Other: Receipt };
+const EXPENSE_GROUP_ICON = { EMI: CreditCard, Food: UtensilsCrossed, Grocery: ShoppingBag, Fuel: Fuel, "Health Care": HeartPulse, Travel: Plane, Shopping: ShoppingBag, Other: Receipt };
 // Each expense category gets its own always-on accent color (not just a highlight-when-selected
 // tint), so the picker reads as a row of distinct colored tiles the way it does in the reference design.
-const EXPENSE_GROUP_COLOR = { Food: "#0071E3", Grocery: "#34C759", Fuel: "#FF9500", "Health Care": "#FF3B30", Travel: "#AF52DE", Shopping: "#32ADE6", Other: "#8E8E93" };
+const EXPENSE_GROUP_COLOR = { EMI: "#5856D6", Food: "#0071E3", Grocery: "#34C759", Fuel: "#FF9500", "Health Care": "#FF3B30", Travel: "#AF52DE", Shopping: "#32ADE6", Other: "#8E8E93" };
 const MEAL_TYPE_ICON = { Breakfast: Sunrise, Lunch: Sun, Dinner: Moon, Tea: Coffee, Snacks: Cookie };
 
 // Travel cards use the icon selected for that trip mode.
@@ -1103,6 +1105,36 @@ function TrendLineChart({ points, height = 96, color = BRASS }) {
       </svg>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
         {points.map((p, i) => <span key={i} style={{ fontSize: 10.5, color: INK_FAINT, fontFamily: disp }}>{p.label}</span>)}
+      </div>
+    </div>
+  );
+}
+// Bar-style month-over-month comparison (used where a bar chart reads clearer than a line,
+// e.g. the Overview savings trend). Bars below zero automatically switch to negativeColor.
+function TrendBarChart({ points, height = 96, color = BRASS, negativeColor }) {
+  const width = 300, pad = 6, gap = 8;
+  const vals = points.map((p) => Number(p.value) || 0);
+  const max = Math.max(1, ...vals), min = Math.min(0, ...vals);
+  const range = (max - min) || 1;
+  const zeroY = pad + (1 - (0 - min) / range) * (height - pad * 2);
+  const barW = points.length ? Math.max(10, (width - pad * 2 - gap * (points.length - 1)) / points.length) : 0;
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height, display: "block" }} preserveAspectRatio="none">
+        <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} stroke={LINE} strokeWidth="1" />
+        {points.map((p, i) => {
+          const v = Number(p.value) || 0;
+          const x = pad + i * (barW + gap);
+          const barColor = v < 0 ? (negativeColor || CORAL) : color;
+          const valueY = pad + (1 - (v - min) / range) * (height - pad * 2);
+          const barTop = v >= 0 ? valueY : zeroY;
+          const barBottom = v >= 0 ? zeroY : valueY;
+          const h = Math.max(3, barBottom - barTop);
+          return <rect key={i} x={x} y={barTop} width={barW} height={h} rx={4} fill={barColor} />;
+        })}
+      </svg>
+      <div style={{ display: "flex", marginTop: 4 }}>
+        {points.map((p, i) => <span key={i} style={{ flex: 1, textAlign: "center", fontSize: 10.5, color: INK_FAINT, fontFamily: disp }}>{p.label}</span>)}
       </div>
     </div>
   );
@@ -5873,7 +5905,7 @@ function LifeTracker() {
                   </span>
                 </div>
               )}
-              <TrendLineChart points={trendSeries.map((t) => ({ label: t.label, value: t.savings }))} color={TEAL} height={80} />
+              <TrendBarChart points={trendSeries.map((t) => ({ label: t.label, value: t.savings }))} color={TEAL} negativeColor={CORAL} height={90} />
             </Card>
 
             {insightPeriod === "year" && <>
