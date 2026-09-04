@@ -252,6 +252,46 @@ button:active, [role="button"]:active {
 @media(max-width:420px){.daily-page-content .mobile-array-grid,.planner-page-content .mobile-array-grid{gap:7px!important}.daily-page-content .today-focus-card,.planner-page-content .today-focus-card{min-height:56px!important;padding:8px 9px!important}}
 </style>
 
+
+<style id="progress-dashboard-redesign">
+  .progress-shell{width:100%;max-width:100%;padding:6px 16px 20px;overflow:visible}
+  .progress-hero{position:relative;overflow:hidden;border-radius:22px;padding:18px;margin-bottom:12px;border:1px solid var(--line);
+    background:linear-gradient(135deg,rgba(200,138,18,.14),rgba(200,138,18,.04) 58%,var(--panel) 100%)}
+  .progress-hero-title{font-size:22px;font-weight:850;line-height:1.16;letter-spacing:-.02em}
+  .progress-hero-sub{font-size:12.5px;color:var(--ink-dim);margin-top:7px;line-height:1.45;max-width:260px}
+  .progress-period-card{display:flex;align-items:center;gap:9px;margin-bottom:10px;padding:9px 11px}
+  .progress-tabs-card{padding:7px;margin-bottom:12px}
+  .progress-section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 7px}
+  .progress-section-title{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.065em;color:var(--ink-faint)}
+  .progress-stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+  .progress-stat{min-height:78px;display:flex;align-items:center;gap:9px;padding:11px}
+  .progress-stat-icon{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 38px}
+  .progress-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);font-weight:800}
+  .progress-stat-value{font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:18px;font-weight:850;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .progress-stat-sub{font-size:10.5px;color:var(--ink-faint);margin-top:1px}
+  .progress-trend-card{padding:12px;margin-bottom:12px}
+  .progress-trend-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+  .progress-delta{font-size:11.5px;font-weight:800;border-radius:999px;padding:4px 8px;white-space:nowrap}
+  .progress-insight-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+  .progress-mini{padding:11px}
+  .progress-mini-value{font-size:16px;font-weight:850;margin-top:3px}
+  .progress-mini-sub{font-size:11px;color:var(--ink-faint);margin-top:2px;line-height:1.35}
+  .progress-empty{padding:18px 10px;text-align:center;color:var(--ink-faint);font-size:13px;line-height:1.45}
+  .progress-list-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--line)}
+  .progress-list-row:first-child{border-top:none}
+  .progress-list-main{min-width:0;flex:1}
+  .progress-list-title{font-size:13.5px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .progress-list-meta{font-size:10.5px;color:var(--ink-faint);margin-top:2px}
+  .progress-pill{font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:11px;font-weight:800;white-space:nowrap}
+  .progress-area-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+  .progress-year-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+  @media(max-width:380px){
+    .progress-shell{padding-left:12px;padding-right:12px}
+    .progress-stat{padding:9px;gap:7px}
+    .progress-stat-icon{width:34px;height:34px;flex-basis:34px}
+    .progress-stat-value{font-size:16px}
+  }
+</style>
 </head>
 <body style="margin:0; background:#F5F5F7;">
   
@@ -5895,163 +5935,235 @@ function LifeTracker() {
         const expenseDelta = trendPrev && trendLast ? (trendPrev.expense !== 0 ? Math.round(((trendLast.expense - trendPrev.expense) / Math.abs(trendPrev.expense)) * 100) : (trendLast.expense === trendPrev.expense ? 0 : (trendLast.expense > trendPrev.expense ? 100 : -100))) : null;
 
         return (
-        <div key="analysis-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
-          <div style={{ position: "relative", overflow: "hidden", background: `linear-gradient(135deg, ${hexA(BRASS, 0.16)} 0%, ${hexA(BRASS, 0.05)} 55%, ${PANEL} 100%)`, border: `1px solid ${LINE}`, borderRadius: 20, padding: "18px 18px 18px", marginBottom: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 21, fontWeight: 800, color: INK, lineHeight: 1.18, fontFamily: disp }}>Your Financial<br />Journey</div>
-                <div style={{ fontSize: 13, color: INK_DIM, marginTop: 8, lineHeight: 1.4 }}>Stay consistent today, better tomorrow <Sparkles size={13} color={BRASS} style={{ display: "inline", verticalAlign: -1 }} /></div>
+        <div key="analysis-page" className="page-smooth-enter progress-shell">
+          <div className="progress-hero">
+            <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}>
+              <div style={{minWidth:0}}>
+                <div className="progress-hero-title">Your Financial<br />Journey</div>
+                <div className="progress-hero-sub">
+                  Stay consistent today, better tomorrow
+                  <Sparkles size={13} color={BRASS} style={{display:"inline",verticalAlign:-1,marginLeft:3}} />
+                </div>
               </div>
               <InsightsHeroArt accent={BRASS} />
             </div>
-            <button onClick={downloadProgressPdf} style={{ marginTop: 16, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: `linear-gradient(135deg, ${BRASS} 0%, #0058B8 100%)`, border: "none", color: "#fff", borderRadius: 980, padding: "12px 12px", fontSize: 15, fontFamily: disp, fontWeight: 700, cursor: "pointer", boxShadow: `0 6px 16px ${hexA(BRASS, 0.35)}` }}><Download size={16} /> Download Progress PDF</button>
+            <button onClick={downloadProgressPdf}
+              style={{marginTop:14,width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,
+                background:`linear-gradient(135deg, ${BRASS} 0%, #0058B8 100%)`,border:"none",color:"#fff",
+                borderRadius:980,padding:"11px 12px",fontSize:14.5,fontFamily:disp,fontWeight:750,cursor:"pointer",
+                boxShadow:`0 6px 16px ${hexA(BRASS,0.30)}`}}>
+              <Download size={16} /> Download Progress PDF
+            </button>
           </div>
 
-          <Card style={{ marginBottom: 10, padding: 10 }}>
-            <SegmentedControl variant="primary" value={insightPeriod} onChange={setInsightPeriod} options={[{ id: "day", label: "Day" }, { id: "month", label: "Month" }, { id: "year", label: "Year" }]} />
-          </Card>
-          <Card style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
-            <CalendarDays size={17} color={BRASS} style={{ flexShrink: 0 }} />
-            {insightPeriod === "day" && <TextField type="date" value={insightDate} onChange={(e) => setInsightDate(e.target.value)} style={{ background: "transparent", padding: 0, fontWeight: 700 }} />}
-            {insightPeriod === "month" && <TextField type="month" value={insightMonth} onChange={(e) => setInsightMonth(e.target.value)} style={{ background: "transparent", padding: 0, fontWeight: 700 }} />}
-            {insightPeriod === "year" && <TextField type="number" value={insightYear} onChange={(e) => setInsightYear(e.target.value.slice(0, 4))} placeholder="2026" style={{ background: "transparent", padding: 0, fontWeight: 700 }} />}
+          <Card className="progress-period-card">
+            <CalendarDays size={17} color={BRASS} style={{flexShrink:0}} />
+            {insightPeriod === "day" && <TextField type="date" value={insightDate} onChange={(e)=>setInsightDate(e.target.value)}
+              style={{background:"transparent",padding:0,fontWeight:750}} />}
+            {insightPeriod === "month" && <TextField type="month" value={insightMonth} onChange={(e)=>setInsightMonth(e.target.value)}
+              style={{background:"transparent",padding:0,fontWeight:750}} />}
+            {insightPeriod === "year" && <TextField type="number" value={insightYear} onChange={(e)=>setInsightYear(e.target.value.slice(0,4))}
+              placeholder="2026" style={{background:"transparent",padding:0,fontWeight:750}} />}
           </Card>
 
-          <Card style={{ marginBottom: 14, padding: 10 }}>
-            <SegmentedControl variant="secondary" value={progressSubTab} onChange={setProgressSubTab} options={[{ id: "overview", label: "Overview", icon: TrendingUp }, { id: "finance", label: "Finance", icon: Wallet }, { id: "habits", label: "Habits", icon: Flame }]} />
+          <Card className="progress-tabs-card">
+            <SegmentedControl variant="primary" value={insightPeriod} onChange={setInsightPeriod}
+              options={[{id:"day",label:"Day"},{id:"month",label:"Month"},{id:"year",label:"Year"}]} />
+          </Card>
+
+          <Card className="progress-tabs-card">
+            <SegmentedControl variant="secondary" value={progressSubTab} onChange={setProgressSubTab}
+              options={[
+                {id:"overview",label:"Overview",icon:TrendingUp},
+                {id:"finance",label:"Finance",icon:Wallet},
+                {id:"habits",label:"Habits",icon:Flame}
+              ]} />
           </Card>
 
           {progressSubTab === "overview" && <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <SectionLabel>{fmtPeriod} overview</SectionLabel>
-              <button onClick={() => setProgressSubTab("finance")} style={{ background: "transparent", border: "none", color: BRASS, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 1, cursor: "pointer", fontFamily: disp, padding: 0, marginBottom: 8 }}>View Details <ChevronRight size={14} /></button>
+            <div className="progress-section-head">
+              <div className="progress-section-title">{fmtPeriod} overview</div>
+              <div style={{fontSize:11,color:INK_FAINT}}>At a glance</div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-              {overviewStats.map((s, i) => (
-                <Card key={s.key} style={{ display: "flex", alignItems: "center", gap: 10, animation: `statCardIn .35s ease ${i * 0.04}s both` }}>
-                  <div style={{ width: 40, height: 40, borderRadius: "50%", background: s.iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+
+            <div className="progress-stat-grid">
+              {overviewStats.map((s,i)=>(
+                <Card key={s.key} className="progress-stat" style={{animation:`statCardIn .35s ease ${i*.04}s both`}}>
+                  <div className="progress-stat-icon" style={{background:s.iconBg}}>
                     <s.icon size={18} color={s.iconColor} strokeWidth={2} />
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.04em", color: INK_FAINT, fontWeight: 700 }}>{s.label}</div>
-                    <div style={{ fontFamily: mono, fontSize: 18, fontWeight: 800, color: s.valueColor || INK, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.value}</div>
-                    <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 1 }}>{s.sub}</div>
+                  <div style={{minWidth:0}}>
+                    <div className="progress-stat-label">{s.label}</div>
+                    <div className="progress-stat-value" style={{color:s.valueColor||INK}}>{s.value}</div>
+                    <div className="progress-stat-sub">{s.sub}</div>
                   </div>
                 </Card>
               ))}
             </div>
-            <SectionLabel>Savings trend (6 months)</SectionLabel>
-            <Card style={{ marginBottom: 12 }}>
-              {trendDelta !== null && (
-                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: trendDelta >= 0 ? TEAL : CORAL, background: hexA(trendDelta >= 0 ? TEAL : CORAL, 0.14), borderRadius: 980, padding: "3px 9px", display: "flex", alignItems: "center", gap: 3 }}>
-                    {trendDelta >= 0 ? "+" : ""}{trendDelta}% vs {trendPrev.label}
-                  </span>
-                </div>
-              )}
-              <TrendBarChart points={trendSeries.map((t) => ({ label: t.label, value: t.savings }))} color={TEAL} negativeColor={CORAL} height={90} />
+
+            <div className="progress-section-head">
+              <div className="progress-section-title">Savings trend</div>
+              {trendDelta !== null && <span className="progress-delta"
+                style={{color:trendDelta>=0?TEAL:CORAL,background:hexA(trendDelta>=0?TEAL:CORAL,.13)}}>
+                {trendDelta>=0?"+":""}{trendDelta}% vs {trendPrev.label}
+              </span>}
+            </div>
+            <Card className="progress-trend-card">
+              <TrendBarChart points={trendSeries.map(t=>({label:t.label,value:t.savings}))}
+                color={TEAL} negativeColor={CORAL} height={92} />
             </Card>
 
-            {insightPeriod === "year" && <>
-              <SectionLabel>Yearly growth comparison</SectionLabel>
-              <Card style={{marginBottom:8}}><div style={{fontSize:13,color:INK_FAINT,marginBottom:8}}>{insightYear} compared with {previousYear}</div>
-                {[['Income growth',incomeGrowth],['Savings growth',savingsGrowth],['Activity growth',activityGrowth]].map(([label,val])=><div key={label} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:`1px solid ${LINE}`}}><span>{label}</span><span style={{fontFamily:mono,fontWeight:700,color:val===null?INK_FAINT:val>=0?TEAL:CORAL}}>{val===null?'No comparison data':`${val>=0?'↑':'↓'} ${Math.abs(val)}%`}</span></div>)}
+            <div className="progress-section-head">
+              <div className="progress-section-title">Performance snapshot</div>
+            </div>
+            <div className="progress-insight-grid">
+              <Card className="progress-mini">
+                <div style={{fontSize:11,color:INK_FAINT}}>Completion</div>
+                <div className="progress-mini-value" style={{color:BRASS}}>{completionPct}%</div>
+                <div className="progress-mini-sub">Activities completed for this period</div>
               </Card>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[[previousYear,prevYearStats],[insightYear,thisYearStats]].map(([yr,st])=><Card key={yr}><div style={{fontWeight:700,marginBottom:6}}>{yr}</div><div style={{fontSize:12,color:INK_DIM}}>Income {inr(st.income)}</div><div style={{fontSize:12,color:INK_DIM,marginTop:4}}>Expense {inr(st.expense)}</div><div style={{fontSize:12,color:TEAL,marginTop:4}}>Savings {inr(st.savings)}</div><div style={{fontSize:12,color:BRASS,marginTop:4}}>Activities {st.done}</div></Card>)}</div>
+              <Card className="progress-mini">
+                <div style={{fontSize:11,color:INK_FAINT}}>Savings rate</div>
+                <div className="progress-mini-value" style={{color:periodSavings>=0?TEAL:CORAL}}>
+                  {savingsRate === null ? "—" : `${savingsRate}%`}
+                </div>
+                <div className="progress-mini-sub">Saved from total income</div>
+              </Card>
+            </div>
+
+            {insightPeriod === "year" && <>
+              <div className="progress-section-head">
+                <div className="progress-section-title">Yearly growth comparison</div>
+                <div style={{fontSize:11,color:INK_FAINT}}>{previousYear} → {insightYear}</div>
+              </div>
+              <Card style={{marginBottom:8,padding:"5px 12px"}}>
+                {[["Income growth",incomeGrowth],["Savings growth",savingsGrowth],["Activity growth",activityGrowth]].map(([label,val])=>(
+                  <div key={label} className="progress-list-row">
+                    <div className="progress-list-main"><div className="progress-list-title">{label}</div></div>
+                    <div className="progress-pill" style={{color:val===null?INK_FAINT:val>=0?TEAL:CORAL}}>
+                      {val===null?"No data":`${val>=0?"↑":"↓"} ${Math.abs(val)}%`}
+                    </div>
+                  </div>
+                ))}
+              </Card>
+              <div className="progress-year-grid">
+                {[[previousYear,prevYearStats],[insightYear,thisYearStats]].map(([yr,st])=>(
+                  <Card key={yr} style={{padding:11}}>
+                    <div style={{fontWeight:800,fontSize:13,marginBottom:6}}>{yr}</div>
+                    <div style={{fontSize:11.5,color:INK_DIM}}>Income <b>{inr(st.income)}</b></div>
+                    <div style={{fontSize:11.5,color:INK_DIM,marginTop:4}}>Expense <b>{inr(st.expense)}</b></div>
+                    <div style={{fontSize:11.5,color:TEAL,marginTop:4}}>Savings <b>{inr(st.savings)}</b></div>
+                    <div style={{fontSize:11.5,color:BRASS,marginTop:4}}>Activities <b>{st.done}</b></div>
+                  </Card>
+                ))}
+              </div>
             </>}
           </>}
 
           {progressSubTab === "finance" && <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-              <SectionLabel style={{ marginBottom: 0 }}>Expense breakdown</SectionLabel>
-              {expenseDelta !== null && (
-                <span style={{ fontSize: 12, fontWeight: 700, color: expenseDelta <= 0 ? TEAL : CORAL, background: hexA(expenseDelta <= 0 ? TEAL : CORAL, 0.14), borderRadius: 980, padding: "3px 9px", display: "flex", alignItems: "center", gap: 3 }}>
-                  {expenseDelta >= 0 ? "+" : ""}{expenseDelta}% vs {trendPrev.label}
-                </span>
-              )}
+            <div className="progress-section-head">
+              <div className="progress-section-title">Expense breakdown</div>
+              {expenseDelta !== null && <span className="progress-delta"
+                style={{color:expenseDelta<=0?TEAL:CORAL,background:hexA(expenseDelta<=0?TEAL:CORAL,.13)}}>
+                {expenseDelta>=0?"+":""}{expenseDelta}% vs {trendPrev.label}
+              </span>}
             </div>
-            <Card style={{ marginBottom: 12 }}>
+            <Card style={{marginBottom:12,padding:12}}>
               {byGroup.length ? <>
-                <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+                <div style={{display:"flex",justifyContent:"center",marginBottom:8}}>
                   <DonutChart data={donutData} centerLabel="Spent" centerValue={inr(periodExpense)} />
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  {byGroup.map(({ g, amount }) => (
-                    <div key={g} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${LINE}` }}>
-                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: EXPENSE_GROUP_COLOR[g] || "#8E8E93", flexShrink: 0 }} />
-                      <span style={{ flex: 1, fontSize: 14 }}>{g}</span>
-                      <span style={{ fontSize: 12.5, color: INK_FAINT }}>{periodExpense ? Math.round((amount / periodExpense) * 100) : 0}%</span>
-                      <span style={{ fontFamily: mono, fontWeight: 700 }}>{inr(amount)}</span>
+                <div>
+                  {byGroup.map(({g,amount})=>(
+                    <div key={g} className="progress-list-row">
+                      <span style={{width:9,height:9,borderRadius:"50%",background:EXPENSE_GROUP_COLOR[g]||"#8E8E93",flexShrink:0}} />
+                      <div className="progress-list-main"><div className="progress-list-title">{g}</div></div>
+                      <span style={{fontSize:11,color:INK_FAINT,marginRight:7}}>
+                        {periodExpense?Math.round(amount/periodExpense*100):0}%
+                      </span>
+                      <span className="progress-pill">{inr(amount)}</span>
                     </div>
                   ))}
                 </div>
-              </> : <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "8px 0" }}>No expense data for this period. Log an expense to see it broken down here.</div>}
+              </> : <div className="progress-empty">No expense data for this period. Log an expense to see it broken down here.</div>}
             </Card>
 
-            {biggestExpenses.length > 0 && (
-              <Card style={{ marginBottom: 12 }}>
-                <div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT,marginBottom:6}}>Biggest expenses this period</div>
-                {biggestExpenses.map((e, i) => (
-                  <div key={e.id || i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderTop: i > 0 ? `1px solid ${LINE}` : "none" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: EXPENSE_GROUP_COLOR[e.group] || "#8E8E93", flexShrink: 0 }} />
-                      <div style={{ fontSize: 14.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.group || "Expense"}{e.note ? ` · ${e.note}` : ""}</div>
+            {biggestExpenses.length>0 && <>
+              <div className="progress-section-head"><div className="progress-section-title">Biggest expenses</div></div>
+              <Card style={{marginBottom:12,padding:"5px 12px"}}>
+                {biggestExpenses.map((e,i)=>(
+                  <div key={e.id||i} className="progress-list-row">
+                    <span style={{width:28,height:28,borderRadius:9,background:hexA(EXPENSE_GROUP_COLOR[e.group]||"#8E8E93",.13),
+                      display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:11,fontWeight:800}}>
+                      {i+1}
+                    </span>
+                    <div className="progress-list-main">
+                      <div className="progress-list-title">{e.group||"Expense"}{e.note?` · ${e.note}`:""}</div>
+                      <div className="progress-list-meta">Largest spending entry</div>
                     </div>
-                    <div style={{ fontFamily: mono, fontWeight: 800, color: CORAL, flexShrink: 0, marginLeft: 8 }}>{inr(Number(e.amount) || 0)}</div>
+                    <div className="progress-pill" style={{color:CORAL}}>{inr(Number(e.amount)||0)}</div>
                   </div>
                 ))}
               </Card>
-            )}
+            </>}
 
-            <SectionLabel>Income vs expense (6 months)</SectionLabel>
-            <Card style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", gap: 14, marginBottom: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: INK_FAINT }}><span style={{width:8,height:8,borderRadius:2,background:TEAL}}/> Income</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: INK_FAINT }}><span style={{width:8,height:8,borderRadius:2,background:CORAL}}/> Expense</div>
+            <div className="progress-section-head"><div className="progress-section-title">Income vs expense</div><div style={{fontSize:11,color:INK_FAINT}}>6 months</div></div>
+            <Card style={{marginBottom:12,padding:12}}>
+              <div style={{display:"flex",gap:14,marginBottom:6}}>
+                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:TEAL}}/> Income</div>
+                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:CORAL}}/> Expense</div>
               </div>
-              <GroupedBarChart points={trendSeries.map((t) => ({ label: t.label, a: t.income, b: t.expense }))} colorA={TEAL} colorB={CORAL} height={100} />
+              <GroupedBarChart points={trendSeries.map(t=>({label:t.label,a:t.income,b:t.expense}))}
+                colorA={TEAL} colorB={CORAL} height={104} />
             </Card>
           </>}
 
           {progressSubTab === "habits" && <>
-            <SectionLabel>Life areas — {fmtPeriod}</SectionLabel>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-              {areaStats.map((a) => <AreaRingCard key={a.id} icon={a.icon} accent={a.accent} label={a.label} pct={a.pct} done={a.done} total={a.total} />)}
+            <div className="progress-section-head">
+              <div className="progress-section-title">Life areas</div>
+              <div style={{fontSize:11,color:INK_FAINT}}>{fmtPeriod}</div>
+            </div>
+            <div className="progress-area-grid">
+              {areaStats.map(a=><AreaRingCard key={a.id} icon={a.icon} accent={a.accent} label={a.label} pct={a.pct} done={a.done} total={a.total} />)}
             </div>
 
-            <SectionLabel>Current streaks</SectionLabel>
-            <Card style={{ marginBottom: 12 }}>
-              {streakList.length ? streakList.map((s, i) => (
-                <StreakRow key={s.id} icon={s.icon} accent={s.accent} label={s.name} streak={s.streak} isLast={i === streakList.length - 1}
-                  selected={selectedStreakId === s.id} onClick={() => setSelectedStreakId(selectedStreakId === s.id ? null : s.id)} />
-              )) : <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "6px 0" }}>No active streaks yet — mark a habit done a couple of days in a row to start one.</div>}
+            <div className="progress-section-head"><div className="progress-section-title">Current streaks</div></div>
+            <Card style={{marginBottom:12,padding:"5px 12px"}}>
+              {streakList.length ? streakList.map((s,i)=>(
+                <StreakRow key={s.id} icon={s.icon} accent={s.accent} label={s.name} streak={s.streak}
+                  isLast={i===streakList.length-1} selected={selectedStreakId===s.id}
+                  onClick={()=>setSelectedStreakId(selectedStreakId===s.id?null:s.id)} />
+              )) : <div className="progress-empty">No active streaks yet — mark a habit done a couple of days in a row to start one.</div>}
             </Card>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-              <SectionLabel style={{ marginBottom: 0 }}>{selectedStreakId ? `Last 30 days — ${streakList.find((s) => s.id === selectedStreakId)?.name || ""}` : "Last 30 days"}</SectionLabel>
-              {selectedStreakId && <button onClick={() => setSelectedStreakId(null)} style={{ background: "transparent", border: "none", color: BRASS, fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>Show all</button>}
+            <div className="progress-section-head">
+              <div className="progress-section-title">
+                {selectedStreakId ? `Last 30 days — ${streakList.find(s=>s.id===selectedStreakId)?.name||""}` : "Last 30 days"}
+              </div>
+              {selectedStreakId && <button onClick={()=>setSelectedStreakId(null)}
+                style={{background:"transparent",border:"none",color:BRASS,fontSize:12,fontWeight:750,cursor:"pointer",padding:0}}>Show all</button>}
             </div>
-            <Card style={{ marginBottom: 12 }}>
-              <ConsistencyHeatmap days={heatmapDays} color={selectedStreakId ? (streakList.find((s) => s.id === selectedStreakId)?.accent || BRASS) : BRASS} />
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: INK_FAINT }}>
-                <span>{heatmapDays[0]?.date}</span>
-                <span>Today</span>
+            <Card style={{marginBottom:12,padding:11}}>
+              <ConsistencyHeatmap days={heatmapDays}
+                color={selectedStreakId?(streakList.find(s=>s.id===selectedStreakId)?.accent||BRASS):BRASS} />
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:7,fontSize:10.5,color:INK_FAINT}}>
+                <span>{heatmapDays[0]?.date}</span><span>Today</span>
               </div>
             </Card>
 
-            {areaStats.length > 0 && areaStats.every((a) => a.total > 0 && a.pct >= 100) && (
-              <Card style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 12, background: `linear-gradient(120deg, ${hexA(TEAL, 0.14)} 0%, ${hexA(BRASS, 0.08)} 100%)` }}>
-                <div style={{ width: 40, height: 40, borderRadius: "50%", background: hexA(TEAL, 0.18), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <span style={{ fontSize: 20 }}>🎉</span>
+            {areaStats.length>0 && areaStats.every(a=>a.total>0&&a.pct>=100) && (
+              <Card style={{marginBottom:12,display:"flex",alignItems:"center",gap:11,padding:12,
+                background:`linear-gradient(120deg,${hexA(TEAL,.14)} 0%,${hexA(BRASS,.08)} 100%)`}}>
+                <div style={{width:38,height:38,borderRadius:12,background:hexA(TEAL,.18),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontSize:19}}>🎉</span>
                 </div>
                 <div>
-                  <div style={{ fontSize: 14.5, fontWeight: 700, color: INK }}>All areas complete!</div>
-                  <div style={{ fontSize: 12.5, color: INK_DIM, marginTop: 1 }}>Every life area is at 100% for {fmtPeriod}. Great consistency.</div>
+                  <div style={{fontSize:14,fontWeight:750,color:INK}}>All areas complete!</div>
+                  <div style={{fontSize:11.5,color:INK_DIM,marginTop:2}}>Every life area is at 100% for {fmtPeriod}. Great consistency.</div>
                 </div>
               </Card>
             )}
           </>}
-
         </div>
         );
       })()}
