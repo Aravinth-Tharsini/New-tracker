@@ -362,7 +362,11 @@ function hexA(hex, alpha) {
   if (h.startsWith("var(")) {
     try {
       const varName = h.match(/--[\w-]+/)[0];
-      const resolved = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+      // The theme variables (--brass, --coral, --teal, ...) are declared on the app's
+      // [data-theme="light"|"dark"] wrapper div, not on <html>, so resolving against
+      // document.documentElement always comes back empty. Look up the themed element itself.
+      const themedEl = document.querySelector("[data-theme]") || document.documentElement;
+      const resolved = getComputedStyle(themedEl).getPropertyValue(varName).trim();
       if (resolved) h = resolved;
     } catch (e) { /* keep original string if resolution fails */ }
   }
