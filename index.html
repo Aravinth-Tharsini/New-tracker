@@ -111,6 +111,12 @@ button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
   to   { opacity: 1; }
 }
 
+/* Progress tab stat cards: gentle staggered fade + rise-in on load. */
+@keyframes statCardIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ===== Celebration pop-up: pops in, holds briefly, fades out on its own ===== */
 @keyframes celebrationPop {
   0%   { opacity: 0; transform: translateX(-50%) scale(0.75) translateY(-6px); }
@@ -1047,6 +1053,96 @@ function RingProgress({ pct, size = 34, color = BRASS, track }) {
     </svg>
   );
 }
+// ---- Progress tab chart components ----
+// Donut chart used for expense-by-category breakdown. data: [{ label, value, color }]
+function DonutChart({ data, size = 132, strokeWidth = 20, centerLabel, centerValue }) {
+  const total = data.reduce((s, d) => s + (Number(d.value) || 0), 0);
+  const r = (size - strokeWidth) / 2, c = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <svg width={size} height={size} style={{ flexShrink: 0 }} viewBox={`0 0 ${size} ${size}`}>
+      <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+        {total <= 0
+          ? <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={LINE} strokeWidth={strokeWidth} />
+          : data.filter((d) => (Number(d.value) || 0) > 0).map((d, i) => {
+              const frac = (Number(d.value) || 0) / total;
+              const dash = Math.max(frac * c - 2, 0);
+              const seg = <circle key={i} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={d.color}
+                strokeWidth={strokeWidth} strokeDasharray={`${dash} ${c - dash}`} strokeDashoffset={-offset}
+                strokeLinecap="round" />;
+              offset += frac * c;
+              return seg;
+            })}
+      </g>
+      <text x="50%" y="45%" textAnchor="middle" dominantBaseline="middle" fontSize={size * 0.09} fontWeight="700" fill={INK_FAINT} fontFamily={disp} style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>{centerLabel || "Total"}</text>
+      <text x="50%" y="61%" textAnchor="middle" dominantBaseline="middle" fontSize={size * 0.125} fontWeight="800" fill={INK} fontFamily={mono}>{centerValue != null ? centerValue : inr(total)}</text>
+    </svg>
+  );
+}
+// Simple trend line chart with a soft area fill. points: [{ label, value }]
+function TrendLineChart({ points, height = 96, color = BRASS }) {
+  const width = 300, pad = 6;
+  const vals = points.map((p) => Number(p.value) || 0);
+  const max = Math.max(1, ...vals), min = Math.min(0, ...vals);
+  const range = (max - min) || 1;
+  const stepX = points.length > 1 ? (width - pad * 2) / (points.length - 1) : 0;
+  const toXY = (p, i) => [pad + i * stepX, pad + (1 - ((Number(p.value) || 0) - min) / range) * (height - pad * 2)];
+  const pathD = points.map((p, i) => { const [x, y] = toXY(p, i); return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`; }).join(" ");
+  const lastXY = points.length ? toXY(points[points.length - 1], points.length - 1) : [pad, height - pad];
+  const areaD = points.length ? `${pathD} L${lastXY[0].toFixed(1)},${height - pad} L${pad},${height - pad} Z` : "";
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height, display: "block" }} preserveAspectRatio="none">
+        {points.length > 0 && <path d={areaD} fill={hexA(color, 0.14)} stroke="none" />}
+        {points.length > 1 && <path d={pathD} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+        {points.map((p, i) => { const [x, y] = toXY(p, i); return <circle key={i} cx={x} cy={y} r="2.6" fill={color} />; })}
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+        {points.map((p, i) => <span key={i} style={{ fontSize: 10.5, color: INK_FAINT, fontFamily: disp }}>{p.label}</span>)}
+      </div>
+    </div>
+  );
+}
+// 30-day consistency heatmap — small colored squares, darker = higher completion that day.
+function ConsistencyHeatmap({ days, color = BRASS }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: 4 }}>
+      {days.map((d) => (
+        <div key={d.date} title={`${d.date}: ${Math.round(d.pct)}%`} style={{
+          aspectRatio: "1", borderRadius: 4,
+          background: d.pct <= 0 ? LINE : hexA(color, Math.max(0.18, Math.min(1, d.pct / 100))),
+        }} />
+      ))}
+    </div>
+  );
+}
+// One row in the streaks list: icon tile, habit name, flame + day count.
+function StreakRow({ icon: Icon, accent, label, streak, isLast }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: isLast ? "none" : `1px solid ${LINE}` }}>
+      <div style={{ width: 32, height: 32, borderRadius: 9, background: hexA(accent, 0.14), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <Icon size={16} color={accent} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 3, fontFamily: mono, fontWeight: 800, color: "#FF9500", fontSize: 14, flexShrink: 0 }}>
+        <Flame size={14} color="#FF9500" /> {streak}
+      </div>
+    </div>
+  );
+}
+// A single life-area card: icon, label, ring progress, done/total count.
+function AreaRingCard({ icon: Icon, accent, label, pct, done, total }) {
+  return (
+    <Card style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "14px 10px" }}>
+      <div style={{ width: 30, height: 30, borderRadius: 9, background: hexA(accent, 0.14), display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon size={15} color={accent} />
+      </div>
+      <RingProgress pct={pct} size={54} color={accent} />
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, textAlign: "center" }}>{label}</div>
+      <div style={{ fontSize: 11, color: INK_FAINT, fontFamily: mono }}>{done}/{total}</div>
+    </Card>
+  );
+}
 // A single "Upcoming attention" list row: colored icon tile, title/subtitle, and a trailing
 // badge (count pill or % ring) + chevron. Shared by the Home page's attention list.
 function AttentionRow({ icon: Icon, accent, title, subtitle, badge, onClick, isLast }) {
@@ -1216,6 +1312,7 @@ function LifeTracker() {
   const [insightDate, setInsightDate] = useState(dateKey());
   const [insightMonth, setInsightMonth] = useState(monthKey());
   const [insightYear, setInsightYear] = useState(String(new Date().getFullYear()));
+  const [progressSubTab, setProgressSubTab] = useState("overview");
   const [activeTab, setActiveTab] = useState(null);
   const [expandedDailyCategory, setExpandedDailyCategory] = useState(null);
   // Set when a reminder is tapped from Home's "Upcoming Attention" so the Daily tab can scroll to and
@@ -5572,6 +5669,50 @@ function LifeTracker() {
         const fmtTravel = (t) => `${t.fromLocation || ""}${t.fromLocation && t.toLocation ? " → " : ""}${t.toLocation || t.title || "Trip"}`;
         const fmtShopping = (l) => `${l.shopName || "Shopping"}${l.location ? ` (${l.location})` : ""}`;
         const fmtPeriod = insightPeriod === "day" ? new Date(insightDate).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : insightPeriod === "month" ? monthLabel(insightMonth) : insightYear;
+
+        // ---- Redesigned Progress tab: extra stats/charts on top of the existing period math above ----
+        const savingsRate = periodIncome > 0 ? Math.round((periodSavings / periodIncome) * 100) : null;
+        const donutData = byGroup.map(({ g, amount }) => ({ label: g, value: amount, color: EXPENSE_GROUP_COLOR[g] || "#8E8E93" }));
+        const biggestExpense = periodExpenses.slice().sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))[0];
+
+        // Trailing 6-month income/expense trend, independent of the selected period, for a stable "shape over time" view.
+        const trendMonthKeys = Array.from({ length: 6 }, (_, i) => { const d = new Date(); d.setMonth(d.getMonth() - (5 - i)); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; });
+        const trendSeries = trendMonthKeys.map((mk) => {
+          const income = Number(financeMonthly[mk]?.income) || 0;
+          const expense = expenseEntries.filter((e) => e.date.slice(0, 7) === mk).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+          return { label: monthLabel(mk).split(" ")[0], income, expense, savings: income - expense };
+        });
+
+        // Per-life-area completion (My Day / Career / Health / Routine), same simplified day-count
+        // math as the overall Completion stat above, just scoped to each category.
+        const AREA_ICON = { myday: Users, career: Briefcase, health: HeartPulse, activity: Activity };
+        const AREA_ACCENT = { myday: "#6D28D9", career: "#2563EB", health: "#DB2777", activity: "#4338CA" };
+        const areaStats = ["myday", "career", "health", "activity"].map((catId) => {
+          const itemsInCat = dailyItems.filter((i) => i.category === catId);
+          const totalForCat = itemsInCat.length * (insightPeriod === "day" ? 1 : Math.max(1, periodDays.length));
+          const doneForCat = periodDays.reduce((sum, [, log]) => sum + itemsInCat.filter((i) => log && log[i.id] && log[i.id].status === "done").length, 0);
+          const label = DAILY_TAB_CATEGORY_DEFS.find((c) => c.id === catId)?.label || catId;
+          return { id: catId, label, icon: AREA_ICON[catId], accent: AREA_ACCENT[catId], pct: totalForCat ? Math.round((doneForCat / totalForCat) * 100) : 0, done: doneForCat, total: totalForCat };
+        });
+
+        // Current streaks across all habit-like items (My Day / Career / Health / Routine), longest first.
+        const streakList = dailyItems
+          .filter((i) => ["myday", "career", "health", "activity"].includes(i.category) && i.type !== "expense")
+          .map((i) => ({ id: i.id, name: i.name || "Untitled", streak: computeStreak(dailyLogs, i.id), icon: AREA_ICON[i.category] || Activity, accent: AREA_ACCENT[i.category] || BRASS }))
+          .sort((a, b) => b.streak - a.streak)
+          .filter((x) => x.streak > 0)
+          .slice(0, 6);
+
+        // Last 30 days of overall completion, for the consistency heatmap.
+        const heatmapDays = Array.from({ length: 30 }, (_, i) => {
+          const d = new Date(); d.setDate(d.getDate() - (29 - i));
+          const k = dateKey(d);
+          const log = dailyLogs[k] || {};
+          const doneN = Object.values(log).filter((r) => r && r.status === "done").length;
+          const totalN = dailyItems.filter((it) => it.type !== "expense").length;
+          return { date: k, pct: totalN ? (doneN / totalN) * 100 : 0 };
+        });
+
         return (
         <div key="analysis-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
           <Card style={{ marginBottom: 12 }}>
@@ -5617,23 +5758,105 @@ function LifeTracker() {
             {insightPeriod === "year" && <TextField type="number" value={insightYear} onChange={(e)=>setInsightYear(e.target.value.slice(0,4))} placeholder="2026" />}
           </Card>
 
-          <SectionLabel>{fmtPeriod} overview</SectionLabel>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Income</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4}}>{inr(periodIncome)}</div></Card>
-            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Expense</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:CORAL}}>{inr(periodExpense)}</div></Card>
-            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Savings</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:periodSavings>=0?TEAL:CORAL}}>{inr(periodSavings)}</div></Card>
-            <Card><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Completion</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:BRASS}}>{completionPct}%</div></Card>
+          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+            {[["overview", "Overview", TrendingUp], ["finance", "Finance", Wallet], ["habits", "Habits", Flame]].map(([id, label, Icon]) => (
+              <ChipButton key={id} active={progressSubTab === id} onClick={() => setProgressSubTab(id)} label={label} icon={Icon} />
+            ))}
           </div>
 
-          <SectionLabel>Expense breakdown</SectionLabel>
-          <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>{byGroup.length ? byGroup.map(({g,amount})=><Card key={g} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:14}}>{g}</span><span style={{fontFamily:mono,fontWeight:700}}>{inr(amount)}</span></Card>) : <Card><span style={{color:INK_FAINT,fontSize:14}}>No expense data for this period.</span></Card>}</div>
-
-          {insightPeriod === "year" && <>
-            <SectionLabel>Yearly growth comparison</SectionLabel>
-            <Card style={{marginBottom:8}}><div style={{fontSize:13,color:INK_FAINT,marginBottom:8}}>{insightYear} compared with {previousYear}</div>
-              {[['Income growth',incomeGrowth],['Savings growth',savingsGrowth],['Activity growth',activityGrowth]].map(([label,val])=><div key={label} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:`1px solid ${LINE}`}}><span>{label}</span><span style={{fontFamily:mono,fontWeight:700,color:val===null?INK_FAINT:val>=0?TEAL:CORAL}}>{val===null?'No comparison data':`${val>=0?'↑':'↓'} ${Math.abs(val)}%`}</span></div>)}
+          {progressSubTab === "overview" && <>
+            <SectionLabel>{fmtPeriod} overview</SectionLabel>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+              <Card style={{ animation: "statCardIn .35s ease .02s both" }}><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Income</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4}}>{inr(periodIncome)}</div></Card>
+              <Card style={{ animation: "statCardIn .35s ease .06s both" }}><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Expense</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:CORAL}}>{inr(periodExpense)}</div></Card>
+              <Card style={{ animation: "statCardIn .35s ease .10s both" }}><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Savings</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:periodSavings>=0?TEAL:CORAL}}>{inr(periodSavings)}</div></Card>
+              <Card style={{ animation: "statCardIn .35s ease .14s both" }}><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Completion</div><div style={{fontFamily:mono,fontSize:19,fontWeight:700,marginTop:4,color:BRASS}}>{completionPct}%</div></Card>
+            </div>
+            <Card style={{ marginBottom: 12, animation: "statCardIn .35s ease .18s both" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div><div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT}}>Savings rate</div><div style={{fontSize:12,color:INK_FAINT,marginTop:2}}>Of income kept as savings</div></div>
+                <div style={{fontFamily:mono,fontSize:22,fontWeight:800,color:savingsRate===null?INK_FAINT:savingsRate>=0?TEAL:CORAL}}>{savingsRate===null?"—":`${savingsRate}%`}</div>
+              </div>
             </Card>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[[previousYear,prevYearStats],[insightYear,thisYearStats]].map(([yr,st])=><Card key={yr}><div style={{fontWeight:700,marginBottom:6}}>{yr}</div><div style={{fontSize:12,color:INK_DIM}}>Income {inr(st.income)}</div><div style={{fontSize:12,color:INK_DIM,marginTop:4}}>Expense {inr(st.expense)}</div><div style={{fontSize:12,color:TEAL,marginTop:4}}>Savings {inr(st.savings)}</div><div style={{fontSize:12,color:BRASS,marginTop:4}}>Activities {st.done}</div></Card>)}</div>
+
+            <SectionLabel>Savings trend (6 months)</SectionLabel>
+            <Card style={{ marginBottom: 12 }}>
+              <TrendLineChart points={trendSeries.map((t) => ({ label: t.label, value: t.savings }))} color={TEAL} height={80} />
+            </Card>
+
+            {insightPeriod === "year" && <>
+              <SectionLabel>Yearly growth comparison</SectionLabel>
+              <Card style={{marginBottom:8}}><div style={{fontSize:13,color:INK_FAINT,marginBottom:8}}>{insightYear} compared with {previousYear}</div>
+                {[['Income growth',incomeGrowth],['Savings growth',savingsGrowth],['Activity growth',activityGrowth]].map(([label,val])=><div key={label} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:`1px solid ${LINE}`}}><span>{label}</span><span style={{fontFamily:mono,fontWeight:700,color:val===null?INK_FAINT:val>=0?TEAL:CORAL}}>{val===null?'No comparison data':`${val>=0?'↑':'↓'} ${Math.abs(val)}%`}</span></div>)}
+              </Card>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[[previousYear,prevYearStats],[insightYear,thisYearStats]].map(([yr,st])=><Card key={yr}><div style={{fontWeight:700,marginBottom:6}}>{yr}</div><div style={{fontSize:12,color:INK_DIM}}>Income {inr(st.income)}</div><div style={{fontSize:12,color:INK_DIM,marginTop:4}}>Expense {inr(st.expense)}</div><div style={{fontSize:12,color:TEAL,marginTop:4}}>Savings {inr(st.savings)}</div><div style={{fontSize:12,color:BRASS,marginTop:4}}>Activities {st.done}</div></Card>)}</div>
+            </>}
+          </>}
+
+          {progressSubTab === "finance" && <>
+            <SectionLabel>Expense breakdown</SectionLabel>
+            <Card style={{ marginBottom: 12 }}>
+              {byGroup.length ? <>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+                  <DonutChart data={donutData} centerLabel="Spent" centerValue={inr(periodExpense)} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {byGroup.map(({ g, amount }) => (
+                    <div key={g} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${LINE}` }}>
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: EXPENSE_GROUP_COLOR[g] || "#8E8E93", flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: 14 }}>{g}</span>
+                      <span style={{ fontSize: 12.5, color: INK_FAINT }}>{periodExpense ? Math.round((amount / periodExpense) * 100) : 0}%</span>
+                      <span style={{ fontFamily: mono, fontWeight: 700 }}>{inr(amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </> : <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "8px 0" }}>No expense data for this period. Log an expense to see it broken down here.</div>}
+            </Card>
+
+            {biggestExpense && (
+              <Card style={{ marginBottom: 12 }}>
+                <div style={{fontSize:11,textTransform:"uppercase",color:INK_FAINT,marginBottom:6}}>Biggest expense this period</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 600 }}>{biggestExpense.group || "Expense"}{biggestExpense.note ? ` · ${biggestExpense.note}` : ""}</div>
+                  <div style={{ fontFamily: mono, fontWeight: 800, color: CORAL }}>{inr(Number(biggestExpense.amount) || 0)}</div>
+                </div>
+              </Card>
+            )}
+
+            <SectionLabel>Income vs expense (6 months)</SectionLabel>
+            <Card style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", gap: 14, marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: INK_FAINT }}><span style={{width:8,height:8,borderRadius:"50%",background:TEAL}}/> Income</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: INK_FAINT }}><span style={{width:8,height:8,borderRadius:"50%",background:CORAL}}/> Expense</div>
+              </div>
+              <TrendLineChart points={trendSeries.map((t) => ({ label: t.label, value: t.income }))} color={TEAL} height={80} />
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${LINE}` }}>
+                <TrendLineChart points={trendSeries.map((t) => ({ label: t.label, value: t.expense }))} color={CORAL} height={80} />
+              </div>
+            </Card>
+          </>}
+
+          {progressSubTab === "habits" && <>
+            <SectionLabel>Life areas — {fmtPeriod}</SectionLabel>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+              {areaStats.map((a) => <AreaRingCard key={a.id} icon={a.icon} accent={a.accent} label={a.label} pct={a.pct} done={a.done} total={a.total} />)}
+            </div>
+
+            <SectionLabel>Current streaks</SectionLabel>
+            <Card style={{ marginBottom: 12 }}>
+              {streakList.length ? streakList.map((s, i) => (
+                <StreakRow key={s.id} icon={s.icon} accent={s.accent} label={s.name} streak={s.streak} isLast={i === streakList.length - 1} />
+              )) : <div style={{ color: INK_FAINT, fontSize: 14, textAlign: "center", padding: "6px 0" }}>No active streaks yet — mark a habit done a couple of days in a row to start one.</div>}
+            </Card>
+
+            <SectionLabel>Last 30 days</SectionLabel>
+            <Card style={{ marginBottom: 12 }}>
+              <ConsistencyHeatmap days={heatmapDays} color={BRASS} />
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: INK_FAINT }}>
+                <span>{heatmapDays[0]?.date}</span>
+                <span>Today</span>
+              </div>
+            </Card>
           </>}
 
         </div>
