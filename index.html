@@ -1109,6 +1109,35 @@ function TrendLineChart({ points, height = 96, color = BRASS }) {
     </div>
   );
 }
+// Side-by-side grouped bars for comparing two series per period (e.g. income vs expense per month).
+function GroupedBarChart({ points, colorA = TEAL, colorB = CORAL, height = 96 }) {
+  const width = 300, pad = 6, groupGap = 10, barGap = 3;
+  const max = Math.max(1, ...points.flatMap((p) => [Number(p.a) || 0, Number(p.b) || 0]));
+  const groupW = points.length ? (width - pad * 2 - groupGap * (points.length - 1)) / points.length : 0;
+  const barW = Math.max(6, (groupW - barGap) / 2);
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height, display: "block" }} preserveAspectRatio="none">
+        <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke={LINE} strokeWidth="1" />
+        {points.map((p, i) => {
+          const gx = pad + i * (groupW + groupGap);
+          const aVal = Number(p.a) || 0, bVal = Number(p.b) || 0;
+          const aH = Math.max(2, (aVal / max) * (height - pad * 2));
+          const bH = Math.max(2, (bVal / max) * (height - pad * 2));
+          return (
+            <g key={i}>
+              <rect x={gx} y={height - pad - aH} width={barW} height={aH} rx={3} fill={colorA} />
+              <rect x={gx + barW + barGap} y={height - pad - bH} width={barW} height={bH} rx={3} fill={colorB} />
+            </g>
+          );
+        })}
+      </svg>
+      <div style={{ display: "flex", marginTop: 4 }}>
+        {points.map((p, i) => <span key={i} style={{ flex: 1, textAlign: "center", fontSize: 10.5, color: INK_FAINT, fontFamily: disp }}>{p.label}</span>)}
+      </div>
+    </div>
+  );
+}
 // Bar-style month-over-month comparison (used where a bar chart reads clearer than a line,
 // e.g. the Overview savings trend). Bars below zero automatically switch to negativeColor.
 function TrendBarChart({ points, height = 96, color = BRASS, negativeColor }) {
@@ -5949,14 +5978,11 @@ function LifeTracker() {
 
             <SectionLabel>Income vs expense (6 months)</SectionLabel>
             <Card style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", gap: 14, marginBottom: 6 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: INK_FAINT }}><span style={{width:8,height:8,borderRadius:"50%",background:TEAL}}/> Income</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: INK_FAINT }}><span style={{width:8,height:8,borderRadius:"50%",background:CORAL}}/> Expense</div>
+              <div style={{ display: "flex", gap: 14, marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: INK_FAINT }}><span style={{width:8,height:8,borderRadius:2,background:TEAL}}/> Income</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: INK_FAINT }}><span style={{width:8,height:8,borderRadius:2,background:CORAL}}/> Expense</div>
               </div>
-              <TrendLineChart points={trendSeries.map((t) => ({ label: t.label, value: t.income }))} color={TEAL} height={80} />
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${LINE}` }}>
-                <TrendLineChart points={trendSeries.map((t) => ({ label: t.label, value: t.expense }))} color={CORAL} height={80} />
-              </div>
+              <GroupedBarChart points={trendSeries.map((t) => ({ label: t.label, a: t.income, b: t.expense }))} colorA={TEAL} colorB={CORAL} height={100} />
             </Card>
           </>}
 
