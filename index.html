@@ -1289,6 +1289,14 @@ function LifeTracker() {
   // All persisted state above is now hydrated synchronously (lazy useState initializers), so
   // there's no more async gap to wait out — loaded can simply start true.
   const [loaded, setLoaded] = useState(true);
+  // Startup splash: rotating logo arcs on launch, fades out smoothly once the app is ready.
+  const [splashVisible, setSplashVisible] = useState(true);
+  const [splashHiding, setSplashHiding] = useState(false);
+  useEffect(() => {
+    const hideTimer = setTimeout(() => setSplashHiding(true), 1100);
+    const removeTimer = setTimeout(() => setSplashVisible(false), 1600);
+    return () => { clearTimeout(hideTimer); clearTimeout(removeTimer); };
+  }, []);
   const [now, setNow] = useState(new Date());
   const notifiedRef = useRef({});
   const today = dateKey();
@@ -3368,6 +3376,45 @@ function LifeTracker() {
           .planner-cat-arrow { width: 36px; height: 36px; }
         }
       `}</style>
+
+      {splashVisible && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 20000,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          background: "linear-gradient(135deg, #8B5CF6 0%, #6D28D9 55%, #4338CA 100%)",
+          opacity: splashHiding ? 0 : 1,
+          transform: splashHiding ? "scale(1.05)" : "scale(1)",
+          transition: "opacity .55s ease, transform .55s ease",
+          pointerEvents: splashHiding ? "none" : "auto",
+        }}>
+          <style>{`
+            @keyframes splashArcSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            @keyframes splashCheckPop { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+            @keyframes splashLabelFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+            .splash-arc-group { transform-origin: 100px 100px; animation: splashArcSpin 1.6s linear infinite; }
+            .splash-check-group { transform-origin: 100px 100px; animation: splashCheckPop .6s cubic-bezier(.22,.8,.25,1) both; }
+            .splash-label { animation: splashLabelFade .6s ease .25s both; }
+            @media (prefers-reduced-motion: reduce) {
+              .splash-arc-group { animation-duration: 3.2s; }
+            }
+          `}</style>
+          <svg width="120" height="120" viewBox="0 0 200 200" style={{ overflow: "visible" }}>
+            <g className="splash-arc-group">
+              <circle cx="100" cy="100" r="88" fill="none" stroke="#4ADE80" strokeWidth="13" strokeLinecap="round" strokeDasharray="107.5 445.4" transform="rotate(-90 100 100)" />
+              <circle cx="100" cy="100" r="88" fill="none" stroke="#10B981" strokeWidth="13" strokeLinecap="round" strokeDasharray="107.5 445.4" transform="rotate(0 100 100)" />
+              <circle cx="100" cy="100" r="88" fill="none" stroke="#3B82F6" strokeWidth="13" strokeLinecap="round" strokeDasharray="107.5 445.4" transform="rotate(90 100 100)" />
+              <circle cx="100" cy="100" r="88" fill="none" stroke="#F59E0B" strokeWidth="13" strokeLinecap="round" strokeDasharray="107.5 445.4" transform="rotate(180 100 100)" />
+            </g>
+            <g className="splash-check-group">
+              <circle cx="100" cy="100" r="54" fill="none" stroke="#FFFFFF" strokeWidth="13" strokeLinecap="round" strokeDasharray="283 57" transform="rotate(125 100 100)" opacity="0.95" />
+              <path d="M76,101 L92,117 L126,80" fill="none" stroke="#FFFFFF" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
+            </g>
+          </svg>
+          <div className="splash-label" style={{ marginTop: 18, color: "#FFFFFF", fontFamily: disp, fontSize: 15, fontWeight: 600, letterSpacing: "0.02em", opacity: 0.92 }}>
+            Life Tracker
+          </div>
+        </div>
+      )}
 
       <div className="app-header-bar" style={{ padding: "calc(16px + env(safe-area-inset-top)) 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span className="app-header-title" style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
