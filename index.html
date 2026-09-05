@@ -372,6 +372,7 @@ import {
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, History, Home as HomeIcon,
   CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper, Trophy,
   Fuel, Store, MessageSquare, Sunrise, Cookie, PiggyBank, Percent,
+  Star, XCircle, Brain, ClipboardCheck, GraduationCap,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -642,6 +643,24 @@ function computeStreak(dailyLogs, itemId) {
     else break;
   }
   return streak;
+}
+// Longest-ever consecutive "done" run for an item, scanning its full log history
+// (distinct from computeStreak, which only reports the current active streak).
+function longestStreakEver(dailyLogs, itemId) {
+  const days = Object.keys(dailyLogs).sort();
+  let best = 0, cur = 0, prevDate = null;
+  for (const d of days) {
+    const rec = dailyLogs[d] && dailyLogs[d][itemId];
+    if (rec && rec.status === "done") {
+      if (prevDate) {
+        const diffDays = Math.round((new Date(d) - new Date(prevDate)) / 86400000);
+        cur = diffDays === 1 ? cur + 1 : 1;
+      } else cur = 1;
+      best = Math.max(best, cur);
+      prevDate = d;
+    }
+  }
+  return best;
 }
 function toCSV(rows) {
   if (!rows.length) return "";
@@ -1084,7 +1103,7 @@ function TravelModeIcon({ mode, size = 18, color = BRASS, style }) {
   return <Icon size={size} color={color} style={style} />;
 }
 
-function Card({ children, style }) { return <div style={{ background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 14, padding: "14px 16px", ...style }}>{children}</div>; }
+function Card({ children, style, className }) { return <div className={className} style={{ background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 14, padding: "14px 16px", ...style }}>{children}</div>; }
 // Small circular percentage ring used for goal-progress badges (e.g. "68% completed").
 function RingProgress({ pct, size = 34, color = BRASS, track }) {
   const r = (size - 5) / 2, c = 2 * Math.PI * r;
@@ -1145,6 +1164,29 @@ function TrendLineChart({ points, height = 96, color = BRASS }) {
       </svg>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
         {points.map((p, i) => <span key={i} style={{ fontSize: 10.5, color: INK_FAINT, fontFamily: disp }}>{p.label}</span>)}
+      </div>
+    </div>
+  );
+}
+// Two-series line chart with dots, used for Income vs Expense over time (income/expense per period).
+function DualLineChart({ points, colorA = TEAL, colorB = CORAL, labelA = "Income", labelB = "Expense", height = 110 }) {
+  const width = 300, pad = 8;
+  const vals = points.flatMap((p) => [Number(p.a) || 0, Number(p.b) || 0]);
+  const max = Math.max(1, ...vals), min = Math.min(0, ...vals);
+  const range = (max - min) || 1;
+  const stepX = points.length > 1 ? (width - pad * 2) / (points.length - 1) : 0;
+  const toY = (v) => pad + (1 - (v - min) / range) * (height - pad * 2);
+  const pathFor = (key) => points.map((p, i) => `${i === 0 ? "M" : "L"}${(pad + i * stepX).toFixed(1)},${toY(Number(p[key]) || 0).toFixed(1)}`).join(" ");
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height, display: "block" }} preserveAspectRatio="none">
+        {points.length > 1 && <path d={pathFor("a")} fill="none" stroke={colorA} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+        {points.length > 1 && <path d={pathFor("b")} fill="none" stroke={colorB} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+        {points.map((p, i) => <circle key={"a"+i} cx={pad + i * stepX} cy={toY(Number(p.a) || 0)} r="2.8" fill={colorA} />)}
+        {points.map((p, i) => <circle key={"b"+i} cx={pad + i * stepX} cy={toY(Number(p.b) || 0)} r="2.8" fill={colorB} />)}
+      </svg>
+      <div style={{ display: "flex", marginTop: 4 }}>
+        {points.map((p, i) => <span key={i} style={{ flex: 1, textAlign: "center", fontSize: 10.5, color: INK_FAINT, fontFamily: disp }}>{p.label}</span>)}
       </div>
     </div>
   );
@@ -1221,16 +1263,37 @@ function TrendBarChart({ points, height = 96, color = BRASS, negativeColor }) {
     </div>
   );
 }
-// 30-day consistency heatmap — small colored squares, darker = higher completion that day.
+// 30-day consistency heatmap — small colored squares, darker = higher completion that day,
+// laid out as calendar weeks (Mon-Sun columns, one row per week) with weekday initials on
+// top and a Less→More legend underneath, mirroring a GitHub-style contributions grid.
 function ConsistencyHeatmap({ days, color = BRASS }) {
+  const WEEKDAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
+  // Pad front/back so the grid aligns to full Mon-Sun weeks.
+  const firstDow = days.length ? (new Date(days[0].date).getDay() + 6) % 7 : 0;
+  const lastDow = days.length ? (new Date(days[days.length - 1].date).getDay() + 6) % 7 : 0;
+  const padded = [...Array(firstDow).fill(null), ...days, ...Array(6 - lastDow).fill(null)];
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: 4 }}>
-      {days.map((d) => (
-        <div key={d.date} title={`${d.date}: ${Math.round(d.pct)}%`} style={{
-          aspectRatio: "1", borderRadius: 4,
-          background: d.pct <= 0 ? LINE : hexA(color, Math.max(0.18, Math.min(1, d.pct / 100))),
-        }} />
-      ))}
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 5 }}>
+        {WEEKDAY_LETTERS.map((l, i) => (
+          <div key={i} style={{ fontSize: 9, color: INK_FAINT, textAlign: "center", fontWeight: 700 }}>{l}</div>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        {padded.map((d, i) => d ? (
+          <div key={d.date} title={`${d.date}: ${Math.round(d.pct)}%`} style={{
+            aspectRatio: "1", borderRadius: 4,
+            background: d.pct <= 0 ? LINE : hexA(color, Math.max(0.18, Math.min(1, d.pct / 100))),
+          }} />
+        ) : <div key={"pad" + i} style={{ aspectRatio: "1" }} />)}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5, marginTop: 8 }}>
+        <span style={{ fontSize: 10, color: INK_FAINT }}>Less</span>
+        {[0.12, 0.32, 0.55, 0.78, 1].map((op, i) => (
+          <div key={i} style={{ width: 10, height: 10, borderRadius: 3, background: op <= 0.12 ? LINE : hexA(color, op) }} />
+        ))}
+        <span style={{ fontSize: 10, color: INK_FAINT }}>More</span>
+      </div>
     </div>
   );
 }
@@ -1263,6 +1326,20 @@ function AreaRingCard({ icon: Icon, accent, label, pct, done, total }) {
       <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, textAlign: "center" }}>{label}</div>
       <div style={{ fontSize: 11, color: INK_FAINT, fontFamily: mono }}>{done}/{total}</div>
     </Card>
+  );
+}
+// A single life-area row: icon, label, horizontal progress bar, trailing %. Used on the
+// Habits tab's "Life Areas Progress" list.
+function AreaBarRow({ icon: Icon, accent, label, pct, isLast }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: isLast ? "none" : `1px solid ${LINE}` }}>
+      <Icon size={15} color={accent} style={{ flexShrink: 0 }} />
+      <div style={{ fontSize: 13, fontWeight: 600, color: INK, width: 84, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
+      <div style={{ flex: 1, height: 7, borderRadius: 999, background: PANEL_2, overflow: "hidden" }}>
+        <div style={{ width: `${Math.min(100, Math.max(0, pct))}%`, height: "100%", borderRadius: 999, background: accent }} />
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 800, color: INK_DIM, fontFamily: mono, width: 32, textAlign: "right", flexShrink: 0 }}>{pct}%</div>
+    </div>
   );
 }
 // A single "Upcoming attention" list row: colored icon tile, title/subtitle, and a trailing
@@ -5934,6 +6011,58 @@ function LifeTracker() {
         // expense is unfavorable, so the color is inverted relative to the savings delta above.
         const expenseDelta = trendPrev && trendLast ? (trendPrev.expense !== 0 ? Math.round(((trendLast.expense - trendPrev.expense) / Math.abs(trendPrev.expense)) * 100) : (trendLast.expense === trendPrev.expense ? 0 : (trendLast.expense > trendPrev.expense ? 100 : -100))) : null;
 
+        // ---- Extra derived stats for the mockup-matched Overview / Habits layouts ----
+        const nonExpenseItems = dailyItems.filter((i) => i.type !== "expense");
+        const relevantHabitItems = dailyItems.filter((i) => ["myday", "career", "health", "activity"].includes(i.category) && i.type !== "expense");
+        // Time actually logged for the selected period (sum of durationMin on completed entries).
+        const periodTimeSpentMin = periodDays.reduce((sum, [, log]) => sum + Object.values(log || {})
+          .filter((r) => r && r.status === "done").reduce((s, r) => s + (Number(r.durationMin) || 0), 0), 0);
+        // In-progress / not-done split for the period, for the Overview "Activity Summary" donut.
+        const periodInProgressCount = periodDays.reduce((sum, [, log]) => sum + nonExpenseItems.filter((i) => log && log[i.id] && log[i.id].status === "in_progress").length, 0);
+        const periodNotDoneCount = Math.max(0, totalTracked - doneCount - periodInProgressCount);
+        const activitySummaryData = [
+          { label: "Completed", value: doneCount, color: TEAL },
+          { label: "In Progress", value: periodInProgressCount, color: BRASS },
+          { label: "Not Done", value: periodNotDoneCount, color: "#FF9500" },
+        ];
+        // Fixed Week/Month/Year-to-date "At a Glance" stats, independent of the Day/Month/Year
+        // selector above (mirrors the reference design's always-visible glance row).
+        const realToday = new Date();
+        const realTodayStr = dateKey(realToday);
+        const glanceStart = (d) => Math.max(1, Math.floor((realToday - d) / 86400000) + 1);
+        const wkStart = new Date(realToday); wkStart.setDate(realToday.getDate() - ((realToday.getDay() + 6) % 7));
+        const monthStart = new Date(realToday.getFullYear(), realToday.getMonth(), 1);
+        const yearStart = new Date(realToday.getFullYear(), 0, 1);
+        const glanceAgg = (start) => {
+          let done = 0, timeMin = 0;
+          const startStr = dateKey(start);
+          Object.entries(dailyLogs).forEach(([d, log]) => {
+            if (d < startStr || d > realTodayStr) return;
+            nonExpenseItems.forEach((it) => { const rec = log[it.id]; if (rec && rec.status === "done") { done += 1; timeMin += Number(rec.durationMin) || 0; } });
+          });
+          return { done, timeMin };
+        };
+        const weekAgg = glanceAgg(wkStart), monthAgg = glanceAgg(monthStart), yearAgg = glanceAgg(yearStart);
+        const weekTotal = nonExpenseItems.length * glanceStart(wkStart);
+        const monthTotal = nonExpenseItems.length * glanceStart(monthStart);
+        const yearTotal = nonExpenseItems.length * glanceStart(yearStart);
+        const glanceStats = [
+          { key: "week", label: "Week", pct: weekTotal ? Math.round(weekAgg.done / weekTotal * 100) : 0, done: weekAgg.done, total: weekTotal, icon: CalendarDays },
+          { key: "month", label: "Month", pct: monthTotal ? Math.round(monthAgg.done / monthTotal * 100) : 0, done: monthAgg.done, total: monthTotal, icon: CalendarDays },
+          { key: "year", label: "Year", pct: yearTotal ? Math.round(yearAgg.done / yearTotal * 100) : 0, done: yearAgg.done, total: yearTotal, icon: CalendarDays },
+          { key: "time", label: "Time This Week", value: fmtDuration(weekAgg.timeMin), icon: Clock },
+        ];
+        // Top current streaks presented as "achievements" (no separate achievements log exists,
+        // so this surfaces the most notable ongoing consistency instead).
+        const achievementIcons = [Trophy, Star, Flame];
+        const achievements = streakList.slice(0, 3).map((s, i) => ({ ...s, rankIcon: achievementIcons[i] || Flame }));
+        // Best-ever streak across all habit-like items, and how many were missed today specifically
+        // (today, not the selected period, since "missed" is inherently a daily concept).
+        const bestStreakEver = relevantHabitItems.reduce((best, i) => Math.max(best, longestStreakEver(dailyLogs, i.id)), 0);
+        const currentTopStreak = streakList[0]?.streak || 0;
+        const todayLogForMissed = dailyLogs[realTodayStr] || {};
+        const missedToday = relevantHabitItems.filter((i) => !(todayLogForMissed[i.id] && todayLogForMissed[i.id].status === "done")).length;
+
         return (
         <div key="analysis-page" className="page-smooth-enter progress-shell">
           <div className="progress-hero">
@@ -5986,20 +6115,79 @@ function LifeTracker() {
               <div style={{fontSize:11,color:INK_FAINT}}>At a glance</div>
             </div>
 
+            {/* Day/period progress ring + time spent, echoing the reference "Day Progress" card. */}
+            <Card style={{marginBottom:12,padding:14}}>
+              <div style={{display:"flex",alignItems:"center",gap:16}}>
+                <RingProgress pct={completionPct} size={92} color={BRASS} />
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:15,fontWeight:800,color:INK}}>
+                    {insightPeriod === "day" ? "Day" : insightPeriod === "month" ? "Month" : "Year"} Progress
+                  </div>
+                  <div style={{fontSize:12,color:INK_DIM,marginTop:2}}>{doneCount} of {totalTracked} activities completed</div>
+                  <div style={{display:"flex",alignItems:"center",gap:5,marginTop:8,fontSize:12,color:INK_DIM}}>
+                    <Clock size={13} color={INK_FAINT} />
+                    <span>Time Spent</span>
+                  </div>
+                  <div style={{fontSize:15,fontWeight:800,color:INK,fontFamily:mono}}>{fmtDuration(periodTimeSpentMin)}</div>
+                </div>
+              </div>
+              <div style={{marginTop:10,fontSize:12.5,fontWeight:700,color:TEAL}}>
+                {completionPct >= 80 ? "Great work! Keep going 🚀" : completionPct >= 50 ? "Good progress, keep it up 💪" : "Let's get moving today ⚡"}
+              </div>
+            </Card>
+
+            <div className="progress-section-head"><div className="progress-section-title">At a Glance</div></div>
             <div className="progress-stat-grid">
-              {overviewStats.map((s,i)=>(
+              {glanceStats.map((s,i)=>(
                 <Card key={s.key} className="progress-stat" style={{animation:`statCardIn .35s ease ${i*.04}s both`}}>
-                  <div className="progress-stat-icon" style={{background:s.iconBg}}>
-                    <s.icon size={18} color={s.iconColor} strokeWidth={2} />
+                  <div className="progress-stat-icon" style={{background:hexA(BRASS,0.14)}}>
+                    <s.icon size={17} color={BRASS} strokeWidth={2} />
                   </div>
                   <div style={{minWidth:0}}>
                     <div className="progress-stat-label">{s.label}</div>
-                    <div className="progress-stat-value" style={{color:s.valueColor||INK}}>{s.value}</div>
-                    <div className="progress-stat-sub">{s.sub}</div>
+                    {s.value ? (
+                      <div className="progress-stat-value" style={{color:INK}}>{s.value}</div>
+                    ) : (<>
+                      <div className="progress-stat-value" style={{color:INK}}>{s.pct}%</div>
+                      <div className="progress-stat-sub">{s.done} of {s.total}</div>
+                    </>)}
                   </div>
                 </Card>
               ))}
             </div>
+
+            <div className="progress-section-head">
+              <div className="progress-section-title">Recent Achievements</div>
+            </div>
+            <Card style={{marginBottom:12,padding:"5px 12px"}}>
+              {achievements.length ? achievements.map((a,i)=>(
+                <div key={a.id} className="progress-list-row">
+                  <div style={{width:32,height:32,borderRadius:9,background:hexA("#FF9500",0.14),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <a.rankIcon size={16} color="#FF9500" />
+                  </div>
+                  <div className="progress-list-main">
+                    <div className="progress-list-title">{a.name}</div>
+                    <div className="progress-list-meta">{a.streak}-day streak</div>
+                  </div>
+                </div>
+              )) : <div className="progress-empty">No streaks yet — complete a habit a couple of days in a row to earn your first achievement.</div>}
+            </Card>
+
+            <div className="progress-section-head"><div className="progress-section-title">Activity Summary</div></div>
+            <Card style={{marginBottom:12,padding:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:16}}>
+                <DonutChart data={activitySummaryData} size={112} strokeWidth={16} centerLabel="Total" centerValue={String(totalTracked)} />
+                <div style={{flex:1,minWidth:0}}>
+                  {activitySummaryData.map((d)=>(
+                    <div key={d.label} style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}>
+                      <span style={{width:9,height:9,borderRadius:"50%",background:d.color,flexShrink:0}} />
+                      <span style={{fontSize:12.5,color:INK_DIM,flex:1}}>{d.label}</span>
+                      <span style={{fontSize:12.5,fontWeight:800,color:INK,fontFamily:mono}}>{d.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
 
             <div className="progress-section-head">
               <div className="progress-section-title">Savings trend</div>
@@ -6061,6 +6249,46 @@ function LifeTracker() {
           </>}
 
           {progressSubTab === "finance" && <>
+            <div className="progress-section-head"><div className="progress-section-title">{fmtPeriod}</div></div>
+            <div className="progress-stat-grid" style={{gridTemplateColumns:"1fr 1fr 1fr"}}>
+              <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
+                <div className="progress-stat-icon" style={{background:"rgba(34,197,94,0.14)"}}><Wallet size={16} color="#22C55E" /></div>
+                <div className="progress-stat-label">Income</div>
+                <div className="progress-stat-value" style={{color:"#22C55E",fontSize:15}}>{inr(periodIncome)}</div>
+              </Card>
+              <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
+                <div className="progress-stat-icon" style={{background:hexA(CORAL,0.14)}}><Receipt size={16} color={CORAL} /></div>
+                <div className="progress-stat-label">Expense</div>
+                <div className="progress-stat-value" style={{color:CORAL,fontSize:15}}>{inr(periodExpense)}</div>
+              </Card>
+              <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
+                <div className="progress-stat-icon" style={{background:hexA(BRASS,0.14)}}><PiggyBank size={16} color={BRASS} /></div>
+                <div className="progress-stat-label">Savings</div>
+                <div className="progress-stat-value" style={{color:BRASS,fontSize:15}}>{inr(periodSavings)}</div>
+              </Card>
+            </div>
+
+            <div className="progress-insight-grid">
+              <Card className="progress-mini">
+                <div style={{fontSize:11,color:INK_FAINT}}>Savings %</div>
+                <div className="progress-mini-value" style={{color:TEAL}}>{savingsRate === null ? "—" : `${savingsRate}%`}</div>
+                <div style={{height:6,borderRadius:999,background:PANEL_2,overflow:"hidden",marginTop:6}}>
+                  <div style={{width:`${Math.max(0,Math.min(100,savingsRate||0))}%`,height:"100%",borderRadius:999,background:TEAL}} />
+                </div>
+              </Card>
+              <Card className="progress-mini">
+                <div style={{fontSize:11,color:INK_FAINT}}>Biggest Expense</div>
+                {biggestExpenses[0] ? (() => { const BIcon = EXPENSE_GROUP_ICON[biggestExpenses[0].group] || Receipt;
+                  return <>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
+                      <BIcon size={14} color={CORAL} />
+                      <span style={{fontSize:13,fontWeight:700,color:INK}}>{biggestExpenses[0].group||"Expense"}</span>
+                    </div>
+                    <div className="progress-mini-value" style={{color:CORAL,marginTop:2}}>{inr(Number(biggestExpenses[0].amount)||0)}</div>
+                  </>; })() : <div className="progress-mini-value" style={{color:INK_FAINT,fontSize:13}}>No data</div>}
+              </Card>
+            </div>
+
             <div className="progress-section-head">
               <div className="progress-section-title">Expense breakdown</div>
               {expenseDelta !== null && <span className="progress-delta"
@@ -6071,7 +6299,7 @@ function LifeTracker() {
             <Card style={{marginBottom:12,padding:12}}>
               {byGroup.length ? <>
                 <div style={{display:"flex",justifyContent:"center",marginBottom:8}}>
-                  <DonutChart data={donutData} centerLabel="Spent" centerValue={inr(periodExpense)} />
+                  <DonutChart data={donutData} centerLabel="Total" centerValue={inr(periodExpense)} />
                 </div>
                 <div>
                   {byGroup.map(({g,amount})=>(
@@ -6086,6 +6314,16 @@ function LifeTracker() {
                   ))}
                 </div>
               </> : <div className="progress-empty">No expense data for this period. Log an expense to see it broken down here.</div>}
+            </Card>
+
+            <div className="progress-section-head"><div className="progress-section-title">Income vs Expense</div><div style={{fontSize:11,color:INK_FAINT}}>6 months</div></div>
+            <Card style={{marginBottom:12,padding:12}}>
+              <div style={{display:"flex",gap:14,marginBottom:6}}>
+                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:TEAL}}/> Income</div>
+                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:CORAL}}/> Expense</div>
+              </div>
+              <DualLineChart points={trendSeries.map(t=>({label:t.label,a:t.income,b:t.expense}))}
+                colorA={TEAL} colorB={CORAL} height={104} />
             </Card>
 
             {biggestExpenses.length>0 && <>
@@ -6106,26 +6344,57 @@ function LifeTracker() {
                 ))}
               </Card>
             </>}
-
-            <div className="progress-section-head"><div className="progress-section-title">Income vs expense</div><div style={{fontSize:11,color:INK_FAINT}}>6 months</div></div>
-            <Card style={{marginBottom:12,padding:12}}>
-              <div style={{display:"flex",gap:14,marginBottom:6}}>
-                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:TEAL}}/> Income</div>
-                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:CORAL}}/> Expense</div>
-              </div>
-              <GroupedBarChart points={trendSeries.map(t=>({label:t.label,a:t.income,b:t.expense}))}
-                colorA={TEAL} colorB={CORAL} height={104} />
-            </Card>
           </>}
 
           {progressSubTab === "habits" && <>
+            {/* Overall habit progress ring + completed/total/percentage summary. */}
+            <div className="progress-section-head"><div className="progress-section-title">Habit Progress</div></div>
+            <Card style={{marginBottom:12,padding:14}}>
+              <div style={{display:"flex",alignItems:"center",gap:18}}>
+                <RingProgress pct={completionPct} size={92} color={TEAL} />
+                <div style={{flex:1,minWidth:0}}>
+                  {[["Completed",doneCount],["Total Habits",totalTracked],["Completion %",`${completionPct}%`]].map(([label,val])=>(
+                    <div key={label} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{width:7,height:7,borderRadius:"50%",background:TEAL,flexShrink:0}} />
+                        <span style={{fontSize:12,color:INK_DIM}}>{label}</span>
+                      </div>
+                      <span style={{fontSize:13,fontWeight:800,color:INK,fontFamily:mono}}>{val}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+
+            <div className="progress-stat-grid" style={{gridTemplateColumns:"1fr 1fr 1fr"}}>
+              <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
+                <div className="progress-stat-icon" style={{background:"rgba(255,149,0,0.14)"}}><Flame size={16} color="#FF9500" /></div>
+                <div className="progress-stat-label">Current Streak</div>
+                <div className="progress-stat-value" style={{color:"#FF9500",fontSize:16}}>{currentTopStreak}</div>
+                <div className="progress-stat-sub">days</div>
+              </Card>
+              <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
+                <div className="progress-stat-icon" style={{background:hexA(BRASS,0.14)}}><Trophy size={16} color={BRASS} /></div>
+                <div className="progress-stat-label">Best Streak</div>
+                <div className="progress-stat-value" style={{color:BRASS,fontSize:16}}>{bestStreakEver}</div>
+                <div className="progress-stat-sub">days</div>
+              </Card>
+              <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
+                <div className="progress-stat-icon" style={{background:hexA(CORAL,0.14)}}><XCircle size={16} color={CORAL} /></div>
+                <div className="progress-stat-label">Missed</div>
+                <div className="progress-stat-value" style={{color:CORAL,fontSize:16}}>{missedToday}</div>
+                <div className="progress-stat-sub">habits</div>
+              </Card>
+            </div>
+
             <div className="progress-section-head">
-              <div className="progress-section-title">Life areas</div>
+              <div className="progress-section-title">Life Areas Progress</div>
               <div style={{fontSize:11,color:INK_FAINT}}>{fmtPeriod}</div>
             </div>
-            <div className="progress-area-grid">
-              {areaStats.map(a=><AreaRingCard key={a.id} icon={a.icon} accent={a.accent} label={a.label} pct={a.pct} done={a.done} total={a.total} />)}
-            </div>
+            <Card style={{marginBottom:12,padding:"5px 12px"}}>
+              {[...areaStats, { id: "finance", label: "Finance", icon: PiggyBank, accent: "#22C55E", pct: savingsRate === null ? 0 : Math.max(0, Math.min(100, savingsRate)) }]
+                .map((a,i,arr)=><AreaBarRow key={a.id} icon={a.icon} accent={a.accent} label={a.label} pct={a.pct} isLast={i===arr.length-1} />)}
+            </Card>
 
             <div className="progress-section-head"><div className="progress-section-title">Current streaks</div></div>
             <Card style={{marginBottom:12,padding:"5px 12px"}}>
