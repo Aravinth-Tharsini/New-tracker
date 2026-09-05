@@ -372,7 +372,7 @@ import {
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, History, Home as HomeIcon,
   CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper, Trophy,
   Fuel, Store, MessageSquare, Sunrise, Cookie, PiggyBank, Percent,
-  Star, XCircle, Brain, ClipboardCheck, GraduationCap,
+  Star, XCircle, Brain, ClipboardCheck, GraduationCap, ArrowLeftRight,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -1088,6 +1088,50 @@ const EXPENSE_GROUP_ICON = { EMI: CreditCard, Food: UtensilsCrossed, Grocery: Sh
 // Each expense category gets its own always-on accent color (not just a highlight-when-selected
 // tint), so the picker reads as a row of distinct colored tiles the way it does in the reference design.
 const EXPENSE_GROUP_COLOR = { EMI: "#5856D6", Food: "#0071E3", Grocery: "#34C759", Fuel: "#FF9500", "Health Care": "#FF3B30", Travel: "#AF52DE", Shopping: "#32ADE6", Other: "#8E8E93" };
+// Icon/accent per life-area category (My Day / Career / Health / Routine), shared by the
+// Progress page's single-period and custom-comparison views.
+const AREA_ICON = { myday: Users, career: Briefcase, health: HeartPulse, activity: Activity };
+const AREA_ACCENT = { myday: "#6D28D9", career: "#2563EB", health: "#DB2777", activity: "#4338CA" };
+// Builds the same set of period stats (income/expense/savings/completion/expense breakdown/
+// life areas/time spent) for an arbitrary day, month, or year — used both by the single-period
+// Progress view and by the Custom two-period comparison view, so both stay consistent.
+function buildPeriodSnapshot(gran, key, dailyLogs, dailyItems, financeMonthly) {
+  const matches = (d) => gran === "day" ? d === key : gran === "month" ? d.slice(0, 7) === key : d.slice(0, 4) === key;
+  const expenseEntries = Object.entries(dailyLogs).flatMap(([d, log]) => (log.expenses || []).map((e) => ({ ...e, date: d })));
+  const periodExpenses = expenseEntries.filter((e) => matches(e.date));
+  const periodExpense = periodExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const periodIncome = gran === "day" ? 0 : gran === "month" ? (Number(financeMonthly[key]?.income) || 0) : Object.entries(financeMonthly).filter(([mk]) => mk.slice(0, 4) === key).reduce((sum, [, v]) => sum + (Number(v?.income) || 0), 0);
+  const periodSavings = periodIncome - periodExpense;
+  const periodDays = Object.entries(dailyLogs).filter(([d]) => matches(d));
+  const nonExpenseItems = dailyItems.filter((i) => i.type !== "expense");
+  const doneCount = periodDays.reduce((sum, [, log]) => sum + Object.values(log || {}).filter((r) => r && r.status === "done").length, 0);
+  const totalTracked = nonExpenseItems.length * (gran === "day" ? 1 : Math.max(1, periodDays.length));
+  const completionPct = totalTracked ? Math.round(doneCount / totalTracked * 100) : 0;
+  const savingsRate = periodIncome > 0 ? Math.round((periodSavings / periodIncome) * 100) : null;
+  const byGroup = [...new Set(periodExpenses.map((e) => e.group || "Other"))]
+    .map((g) => ({ g, amount: periodExpenses.filter((e) => (e.group || "Other") === g).reduce((sum, e) => sum + (Number(e.amount) || 0), 0) }))
+    .sort((a, b) => b.amount - a.amount);
+  const donutData = byGroup.map(({ g, amount }) => ({ label: g, value: amount, color: EXPENSE_GROUP_COLOR[g] || "#8E8E93" }));
+  const biggestExpenses = periodExpenses.slice().sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0)).slice(0, 3);
+  const periodTimeSpentMin = periodDays.reduce((sum, [, log]) => sum + Object.values(log || {})
+    .filter((r) => r && r.status === "done").reduce((s, r) => s + (Number(r.durationMin) || 0), 0), 0);
+  const areaStats = ["myday", "career", "health", "activity"].map((catId) => {
+    const itemsInCat = dailyItems.filter((i) => i.category === catId);
+    const totalForCat = itemsInCat.length * (gran === "day" ? 1 : Math.max(1, periodDays.length));
+    const doneForCat = periodDays.reduce((sum, [, log]) => sum + itemsInCat.filter((i) => log && log[i.id] && log[i.id].status === "done").length, 0);
+    const label = DAILY_TAB_CATEGORY_DEFS.find((c) => c.id === catId)?.label || catId;
+    return { id: catId, label, icon: AREA_ICON[catId], accent: AREA_ACCENT[catId], pct: totalForCat ? Math.round((doneForCat / totalForCat) * 100) : 0, done: doneForCat, total: totalForCat };
+  });
+  return { periodIncome, periodExpense, periodSavings, completionPct, doneCount, totalTracked, savingsRate, byGroup, donutData, biggestExpenses, periodTimeSpentMin, areaStats, expenseCount: periodExpenses.length };
+}
+// Label for a comparison period key given its granularity, e.g. "5 Sep 2026" / "Sep 2026" / "2026".
+function compareKeyLabel(gran, key) {
+  if (gran === "day") return new Date(key).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  if (gran === "month") return monthLabel(key);
+  return key;
+}
+// Percent change from b to a (a = later/new, b = earlier/baseline), null when no baseline to compare against.
+function pctChange(a, b) { return b ? Math.round(((a - b) / Math.abs(b)) * 100) : (a === b ? null : null); }
 const MEAL_TYPE_ICON = { Breakfast: Sunrise, Lunch: Sun, Dinner: Moon, Tea: Coffee, Snacks: Cookie };
 
 // Travel cards use the icon selected for that trip mode.
@@ -1554,6 +1598,15 @@ function LifeTracker() {
   const [insightDate, setInsightDate] = useState(dateKey());
   const [insightMonth, setInsightMonth] = useState(monthKey());
   const [insightYear, setInsightYear] = useState(String(new Date().getFullYear()));
+  // Custom comparison mode: pick a granularity (day/month/year) and two periods of that
+  // granularity to compare side-by-side across Overview / Finance / Habits.
+  const [compareGranularity, setCompareGranularity] = useState("month");
+  const [compareDateA, setCompareDateA] = useState(dateKey(new Date(Date.now() - 86400000)));
+  const [compareDateB, setCompareDateB] = useState(dateKey());
+  const [compareMonthA, setCompareMonthA] = useState((() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return monthKey(d); })());
+  const [compareMonthB, setCompareMonthB] = useState(monthKey());
+  const [compareYearA, setCompareYearA] = useState(String(new Date().getFullYear() - 1));
+  const [compareYearB, setCompareYearB] = useState(String(new Date().getFullYear()));
   const [progressSubTab, setProgressSubTab] = useState("overview");
   const [selectedStreakId, setSelectedStreakId] = useState(null);
   const [activeTab, setActiveTab] = useState(null);
@@ -5928,8 +5981,6 @@ function LifeTracker() {
 
         // Per-life-area completion (My Day / Career / Health / Routine), same simplified day-count
         // math as the overall Completion stat above, just scoped to each category.
-        const AREA_ICON = { myday: Users, career: Briefcase, health: HeartPulse, activity: Activity };
-        const AREA_ACCENT = { myday: "#6D28D9", career: "#2563EB", health: "#DB2777", activity: "#4338CA" };
         const areaStats = ["myday", "career", "health", "activity"].map((catId) => {
           const itemsInCat = dailyItems.filter((i) => i.category === catId);
           const totalForCat = itemsInCat.length * (insightPeriod === "day" ? 1 : Math.max(1, periodDays.length));
@@ -6063,6 +6114,15 @@ function LifeTracker() {
         const todayLogForMissed = dailyLogs[realTodayStr] || {};
         const missedToday = relevantHabitItems.filter((i) => !(todayLogForMissed[i.id] && todayLogForMissed[i.id].status === "done")).length;
 
+        // ---- Custom two-period comparison mode ----
+        const isCustom = insightPeriod === "custom";
+        const compareKeyA = compareGranularity === "day" ? compareDateA : compareGranularity === "month" ? compareMonthA : compareYearA;
+        const compareKeyB = compareGranularity === "day" ? compareDateB : compareGranularity === "month" ? compareMonthB : compareYearB;
+        const snapA = isCustom ? buildPeriodSnapshot(compareGranularity, compareKeyA, dailyLogs, dailyItems, financeMonthly) : null;
+        const snapB = isCustom ? buildPeriodSnapshot(compareGranularity, compareKeyB, dailyLogs, dailyItems, financeMonthly) : null;
+        const labelA = isCustom ? compareKeyLabel(compareGranularity, compareKeyA) : "";
+        const labelB = isCustom ? compareKeyLabel(compareGranularity, compareKeyB) : "";
+
         return (
         <div key="analysis-page" className="page-smooth-enter progress-shell">
           <div className="progress-hero">
@@ -6076,28 +6136,52 @@ function LifeTracker() {
               </div>
               <InsightsHeroArt accent={BRASS} />
             </div>
-            <button onClick={downloadProgressPdf}
+            {!isCustom && <button onClick={downloadProgressPdf}
               style={{marginTop:14,width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,
                 background:`linear-gradient(135deg, ${BRASS} 0%, #0058B8 100%)`,border:"none",color:"#fff",
                 borderRadius:980,padding:"11px 12px",fontSize:14.5,fontFamily:disp,fontWeight:750,cursor:"pointer",
                 boxShadow:`0 6px 16px ${hexA(BRASS,0.30)}`}}>
               <Download size={16} /> Download Progress PDF
-            </button>
+            </button>}
           </div>
 
-          <Card className="progress-period-card">
-            <CalendarDays size={17} color={BRASS} style={{flexShrink:0}} />
-            {insightPeriod === "day" && <TextField type="date" value={insightDate} onChange={(e)=>setInsightDate(e.target.value)}
-              style={{background:"transparent",padding:0,fontWeight:750}} />}
-            {insightPeriod === "month" && <TextField type="month" value={insightMonth} onChange={(e)=>setInsightMonth(e.target.value)}
-              style={{background:"transparent",padding:0,fontWeight:750}} />}
-            {insightPeriod === "year" && <TextField type="number" value={insightYear} onChange={(e)=>setInsightYear(e.target.value.slice(0,4))}
-              placeholder="2026" style={{background:"transparent",padding:0,fontWeight:750}} />}
+          <Card className="progress-period-card" style={isCustom ? {flexDirection:"column",alignItems:"stretch",gap:10} : {}}>
+            {!isCustom ? <>
+              <CalendarDays size={17} color={BRASS} style={{flexShrink:0}} />
+              {insightPeriod === "day" && <TextField type="date" value={insightDate} onChange={(e)=>setInsightDate(e.target.value)}
+                style={{background:"transparent",padding:0,fontWeight:750}} />}
+              {insightPeriod === "month" && <TextField type="month" value={insightMonth} onChange={(e)=>setInsightMonth(e.target.value)}
+                style={{background:"transparent",padding:0,fontWeight:750}} />}
+              {insightPeriod === "year" && <TextField type="number" value={insightYear} onChange={(e)=>setInsightYear(e.target.value.slice(0,4))}
+                placeholder="2026" style={{background:"transparent",padding:0,fontWeight:750}} />}
+            </> : <>
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                <ArrowLeftRight size={15} color={BRASS} style={{flexShrink:0}} />
+                <span style={{fontSize:13,fontWeight:800,color:INK}}>Compare two periods</span>
+              </div>
+              <SegmentedControl variant="secondary" value={compareGranularity} onChange={setCompareGranularity}
+                options={[{id:"day",label:"Day-to-Day"},{id:"month",label:"Month-to-Month"},{id:"year",label:"Year-to-Year"}]} />
+              <div style={{display:"flex",alignItems:"flex-end",gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:10,color:INK_FAINT,marginBottom:4,fontWeight:800,textTransform:"uppercase",letterSpacing:".05em"}}>Period A</div>
+                  {compareGranularity==="day" && <TextField type="date" value={compareDateA} onChange={(e)=>setCompareDateA(e.target.value)} />}
+                  {compareGranularity==="month" && <TextField type="month" value={compareMonthA} onChange={(e)=>setCompareMonthA(e.target.value)} />}
+                  {compareGranularity==="year" && <TextField type="number" value={compareYearA} onChange={(e)=>setCompareYearA(e.target.value.slice(0,4))} placeholder="2025" />}
+                </div>
+                <ArrowRight size={15} color={INK_FAINT} style={{flexShrink:0,marginBottom:11}} />
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:10,color:INK_FAINT,marginBottom:4,fontWeight:800,textTransform:"uppercase",letterSpacing:".05em"}}>Period B</div>
+                  {compareGranularity==="day" && <TextField type="date" value={compareDateB} onChange={(e)=>setCompareDateB(e.target.value)} />}
+                  {compareGranularity==="month" && <TextField type="month" value={compareMonthB} onChange={(e)=>setCompareMonthB(e.target.value)} />}
+                  {compareGranularity==="year" && <TextField type="number" value={compareYearB} onChange={(e)=>setCompareYearB(e.target.value.slice(0,4))} placeholder="2026" />}
+                </div>
+              </div>
+            </>}
           </Card>
 
           <Card className="progress-tabs-card">
             <SegmentedControl variant="primary" value={insightPeriod} onChange={setInsightPeriod}
-              options={[{id:"day",label:"Day"},{id:"month",label:"Month"},{id:"year",label:"Year"}]} />
+              options={[{id:"day",label:"Day"},{id:"month",label:"Month"},{id:"year",label:"Year"},{id:"custom",label:"Custom"}]} />
           </Card>
 
           <Card className="progress-tabs-card">
@@ -6109,6 +6193,7 @@ function LifeTracker() {
               ]} />
           </Card>
 
+          {!isCustom && <>
           {progressSubTab === "overview" && <>
             <div className="progress-section-head">
               <div className="progress-section-title">{fmtPeriod} overview</div>
@@ -6432,6 +6517,142 @@ function LifeTracker() {
                 </div>
               </Card>
             )}
+          </>}
+          </>}
+
+          {isCustom && <>
+            {progressSubTab === "overview" && <>
+              <div className="progress-section-head">
+                <div className="progress-section-title">Comparing {labelA} vs {labelB}</div>
+                <div style={{fontSize:11,color:INK_FAINT}}>{compareGranularity}-to-{compareGranularity}</div>
+              </div>
+              <div className="progress-area-grid" style={{gridTemplateColumns:"1fr 1fr"}}>
+                {[["A",labelA,snapA],["B",labelB,snapB]].map(([tag,lbl,snap])=>(
+                  <Card key={tag} style={{padding:14}}>
+                    <div style={{fontSize:11,fontWeight:800,color:INK_FAINT,textTransform:"uppercase",letterSpacing:".05em",marginBottom:2}}>Period {tag}</div>
+                    <div style={{fontSize:13,fontWeight:800,color:INK,marginBottom:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lbl}</div>
+                    <RingProgress pct={snap.completionPct} size={72} color={tag==="A"?"#8E8E93":BRASS} />
+                    <div style={{fontSize:11,color:INK_DIM,marginTop:8}}>{snap.doneCount} of {snap.totalTracked} completed</div>
+                    <div style={{fontSize:11,color:INK_DIM,marginTop:2}}>Time spent: {fmtDuration(snap.periodTimeSpentMin)}</div>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="progress-section-head"><div className="progress-section-title">Completion change</div></div>
+              <Card style={{marginBottom:12,padding:12}}>
+                {(() => { const delta = pctChange(snapB.completionPct, snapA.completionPct); return (
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:11,color:INK_FAINT}}>{labelA} → {labelB}</div>
+                      <div style={{fontSize:20,fontWeight:800,fontFamily:mono,color:INK}}>{snapA.completionPct}% <ArrowRight size={14} color={INK_FAINT} style={{display:"inline",verticalAlign:-1}} /> {snapB.completionPct}%</div>
+                    </div>
+                    <div className="progress-pill" style={{fontSize:13,padding:"6px 10px",color:delta===null?INK_FAINT:delta>=0?TEAL:CORAL,background:hexA(delta===null?"#8E8E93":delta>=0?TEAL:CORAL,.13)}}>
+                      {delta===null?"No baseline":`${delta>=0?"↑":"↓"} ${Math.abs(delta)}%`}
+                    </div>
+                  </div>
+                ); })()}
+              </Card>
+
+              <div className="progress-section-head"><div className="progress-section-title">Savings comparison</div></div>
+              <Card style={{marginBottom:12,padding:12}}>
+                <div style={{display:"flex",gap:14,marginBottom:6}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:"#8E8E93"}}/> {labelA}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:TEAL}}/> {labelB}</div>
+                </div>
+                <TrendBarChart points={[{label:labelA,value:snapA.periodSavings},{label:labelB,value:snapB.periodSavings}]}
+                  color={TEAL} negativeColor={CORAL} height={92} />
+              </Card>
+            </>}
+
+            {progressSubTab === "finance" && <>
+              <div className="progress-section-head">
+                <div className="progress-section-title">Comparing {labelA} vs {labelB}</div>
+              </div>
+              <div className="progress-area-grid" style={{gridTemplateColumns:"1fr 1fr"}}>
+                {[["A",labelA,snapA,"#8E8E93"],["B",labelB,snapB,BRASS]].map(([tag,lbl,snap,accent])=>(
+                  <Card key={tag} style={{padding:12}}>
+                    <div style={{fontSize:11,fontWeight:800,color:INK_FAINT,textTransform:"uppercase",letterSpacing:".05em",marginBottom:2}}>Period {tag}</div>
+                    <div style={{fontSize:12.5,fontWeight:800,color:INK,marginBottom:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lbl}</div>
+                    <div style={{fontSize:11,color:"#22C55E",fontWeight:700}}>Income</div>
+                    <div style={{fontSize:14,fontWeight:800,fontFamily:mono,color:"#22C55E",marginBottom:6}}>{inr(snap.periodIncome)}</div>
+                    <div style={{fontSize:11,color:CORAL,fontWeight:700}}>Expense</div>
+                    <div style={{fontSize:14,fontWeight:800,fontFamily:mono,color:CORAL,marginBottom:6}}>{inr(snap.periodExpense)}</div>
+                    <div style={{fontSize:11,color:accent,fontWeight:700}}>Savings</div>
+                    <div style={{fontSize:14,fontWeight:800,fontFamily:mono,color:accent}}>{inr(snap.periodSavings)}</div>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="progress-section-head"><div className="progress-section-title">Income vs Expense</div></div>
+              <Card style={{marginBottom:12,padding:12}}>
+                <div style={{display:"flex",gap:14,marginBottom:6}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:TEAL}}/> Income</div>
+                  <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:CORAL}}/> Expense</div>
+                </div>
+                <DualLineChart points={[{label:labelA,a:snapA.periodIncome,b:snapA.periodExpense},{label:labelB,a:snapB.periodIncome,b:snapB.periodExpense}]}
+                  colorA={TEAL} colorB={CORAL} height={104} />
+              </Card>
+
+              <div className="progress-section-head"><div className="progress-section-title">Expense breakdown</div></div>
+              <div className="progress-area-grid" style={{gridTemplateColumns:"1fr 1fr"}}>
+                {[["A",labelA,snapA],["B",labelB,snapB]].map(([tag,lbl,snap])=>(
+                  <Card key={tag} style={{padding:12}}>
+                    <div style={{fontSize:11,fontWeight:800,color:INK_FAINT,textTransform:"uppercase",letterSpacing:".05em",marginBottom:6}}>{lbl}</div>
+                    {snap.byGroup.length ? <>
+                      <div style={{display:"flex",justifyContent:"center",marginBottom:6}}>
+                        <DonutChart data={snap.donutData} size={92} strokeWidth={14} centerLabel="Total" centerValue={inr(snap.periodExpense)} />
+                      </div>
+                      {snap.byGroup.slice(0,3).map(({g,amount})=>(
+                        <div key={g} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:INK_DIM,marginBottom:4}}>
+                          <span style={{width:7,height:7,borderRadius:"50%",background:EXPENSE_GROUP_COLOR[g]||"#8E8E93",flexShrink:0}} />
+                          <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g}</span>
+                          <span style={{fontFamily:mono,fontWeight:700,color:INK}}>{inr(amount)}</span>
+                        </div>
+                      ))}
+                    </> : <div className="progress-empty" style={{padding:"10px 4px"}}>No expenses</div>}
+                  </Card>
+                ))}
+              </div>
+            </>}
+
+            {progressSubTab === "habits" && <>
+              <div className="progress-section-head">
+                <div className="progress-section-title">Comparing {labelA} vs {labelB}</div>
+              </div>
+              <div className="progress-area-grid" style={{gridTemplateColumns:"1fr 1fr"}}>
+                {[["A",labelA,snapA,"#8E8E93"],["B",labelB,snapB,TEAL]].map(([tag,lbl,snap,accent])=>(
+                  <Card key={tag} style={{padding:14,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                    <div style={{fontSize:11,fontWeight:800,color:INK_FAINT,textTransform:"uppercase",letterSpacing:".05em"}}>{lbl}</div>
+                    <RingProgress pct={snap.completionPct} size={72} color={accent} />
+                    <div style={{fontSize:11,color:INK_DIM,fontFamily:mono}}>{snap.doneCount}/{snap.totalTracked}</div>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="progress-section-head"><div className="progress-section-title">Life areas</div></div>
+              <Card style={{marginBottom:12,padding:"5px 12px"}}>
+                {snapA.areaStats.map((a,i)=>{
+                  const bStat = snapB.areaStats.find(x=>x.id===a.id);
+                  return (
+                    <div key={a.id} style={{padding:"9px 0",borderBottom:i===snapA.areaStats.length-1?"none":`1px solid ${LINE}`}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                        <a.icon size={14} color={a.accent} />
+                        <span style={{fontSize:12.5,fontWeight:700,color:INK,flex:1}}>{a.label}</span>
+                        <span style={{fontSize:11,color:INK_FAINT,fontFamily:mono}}>{a.pct}% <ArrowRight size={10} color={INK_FAINT} style={{display:"inline",verticalAlign:-1}} /> {bStat?.pct||0}%</span>
+                      </div>
+                      <div style={{display:"flex",gap:4}}>
+                        <div style={{flex:1,height:6,borderRadius:999,background:PANEL_2,overflow:"hidden"}}>
+                          <div style={{width:`${Math.min(100,a.pct)}%`,height:"100%",background:"#8E8E93",borderRadius:999}} />
+                        </div>
+                        <div style={{flex:1,height:6,borderRadius:999,background:PANEL_2,overflow:"hidden"}}>
+                          <div style={{width:`${Math.min(100,bStat?.pct||0)}%`,height:"100%",background:a.accent,borderRadius:999}} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </Card>
+            </>}
           </>}
         </div>
         );
