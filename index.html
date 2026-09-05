@@ -1235,6 +1235,30 @@ function DualLineChart({ points, colorA = TEAL, colorB = CORAL, labelA = "Income
     </div>
   );
 }
+// Simple, chart-free Income vs Expense comparison: one row per period with two plain horizontal
+// bars (Income / Expense), scaled to the largest value across all rows so amounts stay comparable
+// at a glance — no SVG, no plotted lines, just bars and numbers.
+function IncomeExpenseBars({ rows }) {
+  const maxValue = Math.max(1, ...rows.flatMap((r) => [Number(r.income) || 0, Number(r.expense) || 0]));
+  return (
+    <div>
+      {rows.map((r, i) => (
+        <div key={r.label + i} style={{ padding: "10px 0", borderBottom: i === rows.length - 1 ? "none" : `1px solid ${LINE}` }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: INK, marginBottom: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</div>
+          {[["Income", r.income, "#22C55E"], ["Expense", r.expense, CORAL]].map(([lbl, val, color]) => (
+            <div key={lbl} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: lbl === "Income" ? 6 : 0 }}>
+              <span style={{ width: 52, fontSize: 10.5, fontWeight: 700, color, flexShrink: 0 }}>{lbl}</span>
+              <div style={{ flex: 1, height: 9, borderRadius: 999, background: PANEL_2, overflow: "hidden" }}>
+                <div style={{ width: `${Math.min(100, (Number(val) || 0) / maxValue * 100)}%`, height: "100%", borderRadius: 999, background: color, transition: "width .25s ease" }} />
+              </div>
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: INK, fontFamily: mono, minWidth: 66, textAlign: "right", flexShrink: 0 }}>{inr(Number(val) || 0)}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
 // Side-by-side grouped bars for comparing two series per period (e.g. income vs expense per month).
 function GroupedBarChart({ points, colorA = TEAL, colorB = CORAL, height = 96 }) {
   const width = 300, pad = 6, groupGap = 10, barGap = 3;
@@ -6402,13 +6426,8 @@ function LifeTracker() {
             </Card>
 
             <div className="progress-section-head"><div className="progress-section-title">Income vs Expense</div><div style={{fontSize:11,color:INK_FAINT}}>6 months</div></div>
-            <Card style={{marginBottom:12,padding:12}}>
-              <div style={{display:"flex",gap:14,marginBottom:6}}>
-                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:TEAL}}/> Income</div>
-                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:CORAL}}/> Expense</div>
-              </div>
-              <DualLineChart points={trendSeries.map(t=>({label:t.label,a:t.income,b:t.expense}))}
-                colorA={TEAL} colorB={CORAL} height={104} />
+            <Card style={{marginBottom:12,padding:"4px 14px"}}>
+              <IncomeExpenseBars rows={trendSeries.map(t=>({label:t.label,income:t.income,expense:t.expense}))} />
             </Card>
 
             {biggestExpenses.length>0 && <>
@@ -6584,13 +6603,8 @@ function LifeTracker() {
               </div>
 
               <div className="progress-section-head"><div className="progress-section-title">Income vs Expense</div></div>
-              <Card style={{marginBottom:12,padding:12}}>
-                <div style={{display:"flex",gap:14,marginBottom:6}}>
-                  <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:TEAL}}/> Income</div>
-                  <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:INK_FAINT}}><span style={{width:8,height:8,borderRadius:2,background:CORAL}}/> Expense</div>
-                </div>
-                <DualLineChart points={[{label:labelA,a:snapA.periodIncome,b:snapA.periodExpense},{label:labelB,a:snapB.periodIncome,b:snapB.periodExpense}]}
-                  colorA={TEAL} colorB={CORAL} height={104} />
+              <Card style={{marginBottom:12,padding:"4px 14px"}}>
+                <IncomeExpenseBars rows={[{label:labelA,income:snapA.periodIncome,expense:snapA.periodExpense},{label:labelB,income:snapB.periodIncome,expense:snapB.periodExpense}]} />
               </Card>
 
               <div className="progress-section-head"><div className="progress-section-title">Expense breakdown</div></div>
