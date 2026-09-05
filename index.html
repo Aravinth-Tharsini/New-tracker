@@ -373,6 +373,7 @@ import {
   CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper, Trophy,
   Fuel, Store, MessageSquare, Sunrise, Cookie, PiggyBank, Percent,
   Star, XCircle, Brain, ClipboardCheck, GraduationCap, ArrowLeftRight,
+  Zap, Smartphone, Shirt, Wrench, Gift,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -741,23 +742,26 @@ const TYPE_OPTIONS = [
   { value: "interval", label: "Interval \u00b7 recurring reminder" },
 ];
 const DEFAULT_EXPENSE_GROUPS = {
-  EMI: ["EMI", "Shopping"],
+  Rent: ["Rent"],
   "Electricity Bill": ["Electricity Bill"],
-  Food: ["Breakfast", "Lunch", "Dinner", "Tea", "Snacks"],
-  Grocery: ["Vegetables", "Fruits", "Grocery items", "Household items"],
+  EMI: ["EMI"],
   Recharge: ["Mobile recharge", "DTH / internet recharge"],
+  Water: ["Water"],
+  Travel: ["Train", "Bus", "Cab / Auto", "Flight", "Bike Maintenance"],
   Fuel: ["Petrol", "Diesel"],
+  Grocery: ["Vegetables", "Fruits", "Grocery items", "Household items"],
+  "Outside Food": ["Restaurant", "Food delivery", "Cafe / Tea & Snacks", "Office / Work lunch"],
+  Clothes: ["Men's wear", "Women's wear", "Footwear", "Accessories"],
+  Shopping: ["Electronics", "Home & Kitchen", "Gifts", "Miscellaneous"],
   "Health Care": ["Grooming", "Medical", "Pharmacy"],
-  Travel: ["Car", "Train", "Bus", "Flight", "Other"],
-  Shopping: ["Shopping list"],
-  Other: ["Shopping", "Bills", "Entertainment", "Personal"],
+  Other: ["Entertainment", "Personal", "Donations"],
 };
 // Groups whose payments are driven from the saved Repayment Due data instead of manual entry;
 // these are hidden from the "Today's Expense" category picker and shown in their own Repayment section.
-// EMI is intentionally left out of this list (even though it also appears in the Repayments Due
-// section) so it's still selectable for a quick one-off manual entry.
+// EMI, Rent, and Water are intentionally left out of this list (even though Rent/Water also appear in
+// the Repayments Due section) so they stay selectable for a quick one-off manual entry too.
 const REPAYMENT_LINKED_EXPENSE_GROUPS = ["Electricity Bill", "Recharge"];
-const REPAYMENT_CATEGORY_TO_EXPENSE_GROUP = { "EMI": "EMI", "Loan": "EMI", "Gold Loan": "EMI", "Electricity": "Electricity Bill", "Mobile Recharge": "Recharge", "Rent": "Other", "Other": "Other" };
+const REPAYMENT_CATEGORY_TO_EXPENSE_GROUP = { "EMI": "EMI", "Loan": "EMI", "Gold Loan": "EMI", "Electricity": "Electricity Bill", "Mobile Recharge": "Recharge", "Rent": "Rent", "Water": "Water", "Other": "Other" };
 
 function isItemValid(item) {
   if (!item || !item.name || !item.name.trim()) return false;
@@ -766,10 +770,10 @@ function isItemValid(item) {
   return item.type === "instant" || item.type === "duration";
 }
 
-const REPAYMENT_CATEGORIES = ["Gold Loan", "Loan", "EMI", "Electricity", "Rent", "Mobile Recharge", "Other"];
+const REPAYMENT_CATEGORIES = ["Gold Loan", "Loan", "EMI", "Electricity", "Rent", "Water", "Mobile Recharge", "Other"];
 // EMI/Loan/Gold Loan/Rent/Other are fixed: amount and schedule come from what's saved in Repayment due.
 // Electricity and Mobile Recharge are variable: the reminder schedule stays fixed, but the amount is editable at pay time.
-const REPAYMENT_VARIABLE_CATEGORIES = ["Electricity", "Mobile Recharge"];
+const REPAYMENT_VARIABLE_CATEGORIES = ["Electricity", "Mobile Recharge", "Water"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 function weekdayLabel(date) { return WEEKDAYS[(date.getDay() + 6) % 7]; }
 function isItemScheduledToday(item, date) { return !item.days || item.days.length === 0 || item.days.includes(weekdayLabel(date)); }
@@ -1084,10 +1088,20 @@ const TODAY_CARD_ACCENT = {
 // Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
 const DAILY_EXPENSE_GROUPS = Object.fromEntries(Object.entries(DEFAULT_EXPENSE_GROUPS).filter(([g]) => !REPAYMENT_LINKED_EXPENSE_GROUPS.includes(g)));
-const EXPENSE_GROUP_ICON = { EMI: CreditCard, Food: UtensilsCrossed, Grocery: ShoppingBag, Fuel: Fuel, "Health Care": HeartPulse, Travel: Plane, Shopping: ShoppingBag, Other: Receipt };
+const EXPENSE_GROUP_ICON = { Rent: Home, "Electricity Bill": Zap, EMI: CreditCard, Recharge: Smartphone, Water: Droplet, Travel: Plane, Fuel: Fuel, Grocery: ShoppingBag, "Outside Food": UtensilsCrossed, Clothes: Shirt, Shopping: Store, "Health Care": HeartPulse, Other: Receipt };
 // Each expense category gets its own always-on accent color (not just a highlight-when-selected
 // tint), so the picker reads as a row of distinct colored tiles the way it does in the reference design.
-const EXPENSE_GROUP_COLOR = { EMI: "#5856D6", Food: "#0071E3", Grocery: "#34C759", Fuel: "#FF9500", "Health Care": "#FF3B30", Travel: "#AF52DE", Shopping: "#32ADE6", Other: "#8E8E93" };
+const EXPENSE_GROUP_COLOR = { Rent: "#8E44AD", "Electricity Bill": "#F5A623", EMI: "#5856D6", Recharge: "#00B8D9", Water: "#0EA5E9", Travel: "#AF52DE", Fuel: "#FF9500", Grocery: "#34C759", "Outside Food": "#0071E3", Clothes: "#EC4899", Shopping: "#32ADE6", "Health Care": "#FF3B30", Other: "#8E8E93" };
+// Icon per expense subcategory, keyed by its exact label from DEFAULT_EXPENSE_GROUPS — used to give
+// the subcategory chips (and the Progress tab's category drill-down) a distinct icon where it helps.
+const SUBCATEGORY_ICON = {
+  Train, Bus, "Cab / Auto": Car, Flight: Plane, "Bike Maintenance": Wrench,
+  Restaurant: UtensilsCrossed, "Food delivery": Store, "Cafe / Tea & Snacks": Coffee, "Office / Work lunch": Briefcase,
+  "Men's wear": Shirt, "Women's wear": Shirt, Footwear: Footprints, Accessories: Star,
+  Electronics: Laptop, "Home & Kitchen": Home, Gifts: Gift, Miscellaneous: ShoppingBag,
+  Grooming: Brush, Medical: HeartPulse, Pharmacy: HeartPulse,
+  Entertainment: Film, Personal: Smile, Donations: HandHeart,
+};
 // Icon/accent per life-area category (My Day / Career / Health / Routine), shared by the
 // Progress page's single-period and custom-comparison views.
 const AREA_ICON = { myday: Users, career: Briefcase, health: HeartPulse, activity: Activity };
@@ -1109,7 +1123,16 @@ function buildPeriodSnapshot(gran, key, dailyLogs, dailyItems, financeMonthly) {
   const completionPct = totalTracked ? Math.round(doneCount / totalTracked * 100) : 0;
   const savingsRate = periodIncome > 0 ? Math.round((periodSavings / periodIncome) * 100) : null;
   const byGroup = [...new Set(periodExpenses.map((e) => e.group || "Other"))]
-    .map((g) => ({ g, amount: periodExpenses.filter((e) => (e.group || "Other") === g).reduce((sum, e) => sum + (Number(e.amount) || 0), 0) }))
+    .map((g) => {
+      const groupExpenses = periodExpenses.filter((e) => (e.group || "Other") === g);
+      const amount = groupExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+      // Subcategory-level breakdown within this group, so a category total can be expanded
+      // into exactly what it was spent on (e.g. Travel -> Train/Bus/Fuel/Bike Maintenance).
+      const subs = [...new Set(groupExpenses.map((e) => e.subcategory || "Other"))]
+        .map((sub) => ({ sub, amount: groupExpenses.filter((e) => (e.subcategory || "Other") === sub).reduce((s, e) => s + (Number(e.amount) || 0), 0) }))
+        .sort((a, b) => b.amount - a.amount);
+      return { g, amount, subs };
+    })
     .sort((a, b) => b.amount - a.amount);
   const donutData = byGroup.map(({ g, amount }) => ({ label: g, value: amount, color: EXPENSE_GROUP_COLOR[g] || "#8E8E93" }));
   const biggestExpenses = periodExpenses.slice().sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0)).slice(0, 3);
@@ -1132,7 +1155,7 @@ function compareKeyLabel(gran, key) {
 }
 // Percent change from b to a (a = later/new, b = earlier/baseline), null when no baseline to compare against.
 function pctChange(a, b) { return b ? Math.round(((a - b) / Math.abs(b)) * 100) : (a === b ? null : null); }
-const MEAL_TYPE_ICON = { Breakfast: Sunrise, Lunch: Sun, Dinner: Moon, Tea: Coffee, Snacks: Cookie };
+// (Subcategory icons live in SUBCATEGORY_ICON, defined above with the expense group maps.)
 
 // Travel cards use the icon selected for that trip mode.
 function TravelModeIcon({ mode, size = 18, color = BRASS, style }) {
@@ -1633,6 +1656,8 @@ function LifeTracker() {
   const [compareYearB, setCompareYearB] = useState(String(new Date().getFullYear()));
   const [progressSubTab, setProgressSubTab] = useState("overview");
   const [selectedStreakId, setSelectedStreakId] = useState(null);
+  // Which expense category is expanded to show its subcategory breakdown on the Progress > Finance tab.
+  const [expandedExpenseGroup, setExpandedExpenseGroup] = useState(null);
   const [activeTab, setActiveTab] = useState(null);
   const [expandedDailyCategory, setExpandedDailyCategory] = useState(null);
   // Set when a reminder is tapped from Home's "Upcoming Attention" so the Daily tab can scroll to and
@@ -2644,7 +2669,8 @@ function LifeTracker() {
     const alreadyLogged = Object.values(dailyLogs).some((log) => (log.expenses || []).some((e) => e.linkedTravelId === plan.id));
     if (alreadyLogged) return;
     const group = "Travel";
-    const sub = ["Car", "Train", "Bus", "Bike", "Flight", "Other"].includes(plan.mode) ? plan.mode : "Other";
+    const modeMap = { Car: "Cab / Auto", Train: "Train", Bus: "Bus", Bike: "Bike", Flight: "Flight" };
+    const sub = modeMap[plan.mode] || "Other";
     setDailyLogs((prev) => {
       const log = prev[today] || defaultLog();
       if ((log.expenses || []).some((e) => e.linkedTravelId === plan.id)) return prev;
@@ -4677,7 +4703,7 @@ function LifeTracker() {
                               {subOptions.length > 0 && (
                                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
                                   {subOptions.map((s) => (
-                                    <ChipButton key={s} label={s} icon={MEAL_TYPE_ICON[s]} active={activeSub === s} onClick={() => setFlow("dailyExpense", { sub: s })} />
+                                    <ChipButton key={s} label={s} icon={SUBCATEGORY_ICON[s]} active={activeSub === s} onClick={() => setFlow("dailyExpense", { sub: s })} />
                                   ))}
                                 </div>
                               )}
@@ -5975,7 +6001,14 @@ function LifeTracker() {
         const savingsGrowth = growth(thisYearStats.savings, prevYearStats.savings);
         const incomeGrowth = growth(thisYearStats.income, prevYearStats.income);
         const activityGrowth = growth(thisYearStats.done, prevYearStats.done);
-        const byGroup = [...new Set(periodExpenses.map((e)=>e.group||"Other"))].map((g)=>({g, amount:periodExpenses.filter((e)=>(e.group||"Other")===g).reduce((sum,e)=>sum+(Number(e.amount)||0),0)})).sort((a,b)=>b.amount-a.amount);
+        const byGroup = [...new Set(periodExpenses.map((e)=>e.group||"Other"))].map((g)=>{
+          const groupExpenses = periodExpenses.filter((e)=>(e.group||"Other")===g);
+          const amount = groupExpenses.reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+          const subs = [...new Set(groupExpenses.map((e)=>e.subcategory||"Other"))]
+            .map((sub)=>({sub, amount: groupExpenses.filter((e)=>(e.subcategory||"Other")===sub).reduce((s,e)=>s+(Number(e.amount)||0),0)}))
+            .sort((a,b)=>b.amount-a.amount);
+          return { g, amount, subs };
+        }).sort((a,b)=>b.amount-a.amount);
         // Travel and Shopping are included in the same selected Day / Month / Year progress report.
         const itemMatchesPeriod = (value) => {
           if (!value) return false;
@@ -6410,17 +6443,42 @@ function LifeTracker() {
                 <div style={{display:"flex",justifyContent:"center",marginBottom:8}}>
                   <DonutChart data={donutData} centerLabel="Total" centerValue={inr(periodExpense)} />
                 </div>
+                <div style={{fontSize:10.5,color:INK_FAINT,textAlign:"center",marginBottom:4}}>Tap a category to see its breakdown</div>
                 <div>
-                  {byGroup.map(({g,amount})=>(
-                    <div key={g} className="progress-list-row">
-                      <span style={{width:9,height:9,borderRadius:"50%",background:EXPENSE_GROUP_COLOR[g]||"#8E8E93",flexShrink:0}} />
-                      <div className="progress-list-main"><div className="progress-list-title">{g}</div></div>
-                      <span style={{fontSize:11,color:INK_FAINT,marginRight:7}}>
-                        {periodExpense?Math.round(amount/periodExpense*100):0}%
-                      </span>
-                      <span className="progress-pill">{inr(amount)}</span>
-                    </div>
-                  ))}
+                  {byGroup.map(({g,amount,subs})=>{
+                    const isOpen = expandedExpenseGroup === g;
+                    const GIcon = EXPENSE_GROUP_ICON[g] || Receipt;
+                    return (
+                      <div key={g} style={{borderBottom:`1px solid ${LINE}`}}>
+                        <button onClick={()=>setExpandedExpenseGroup(isOpen?null:g)}
+                          style={{display:"flex",alignItems:"center",gap:9,width:"100%",background:"transparent",border:"none",padding:"10px 0",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                          <div style={{width:26,height:26,borderRadius:8,background:hexA(EXPENSE_GROUP_COLOR[g]||"#8E8E93",0.14),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                            <GIcon size={13} color={EXPENSE_GROUP_COLOR[g]||"#8E8E93"} />
+                          </div>
+                          <div style={{flex:1,minWidth:0,fontSize:13,fontWeight:700,color:INK,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g}</div>
+                          <span style={{fontSize:11,color:INK_FAINT,marginRight:2}}>
+                            {periodExpense?Math.round(amount/periodExpense*100):0}%
+                          </span>
+                          <span className="progress-pill">{inr(amount)}</span>
+                          {isOpen ? <ChevronUp size={15} color={INK_FAINT} style={{flexShrink:0}} /> : <ChevronDown size={15} color={INK_FAINT} style={{flexShrink:0}} />}
+                        </button>
+                        {isOpen && (
+                          <div style={{padding:"0 0 10px 35px"}}>
+                            {subs.map(({sub,amount:subAmt})=>{
+                              const SIcon = SUBCATEGORY_ICON[sub];
+                              return (
+                                <div key={sub} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 0"}}>
+                                  {SIcon ? <SIcon size={12} color={INK_FAINT} style={{flexShrink:0}} /> : <span style={{width:5,height:5,borderRadius:"50%",background:INK_FAINT,flexShrink:0}} />}
+                                  <span style={{flex:1,minWidth:0,fontSize:12,color:INK_DIM,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sub}</span>
+                                  <span style={{fontSize:12,fontWeight:700,color:INK,fontFamily:mono}}>{inr(subAmt)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </> : <div className="progress-empty">No expense data for this period. Log an expense to see it broken down here.</div>}
             </Card>
