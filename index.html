@@ -373,7 +373,7 @@ import {
   CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper, Trophy,
   Fuel, Store, MessageSquare, Sunrise, Cookie, PiggyBank, Percent,
   Star, XCircle, Brain, ClipboardCheck, GraduationCap, ArrowLeftRight,
-  Zap, Smartphone, Shirt, Wrench, Gift,
+  Zap, Smartphone, Shirt, Wrench, Gift, Shield,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -754,6 +754,7 @@ const DEFAULT_EXPENSE_GROUPS = {
   Clothes: ["Men's wear", "Women's wear", "Footwear", "Accessories"],
   Shopping: ["Electronics", "Home & Kitchen", "Gifts", "Miscellaneous"],
   "Health Care": ["Grooming", "Medical", "Pharmacy"],
+  Insurance: ["Vehicle", "Health", "Life", "Home"],
   Other: ["Entertainment", "Personal", "Donations"],
 };
 // Groups whose payments are driven from the saved Repayment Due data instead of manual entry;
@@ -761,7 +762,7 @@ const DEFAULT_EXPENSE_GROUPS = {
 // EMI, Rent, and Water are intentionally left out of this list (even though Rent/Water also appear in
 // the Repayments Due section) so they stay selectable for a quick one-off manual entry too.
 const REPAYMENT_LINKED_EXPENSE_GROUPS = ["Electricity Bill", "Recharge"];
-const REPAYMENT_CATEGORY_TO_EXPENSE_GROUP = { "EMI": "EMI", "Loan": "EMI", "Gold Loan": "EMI", "Electricity": "Electricity Bill", "Mobile Recharge": "Recharge", "Rent": "Rent", "Water": "Water", "Other": "Other" };
+const REPAYMENT_CATEGORY_TO_EXPENSE_GROUP = { "EMI": "EMI", "Loan": "EMI", "Gold Loan": "EMI", "Electricity": "Electricity Bill", "Mobile Recharge": "Recharge", "Rent": "Rent", "Water": "Water", "Insurance Renewal": "Insurance", "Bike Maintenance": "Travel", "Other": "Other" };
 
 function isItemValid(item) {
   if (!item || !item.name || !item.name.trim()) return false;
@@ -770,7 +771,7 @@ function isItemValid(item) {
   return item.type === "instant" || item.type === "duration";
 }
 
-const REPAYMENT_CATEGORIES = ["Gold Loan", "Loan", "EMI", "Electricity", "Rent", "Water", "Mobile Recharge", "Other"];
+const REPAYMENT_CATEGORIES = ["Gold Loan", "Loan", "EMI", "Electricity", "Rent", "Water", "Insurance Renewal", "Bike Maintenance", "Mobile Recharge", "Other"];
 // EMI/Loan/Gold Loan/Rent/Other are fixed: amount and schedule come from what's saved in Repayment due.
 // Electricity and Mobile Recharge are variable: the reminder schedule stays fixed, but the amount is editable at pay time.
 const REPAYMENT_VARIABLE_CATEGORIES = ["Electricity", "Mobile Recharge", "Water"];
@@ -1088,10 +1089,10 @@ const TODAY_CARD_ACCENT = {
 // Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
 const DAILY_EXPENSE_GROUPS = Object.fromEntries(Object.entries(DEFAULT_EXPENSE_GROUPS).filter(([g]) => !REPAYMENT_LINKED_EXPENSE_GROUPS.includes(g)));
-const EXPENSE_GROUP_ICON = { Rent: Home, "Electricity Bill": Zap, EMI: CreditCard, Recharge: Smartphone, Water: Droplet, Travel: Plane, Fuel: Fuel, Grocery: ShoppingBag, "Outside Food": UtensilsCrossed, Clothes: Shirt, Shopping: Store, "Health Care": HeartPulse, Other: Receipt };
+const EXPENSE_GROUP_ICON = { Rent: Home, "Electricity Bill": Zap, EMI: CreditCard, Recharge: Smartphone, Water: Droplet, Travel: Plane, Fuel: Fuel, Grocery: ShoppingBag, "Outside Food": UtensilsCrossed, Clothes: Shirt, Shopping: Store, "Health Care": HeartPulse, Insurance: Shield, Other: Receipt };
 // Each expense category gets its own always-on accent color (not just a highlight-when-selected
 // tint), so the picker reads as a row of distinct colored tiles the way it does in the reference design.
-const EXPENSE_GROUP_COLOR = { Rent: "#8E44AD", "Electricity Bill": "#F5A623", EMI: "#5856D6", Recharge: "#00B8D9", Water: "#0EA5E9", Travel: "#AF52DE", Fuel: "#FF9500", Grocery: "#34C759", "Outside Food": "#0071E3", Clothes: "#EC4899", Shopping: "#32ADE6", "Health Care": "#FF3B30", Other: "#8E8E93" };
+const EXPENSE_GROUP_COLOR = { Rent: "#8E44AD", "Electricity Bill": "#F5A623", EMI: "#5856D6", Recharge: "#00B8D9", Water: "#0EA5E9", Travel: "#AF52DE", Fuel: "#FF9500", Grocery: "#34C759", "Outside Food": "#0071E3", Clothes: "#EC4899", Shopping: "#32ADE6", "Health Care": "#FF3B30", Insurance: "#607D8B", Other: "#8E8E93" };
 // Icon per expense subcategory, keyed by its exact label from DEFAULT_EXPENSE_GROUPS — used to give
 // the subcategory chips (and the Progress tab's category drill-down) a distinct icon where it helps.
 const SUBCATEGORY_ICON = {
@@ -1100,6 +1101,7 @@ const SUBCATEGORY_ICON = {
   "Men's wear": Shirt, "Women's wear": Shirt, Footwear: Footprints, Accessories: Star,
   Electronics: Laptop, "Home & Kitchen": Home, Gifts: Gift, Miscellaneous: ShoppingBag,
   Grooming: Brush, Medical: HeartPulse, Pharmacy: HeartPulse,
+  Vehicle: Car, Health: HeartPulse, Life: HandHeart, Home: Home,
   Entertainment: Film, Personal: Smile, Donations: HandHeart,
 };
 // Icon/accent per life-area category (My Day / Career / Health / Routine), shared by the
@@ -2407,10 +2409,12 @@ function LifeTracker() {
     purpose: "", emiAmount: "", dueDate: "", receivedDate: "",
     amount: "", frequency: "Monthly", dueDayStart: "", dueDayEnd: "",
     planAmount: "", startDate: "",
+    policyType: "Vehicle",
+    currentOdometer: "", serviceIntervalKm: "", serviceIntervalMonths: "",
     reminderOffset: "3d",
   });
   const [repaymentForm, setRepaymentForm] = useState(blankRepaymentForm());
-  const repaymentCategoryClass = (cat) => (cat === "Gold Loan" ? "gold" : (cat === "Loan" || cat === "EMI") ? "loan" : cat === "Mobile Recharge" ? "recharge" : "simple");
+  const repaymentCategoryClass = (cat) => (cat === "Gold Loan" ? "gold" : (cat === "Loan" || cat === "EMI") ? "loan" : cat === "Mobile Recharge" ? "recharge" : cat === "Bike Maintenance" ? "bike" : "simple");
   const openEditRepayment = (r) => {
     setRepaymentForm({
       category: r.category, name: r.name || "", remarks: r.remarks || "",
@@ -2421,6 +2425,10 @@ function LifeTracker() {
       amount: r.amount != null ? String(r.amount) : "",
       frequency: r.frequency || "Monthly", dueDayStart: r.dueDayStart != null ? String(r.dueDayStart) : "", dueDayEnd: r.dueDayEnd != null ? String(r.dueDayEnd) : "",
       planAmount: r.planAmount != null ? String(r.planAmount) : "", startDate: r.startDate || "",
+      policyType: r.policyType || "Vehicle",
+      currentOdometer: r.lastServiceOdometer != null ? String(r.lastServiceOdometer) : "",
+      serviceIntervalKm: r.serviceIntervalKm != null ? String(r.serviceIntervalKm) : "",
+      serviceIntervalMonths: r.serviceIntervalMonths != null ? String(r.serviceIntervalMonths) : "",
       reminderOffset: r.reminderOffset || "3d",
     });
     setEditingRepaymentId(r.id);
@@ -2485,12 +2493,30 @@ function LifeTracker() {
       } else {
         setRepayments((prev) => [...prev, { id: "r" + Date.now(), ...base, paid: false }]);
       }
+    } else if (cls === "bike") {
+      const currentOdo = parseFloat(repaymentForm.currentOdometer) || 0;
+      const intervalKm = parseFloat(repaymentForm.serviceIntervalKm) || 0;
+      if (intervalKm <= 0) return;
+      const intervalMonths = repaymentForm.serviceIntervalMonths ? parseFloat(repaymentForm.serviceIntervalMonths) : null;
+      const base = {
+        category: repaymentForm.category, name: repaymentForm.name.trim(), remarks: repaymentForm.remarks.trim(),
+        serviceIntervalKm: intervalKm, serviceIntervalMonths: intervalMonths,
+        nextDueOdometer: currentOdo + intervalKm,
+        dueDate: intervalMonths ? addMonthsFrom(dateKey(), intervalMonths) : "",
+        reminderOffset: repaymentForm.reminderOffset,
+      };
+      if (editingRepaymentId) {
+        setRepayments((prev) => prev.map((r) => (r.id !== editingRepaymentId ? r : { ...r, ...base })));
+      } else {
+        setRepayments((prev) => [...prev, { id: "r" + Date.now(), ...base, lastServiceOdometer: currentOdo, lastServiceDate: null, history: [], amount: 0, paid: false }]);
+      }
     } else {
       const amt = parseFloat(repaymentForm.amount);
       if (!amt || amt <= 0) return;
       const base = {
         category: repaymentForm.category, name: repaymentForm.name.trim(), remarks: repaymentForm.remarks.trim(), amount: amt, dueDate: repaymentForm.dueDate || "", reminderOffset: repaymentForm.reminderOffset,
         frequency: repaymentForm.frequency, dueDayStart: repaymentForm.dueDayStart ? parseInt(repaymentForm.dueDayStart) : null, dueDayEnd: repaymentForm.dueDayEnd ? parseInt(repaymentForm.dueDayEnd) : null,
+        ...(repaymentForm.category === "Insurance Renewal" ? { policyType: repaymentForm.policyType } : {}),
       };
       if (editingRepaymentId) {
         setRepayments((prev) => prev.map((r) => (r.id !== editingRepaymentId ? r : { ...r, ...base })));
@@ -2510,10 +2536,14 @@ function LifeTracker() {
     const d = new Date(dueDate);
     if (frequency === "Daily") d.setDate(d.getDate() + 1);
     else if (frequency === "Weekly") d.setDate(d.getDate() + 7);
+    else if (frequency === "Half-yearly") { d.setMonth(d.getMonth() + 6); if (dueDayStart) d.setDate(Number(dueDayStart)); }
     else if (frequency === "Yearly") { d.setFullYear(d.getFullYear() + 1); if (dueDayStart) d.setDate(Number(dueDayStart)); }
     else { d.setMonth(d.getMonth() + 1); if (dueDayStart) d.setDate(Number(dueDayStart)); }
     return dateKey(d);
   };
+  // Adds n calendar months to an arbitrary date string — used to roll a Bike Maintenance
+  // reminder's optional time-based due date forward after each service is logged.
+  const addMonthsFrom = (dateStr, n) => { const d = new Date(dateStr); d.setMonth(d.getMonth() + Number(n || 0)); return dateKey(d); };
   // Marking a recurring bill (simple w/ frequency, or recharge) as paid keeps the paid record in place as
   // history and spins off a new pending record for the next cycle, carrying forward name/category/settings
   // and only refreshing the due date (and, for recharge, the renewal date/avg cost).
@@ -2543,6 +2573,41 @@ function LifeTracker() {
       const done = remainingAmount <= 0 || installmentsPaid >= (r.installmentsTotal || 0);
       return { ...r, remainingAmount, installmentsPaid, dueDate: done ? r.dueDate : advanceMonth(r.dueDate), paid: done };
     }));
+  };
+  // ---- Bike Maintenance: km-based service log (odometer + cost + parts changed) ----
+  const BIKE_PARTS_OPTIONS = ["Engine oil", "Oil filter", "Air filter", "Brake pads", "Chain & sprocket", "Tyres", "Battery", "Spark plug", "Clutch plate"];
+  const [bikeServiceForm, setBikeServiceForm] = useState(null); // { repaymentId, odometer, cost, parts, otherPart, serviceCenter, notes }
+  const [expandedBikeHistoryId, setExpandedBikeHistoryId] = useState(null);
+  const openBikeServiceForm = (r) => setBikeServiceForm({ repaymentId: r.id, odometer: r.nextDueOdometer != null ? String(r.nextDueOdometer) : "", cost: "", parts: [], otherPart: "", serviceCenter: "", notes: "" });
+  const cancelBikeServiceForm = () => setBikeServiceForm(null);
+  const toggleBikeServicePart = (part) => setBikeServiceForm((f) => f && ({ ...f, parts: f.parts.includes(part) ? f.parts.filter((p) => p !== part) : [...f.parts, part] }));
+  const saveBikeService = () => {
+    if (!bikeServiceForm) return;
+    const odo = parseFloat(bikeServiceForm.odometer) || 0;
+    if (odo <= 0) return;
+    const cost = parseFloat(bikeServiceForm.cost) || 0;
+    const parts = [...bikeServiceForm.parts, ...(bikeServiceForm.otherPart.trim() ? [bikeServiceForm.otherPart.trim()] : [])];
+    const serviceDate = dateKey();
+    const entry = { date: serviceDate, odometer: odo, cost, parts, serviceCenter: bikeServiceForm.serviceCenter.trim(), notes: bikeServiceForm.notes.trim() };
+    const rId = bikeServiceForm.repaymentId;
+    setRepayments((prev) => prev.map((r) => r.id !== rId ? r : {
+      ...r,
+      history: [entry, ...(r.history || [])],
+      lastServiceOdometer: odo,
+      lastServiceDate: serviceDate,
+      nextDueOdometer: odo + (r.serviceIntervalKm || 0),
+      dueDate: r.serviceIntervalMonths ? addMonthsFrom(serviceDate, r.serviceIntervalMonths) : r.dueDate,
+    }));
+    if (cost > 0) {
+      setDailyLogs((prev) => {
+        const log = prev[today] || defaultLog();
+        const remarksBits = [parts.length ? `Parts: ${parts.join(", ")}` : "", bikeServiceForm.notes.trim()].filter(Boolean);
+        const exp = { id: "e" + Date.now(), itemId: "expense", amount: cost, group: "Travel", subcategory: "Bike Maintenance", vendor: bikeServiceForm.serviceCenter.trim(), remarks: remarksBits.join(" \u00b7 "), time: new Date().toISOString(), linkedRepaymentId: rId };
+        return { ...prev, [today]: { ...log, expenses: [...log.expenses, exp] } };
+      });
+    }
+    celebrate("Service logged!");
+    setBikeServiceForm(null);
   };
   const sortedRepayments = [...repayments].sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
   const todaysRepaymentReminders = useMemo(() => sortedRepayments.filter((r) => isRepaymentRelevantToday(r, today)), [sortedRepayments, today]);
@@ -3182,12 +3247,12 @@ function LifeTracker() {
   const repaymentFormCard = (
                   <div ref={repaymentFormRef}>
                     <Card style={{ marginBottom: 9 }}>
-                      <SectionLabel>{editingRepaymentId ? "Edit repayment" : "New repayment"}</SectionLabel>
+                      <SectionLabel>{editingRepaymentId ? "Edit reminder" : "New reminder"}</SectionLabel>
                       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        <Select value={repaymentForm.category} onChange={(e) => setRepaymentForm({ ...blankRepaymentForm(), category: e.target.value })}>
+                        <Select value={repaymentForm.category} onChange={(e) => { const cat = e.target.value; setRepaymentForm({ ...blankRepaymentForm(), category: cat, frequency: cat === "Insurance Renewal" ? "Yearly" : "Monthly" }); }}>
                           {REPAYMENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                         </Select>
-                        <TextField placeholder="Lender / details (e.g. HDFC)" value={repaymentForm.name} onChange={(e) => setRepaymentForm({ ...repaymentForm, name: e.target.value })} />
+                        <TextField placeholder={repaymentForm.category === "Bike Maintenance" ? "Bike name / nickname (optional)" : repaymentForm.category === "Insurance Renewal" ? "Insurer / Policy name" : "Lender / details (e.g. HDFC)"} value={repaymentForm.name} onChange={(e) => setRepaymentForm({ ...repaymentForm, name: e.target.value })} />
 
                         {(repaymentCategoryClass(repaymentForm.category) === "loan" || repaymentCategoryClass(repaymentForm.category) === "gold") && (
                           <TextField placeholder="Loan purpose" value={repaymentForm.purpose} onChange={(e) => setRepaymentForm({ ...repaymentForm, purpose: e.target.value })} />
@@ -3269,8 +3334,33 @@ function LifeTracker() {
                               </div>
                             )}
                           </>
+                        ) : repaymentCategoryClass(repaymentForm.category) === "bike" ? (
+                          <>
+                            <TextField type="number" placeholder="Current odometer (km)" value={repaymentForm.currentOdometer} onChange={(e) => setRepaymentForm({ ...repaymentForm, currentOdometer: e.target.value })} style={{ fontFamily: mono }} />
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Service every (km)</div>
+                                <TextField type="number" placeholder="e.g. 3000" value={repaymentForm.serviceIntervalKm} onChange={(e) => setRepaymentForm({ ...repaymentForm, serviceIntervalKm: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Or every (months, optional)</div>
+                                <TextField type="number" placeholder="e.g. 3" value={repaymentForm.serviceIntervalMonths} onChange={(e) => setRepaymentForm({ ...repaymentForm, serviceIntervalMonths: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              </div>
+                            </div>
+                            <div style={{ fontSize: 12.5, color: INK_FAINT }}>You'll log the actual odometer reading and cost each time you service it.</div>
+                          </>
                         ) : (
-                          <TextField type="number" placeholder="Amount" value={repaymentForm.amount} onChange={(e) => setRepaymentForm({ ...repaymentForm, amount: e.target.value })} style={{ fontFamily: mono }} />
+                          <>
+                            {repaymentForm.category === "Insurance Renewal" && (
+                              <Select value={repaymentForm.policyType} onChange={(e) => setRepaymentForm({ ...repaymentForm, policyType: e.target.value })}>
+                                <option value="Vehicle">Vehicle</option>
+                                <option value="Health">Health</option>
+                                <option value="Life">Life</option>
+                                <option value="Home">Home</option>
+                              </Select>
+                            )}
+                            <TextField type="number" placeholder={repaymentForm.category === "Insurance Renewal" ? "Premium amount" : "Amount"} value={repaymentForm.amount} onChange={(e) => setRepaymentForm({ ...repaymentForm, amount: e.target.value })} style={{ fontFamily: mono }} />
+                          </>
                         )}
 
                         {repaymentCategoryClass(repaymentForm.category) === "simple" && (
@@ -3285,6 +3375,7 @@ function LifeTracker() {
                                 <option value="Daily">Today</option>
                                 <option value="Weekly">Weekly</option>
                                 <option value="Monthly">Monthly</option>
+                                <option value="Half-yearly">Half-yearly</option>
                                 <option value="Yearly">Yearly</option>
                               </Select>
                             </div>
@@ -3314,6 +3405,31 @@ function LifeTracker() {
                       </div>
                     </Card>
                   </div>
+  );
+
+  const bikeServiceFormCard = bikeServiceForm && (
+    <Card style={{ marginBottom: 9 }}>
+      <SectionLabel>Log service</SectionLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <TextField type="number" placeholder="Odometer reading (km)" value={bikeServiceForm.odometer} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, odometer: e.target.value })} style={{ fontFamily: mono }} />
+        <TextField type="number" placeholder="Cost" value={bikeServiceForm.cost} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, cost: e.target.value })} style={{ fontFamily: mono }} />
+        <div>
+          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Parts changed</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {BIKE_PARTS_OPTIONS.map((p) => (
+              <ChipButton key={p} label={p} icon={SUBCATEGORY_ICON[p]} active={bikeServiceForm.parts.includes(p)} onClick={() => toggleBikeServicePart(p)} />
+            ))}
+          </div>
+        </div>
+        <TextField placeholder="Other part (optional)" value={bikeServiceForm.otherPart} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, otherPart: e.target.value })} />
+        <TextField placeholder="Service center / mechanic (optional)" value={bikeServiceForm.serviceCenter} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, serviceCenter: e.target.value })} />
+        <TextField placeholder="Notes (optional)" value={bikeServiceForm.notes} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, notes: e.target.value })} />
+        <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+          <button onClick={saveBikeService} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>Save</button>
+          <button onClick={cancelBikeServiceForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
+        </div>
+      </div>
+    </Card>
   );
 
   const myDayFormCard = (
@@ -4619,7 +4735,7 @@ function LifeTracker() {
                         <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
                           {todaysRepaymentReminders.length > 0 && (
                             <Card style={{ marginBottom: 8, borderRadius: 20 }}>
-                              <SectionLabel>Repayments due</SectionLabel>
+                              <SectionLabel>Reminders due</SectionLabel>
                               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                                 {todaysRepaymentReminders.map((r) => {
                                   const cls = repaymentCategoryClass(r.category);
@@ -4633,9 +4749,14 @@ function LifeTracker() {
                                           <div style={{ fontSize: 15, color: INK, fontWeight: 650 }}>{r.name || r.category}</div>
                                           <div style={{ fontSize: 12.5, color: overdue ? CORAL : INK_FAINT, marginTop: 2, fontWeight: overdue ? 700 : 400 }}>{r.category} &middot; due {formatDMY(r.dueDate)}{overdue ? " \u00b7 overdue" : ""}</div>
                                         </div>
-                                        {!variable && <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: CORAL, flexShrink: 0 }}>{inr(r.amount)}</span>}
+                                        {!variable && cls !== "bike" && <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: CORAL, flexShrink: 0 }}>{inr(r.amount)}</span>}
                                       </div>
-                                      {variable ? (
+                                      {cls === "bike" ? (
+                                        <>
+                                          <button onClick={() => (bikeServiceForm?.repaymentId === r.id ? cancelBikeServiceForm() : openBikeServiceForm(r))} style={{ width: "100%", marginTop: 8, minHeight: 38, background: TEAL, border: "none", borderRadius: 10, padding: "6px 0", color: "#FFFFFF", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>{bikeServiceForm?.repaymentId === r.id ? "Cancel" : "Log Service"}</button>
+                                          {bikeServiceForm?.repaymentId === r.id && <div style={{ marginTop: 8 }}>{bikeServiceFormCard}</div>}
+                                        </>
+                                      ) : variable ? (
                                         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
                                           <div style={{ display: "flex", gap: 6 }}>
                                             <TextField type="number" placeholder={`Amount (last ${inr(r.amount)})`} value={getFlow(`repay-${r.id}`).amount || ""} onChange={(e) => setFlow(`repay-${r.id}`, { amount: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
@@ -5419,7 +5540,7 @@ function LifeTracker() {
                 <>
                   <div style={{ display: "flex", gap: 5, marginBottom: 9 }}>
                     <ChipButton label="Goals" active={financeGoalView === "goals"} onClick={() => { setFinanceGoalView("goals"); setHistoryExpanded(false); }} />
-                    <ChipButton label="Repayment due" active={financeGoalView === "repayments"} onClick={() => { setFinanceGoalView("repayments"); setHistoryExpanded(false); }} />
+                    <ChipButton label="Reminder due" active={financeGoalView === "repayments"} onClick={() => { setFinanceGoalView("repayments"); setHistoryExpanded(false); }} />
                   </div>
                 </>
               )}
@@ -5505,7 +5626,7 @@ function LifeTracker() {
               {catTab === "financegoals" && financeGoalView === "repayments" && (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <SectionLabel>Repayment due</SectionLabel>
+                    <SectionLabel>Reminder due</SectionLabel>
                     <button onClick={() => (showAddRepayment ? cancelRepaymentForm() : setShowAddRepayment(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add</button>
                   </div>
                   {showAddRepayment && !(editingRepaymentId && repayments.some((r) => r.id === editingRepaymentId && !r.paid)) && repaymentFormCard}
@@ -5536,15 +5657,21 @@ function LifeTracker() {
                               </div>
                             </div>
                             <div style={{ display: "flex", gap: 5, alignItems: "center", flexShrink: 0 }}>
-                              <span style={{ fontFamily: mono, fontSize: 16, color: CORAL }}>{inr(r.amount)}</span>
-                              {cls === "loan" ? (
-                                r.paid ? (
-                                  <span style={{ fontSize: 13, color: TEAL, fontFamily: mono }}>Closed</span>
-                                ) : (
-                                  <button onClick={() => payNextEmi(r.id)} style={{ background: TEAL, border: "none", borderRadius: 7, padding: "4px 8px", color: "#FFFFFF", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Pay EMI</button>
-                                )
+                              {cls === "bike" ? (
+                                <button onClick={() => (bikeServiceForm?.repaymentId === r.id ? cancelBikeServiceForm() : openBikeServiceForm(r))} style={{ background: TEAL, border: "none", borderRadius: 7, padding: "6px 10px", color: "#FFFFFF", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>{bikeServiceForm?.repaymentId === r.id ? "Cancel" : "Log Service"}</button>
                               ) : (
-                                <button onClick={() => toggleRepaymentPaid(r.id)} style={{ width: 30, height: 30, borderRadius: 7, border: `1.5px solid ${r.paid ? BRASS : INK_FAINT}`, background: r.paid ? BRASS : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>{r.paid && <Check size={15} strokeWidth={3} color={BG} />}</button>
+                                <>
+                                  <span style={{ fontFamily: mono, fontSize: 16, color: CORAL }}>{inr(r.amount)}</span>
+                                  {cls === "loan" ? (
+                                    r.paid ? (
+                                      <span style={{ fontSize: 13, color: TEAL, fontFamily: mono }}>Closed</span>
+                                    ) : (
+                                      <button onClick={() => payNextEmi(r.id)} style={{ background: TEAL, border: "none", borderRadius: 7, padding: "4px 8px", color: "#FFFFFF", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Pay EMI</button>
+                                    )
+                                  ) : (
+                                    <button onClick={() => toggleRepaymentPaid(r.id)} style={{ width: 30, height: 30, borderRadius: 7, border: `1.5px solid ${r.paid ? BRASS : INK_FAINT}`, background: r.paid ? BRASS : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>{r.paid && <Check size={15} strokeWidth={3} color={BG} />}</button>
+                                  )}
+                                </>
                               )}
                               <IconAction onClick={() => openEditRepayment(r)}><Pencil size={15} /></IconAction>
                               <IconAction onClick={() => deleteRepayment(r.id)}><Trash2 size={15} /></IconAction>
@@ -5575,12 +5702,42 @@ function LifeTracker() {
                               <div style={{ display: "flex", justifyContent: "space-between" }}><span>Avg daily cost</span><span>{inr(r.avgDailyCost)}</span></div>
                             </div>
                           )}
+                          {cls === "bike" && (
+                            <div style={{ marginTop: 8, borderTop: `1px solid ${LINE}`, paddingTop: 8, display: "flex", flexDirection: "column", gap: 2, fontSize: 13, color: INK_DIM, fontFamily: mono }}>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Last serviced</span><span>{r.lastServiceDate ? `${(r.lastServiceOdometer || 0).toLocaleString("en-IN")} km \u00b7 ${formatDMY(r.lastServiceDate)}` : "Not yet"}</span></div>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Next service due</span><span style={{ color: BRASS }}>{(r.nextDueOdometer || 0).toLocaleString("en-IN")} km{r.dueDate ? ` \u00b7 by ${formatDMY(r.dueDate)}` : ""}</span></div>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Service interval</span><span>Every {(r.serviceIntervalKm || 0).toLocaleString("en-IN")} km{r.serviceIntervalMonths ? ` or ${r.serviceIntervalMonths} mo` : ""}</span></div>
+                            </div>
+                          )}
+                          {bikeServiceForm?.repaymentId === r.id && <div style={{ marginTop: 8 }}>{bikeServiceFormCard}</div>}
+                          {cls === "bike" && (r.history || []).length > 0 && (
+                            <div style={{ marginTop: 8 }}>
+                              <button onClick={() => setExpandedBikeHistoryId(expandedBikeHistoryId === r.id ? null : r.id)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", color: BRASS, cursor: "pointer", fontSize: 13, fontWeight: 700, padding: 0 }}>
+                                <History size={13} /> {expandedBikeHistoryId === r.id ? "Hide" : "Show"} service history ({r.history.length})
+                              </button>
+                              {expandedBikeHistoryId === r.id && (
+                                <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+                                  {r.history.map((h, i) => (
+                                    <div key={i} style={{ background: PANEL_2, borderRadius: 9, padding: "7px 9px", fontSize: 12.5 }}>
+                                      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, color: INK }}>
+                                        <span>{(h.odometer || 0).toLocaleString("en-IN")} km &middot; {formatDMY(h.date)}</span>
+                                        <span style={{ fontFamily: mono }}>{inr(h.cost)}</span>
+                                      </div>
+                                      {h.parts?.length > 0 && <div style={{ color: INK_FAINT, marginTop: 2 }}>Parts: {h.parts.join(", ")}</div>}
+                                      {h.serviceCenter && <div style={{ color: INK_FAINT }}>{h.serviceCenter}</div>}
+                                      {h.notes && <div style={{ color: INK_FAINT }}>{h.notes}</div>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                           {r.remarks && <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 5 }}>{r.remarks}</div>}
                         </Card>
                         </div>
                       );
                     })}
-                    {sortedRepayments.filter((r) => !r.paid).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{sortedRepayments.some((r) => r.paid) ? "All repayments are settled — check History." : "No repayments added yet."}</div>}
+                    {sortedRepayments.filter((r) => !r.paid).length === 0 && <div style={{ color: INK_FAINT, fontSize: 15, textAlign: "center", padding: "19px 0" }}>{sortedRepayments.some((r) => r.paid) ? "All reminders are settled — check History." : "No reminders added yet."}</div>}
                   </div>
                 </>
               )}
