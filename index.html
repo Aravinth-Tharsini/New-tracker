@@ -4384,28 +4384,37 @@ function LifeTracker() {
         return (
         <div key="daily-page" className="daily-page-content" style={{ padding: "6px 0 14px", flex: 1, minHeight: 0, width: "100%" }}>
           {!expandedDailyCategory && (
-            <div className="today-hero">
-              <div className="today-hero-text">
-                <div className="today-hero-greeting">{greeting} <span aria-hidden="true">👋</span></div>
-                <div className="today-hero-sub">Plan better, stay consistent, achieve your goals.</div>
+            <>
+              <div style={{ position: "relative", overflow: "hidden", borderRadius: 22, margin: "2px 16px 12px", padding: "18px 20px 16px", background: darkMode ? "linear-gradient(120deg, #1C1C1E 0%, #2A2019 55%, #33240F 100%)" : "linear-gradient(120deg, #E4EAF7 0%, #F1E4D8 60%, #F7DFC4 100%)", border: `1px solid ${LINE}` }}>
+                <svg width="112" height="98" viewBox="0 0 112 98" style={{ position: "absolute", right: -6, bottom: -10, opacity: darkMode ? 0.6 : 0.9 }}>
+                  <circle cx="82" cy="60" r="26" fill="#FFFFFF" opacity={darkMode ? 0.12 : 0.55} />
+                  <circle cx="82" cy="60" r="26" fill="#F2A65A" opacity="0.6" />
+                  <circle cx="82" cy="60" r="14" fill="#FFF8EF" opacity={darkMode ? 0.85 : 1} />
+                  <path d="M0 82 Q30 58 60 78 T112 70 V98 H0 Z" fill="#B9C8E8" opacity={darkMode ? 0.18 : 0.75} />
+                  <ellipse cx="24" cy="24" rx="13" ry="7" fill="#FFFFFF" opacity={darkMode ? 0.18 : 0.8} />
+                  <ellipse cx="46" cy="16" rx="9" ry="5" fill="#FFFFFF" opacity={darkMode ? 0.14 : 0.7} />
+                  <path d="M12 40 q4 -4 8 0 q4 -4 8 0" stroke="#8FA3C9" strokeWidth="1.6" fill="none" strokeLinecap="round" opacity={darkMode ? 0.4 : 1} />
+                  <path d="M30 32 q3.5 -3.5 7 0" stroke="#8FA3C9" strokeWidth="1.6" fill="none" strokeLinecap="round" opacity={darkMode ? 0.4 : 1} />
+                </svg>
+                <div style={{ position: "relative", maxWidth: "72%" }}>
+                  <div style={{ fontSize: 21, fontWeight: 800, color: INK, letterSpacing: "-0.02em" }}>{greeting}! <span aria-hidden="true">👋</span></div>
+                  <div style={{ fontSize: 13, color: INK_DIM, marginTop: 5, lineHeight: 1.4 }}>Plan better, stay consistent, achieve your goals.</div>
+                </div>
               </div>
               {heroTrackable > 0 && (
-                <div className="today-hero-ring">
-                  <svg viewBox="0 0 64 64" width="58" height="58">
-                    <circle cx="32" cy="32" r={heroRingR} fill="none" stroke={hexA(BRASS_HEX, darkMode ? 0.28 : 0.14)} strokeWidth="6" />
-                    <circle
-                      cx="32" cy="32" r={heroRingR} fill="none" stroke={BRASS} strokeWidth="6" strokeLinecap="round"
-                      strokeDasharray={heroRingCirc} strokeDashoffset={heroRingCirc * (1 - heroPct)}
-                      transform="rotate(-90 32 32)" style={{ transition: "stroke-dashoffset .5s ease" }}
-                    />
-                  </svg>
-                  <div className="today-hero-ring-label">
-                    <div className="today-hero-ring-num">{heroDone}<span>/{heroTrackable}</span></div>
-                    <div className="today-hero-ring-caption">done</div>
-                  </div>
+                <div style={{ margin: "0 16px 16px" }}>
+                  <Card style={{ padding: "14px 16px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                      <RingProgress pct={heroPct * 100} size={68} color={TEAL} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 750, color: INK }}>Today's Progress</div>
+                        <div style={{ marginTop: 4, fontSize: 12.5, color: INK_DIM }}>{heroDone} of {heroTrackable} activities completed</div>
+                      </div>
+                    </div>
+                  </Card>
                 </div>
               )}
-            </div>
+            </>
           )}
           {availableDailyCategories.length === 0 ? (
             <div className="today-empty-state">
@@ -7056,7 +7065,7 @@ function doPost(e) {
 
       <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 10000, background: "transparent", paddingBottom: "calc(10px + env(safe-area-inset-bottom))", display: "flex", justifyContent: "center", pointerEvents: "none" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 2, width: "calc(100% - 24px)", maxWidth: 456, background: "var(--nav-bg)", borderRadius: 26, boxShadow: "0 10px 30px rgba(15,23,42,0.14), 0 2px 8px rgba(15,23,42,0.06)", border: `1px solid ${LINE}`, padding: "6px 6px", pointerEvents: "auto" }}>
-          {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: LayoutGrid }, { id: "analysis", label: "Progress", icon: TrendingUp }, { id: "datalink", label: "More", icon: Settings2 }].map((p) => {
+          {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: Plus }, { id: "analysis", label: "Progress", icon: TrendingUp }, { id: "datalink", label: "More", icon: Settings2 }].map((p) => {
             const Icon = p.icon; const active = page === p.id;
             return (
               <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: active ? 3 : 2, padding: "6px 0", background: "transparent", border: "none", cursor: "pointer", color: active ? "#FFFFFF" : INK_FAINT, transition: "color .18s ease" }}>
