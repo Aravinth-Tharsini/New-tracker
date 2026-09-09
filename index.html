@@ -2457,7 +2457,7 @@ function LifeTracker() {
   const committedTotal = financeGoalsAll.filter((g) => g.done).reduce((s, g) => s + (g.targetAmount || 0), 0);
   const financeBalanceAvailable = totalSavingsPool - committedTotal;
   const financeAllocations = useMemo(() => {
-    if (catTab !== "finance") return {};
+    if (catTab !== "finance" && catTab !== "financegoals") return {};
     const map = {};
     let remaining = Math.max(0, financeBalanceAvailable);
     const ordered = [...categoryGoals].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
