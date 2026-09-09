@@ -4494,10 +4494,10 @@ function LifeTracker() {
                         <button
                           className="today-focus-card is-open"
                           onClick={() => setExpandedDailyCategory(null)}
-                          style={{ background: hexA(BRASS_HEX, darkMode ? 0.20 : 0.10), cursor: "pointer" }}
+                          style={{ background: hexA(accent, darkMode ? 0.20 : 0.10), cursor: "pointer" }}
                         >
-                          <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0, "--icon-tint": hexA(BRASS_HEX, darkMode ? 0.24 : 0.14), "--icon-tint-border": hexA(BRASS_HEX, 0.3) }}>
-                            <CatIcon size={32} color={BRASS} strokeWidth={2.2} />
+                          <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0, "--icon-tint": hexA(accent, darkMode ? 0.24 : 0.14), "--icon-tint-border": hexA(accent, 0.3) }}>
+                            <CatIcon size={32} color={accent} strokeWidth={2.2} />
                             {badge}
                           </div>
                         </button>
