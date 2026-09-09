@@ -2113,7 +2113,7 @@ function LifeTracker() {
     if (!amt || amt <= 0 || !group || !sub) return;
     setDailyLogs((prev) => {
       const log = prev[today] || defaultLog();
-      const entry = { id: "e" + Date.now(), itemId: item.id, amount: amt, group, subcategory: sub, vendor: (flow.vendor || "").trim(), remarks: (flow.remarks || "").trim(), time: new Date().toISOString(), linkedRepaymentId: flow.linkedRepaymentId || null, linkedShoppingListId: flow.linkedShoppingListId || null };
+      const entry = { id: "e" + Date.now(), itemId: item.id, amount: amt, group, subcategory: sub, vendor: (flow.vendor || "").trim(), remarks: (flow.remarks || "").trim(), time: new Date().toISOString(), linkedRepaymentId: flow.linkedRepaymentId || null, linkedShoppingListId: flow.linkedShoppingListId || null, paymentMethod: flow.paymentMethod || "online" };
       return { ...prev, [today]: { ...log, expenses: [...log.expenses, entry] } };
     });
     if (flow.linkedShoppingListId) {
@@ -2126,7 +2126,7 @@ function LifeTracker() {
         else toggleRepaymentPaid(linked.id);
       }
     }
-    setFlow(item.id, { amount: "", vendor: "", remarks: "", linkedRepaymentId: null, linkedShoppingListId: null, sub: null });
+    setFlow(item.id, { amount: "", vendor: "", remarks: "", linkedRepaymentId: null, linkedShoppingListId: null, sub: null, paymentMethod: flow.paymentMethod || "online" });
   };
   const payRepayment = (r) => {
     const group = REPAYMENT_CATEGORY_TO_EXPENSE_GROUP[r.category] || "Other";
@@ -2292,8 +2292,21 @@ function LifeTracker() {
   };
 
   const expensesForMonth = (mk) => Object.entries(dailyLogs).filter(([d]) => d.slice(0, 7) === mk).reduce((s, [, log]) => s + (log.expenses || []).reduce((s2, e) => s2 + e.amount, 0), 0);
+  // Same as expensesForMonth but scoped to one payment method. Older expenses (and ones logged from
+  // automatic flows like EMI/shopping/travel pay) predate the paymentMethod field, so they default to
+  // "online" — the safest assumption since most of those are bank transfers rather than cash-in-hand.
+  const expensesForMonthByMethod = (mk, method) => Object.entries(dailyLogs).filter(([d]) => d.slice(0, 7) === mk).reduce((s, [, log]) => s + (log.expenses || []).filter((e) => (e.paymentMethod || "online") === method).reduce((s2, e) => s2 + e.amount, 0), 0);
   const [financeMonth, setFinanceMonth] = useState(curMonth);
   const setFinanceField = (mk, f, v) => setFinanceMonthly((prev) => ({ ...prev, [mk]: { ...prev[mk], [f]: v } }));
+  // Online/Account Balance + Physical/Cash Balance are the two numbers the user actually enters for
+  // "How Much I Have"; `income` (used everywhere else — goal funding, insights, trend charts) is kept
+  // in sync as their sum so none of that existing logic needs to change.
+  const setFinanceBalanceField = (mk, field, v) => setFinanceMonthly((prev) => {
+    const cur = prev[mk] || {};
+    const online = field === "onlineBalance" ? v : (cur.onlineBalance ?? "");
+    const cash = field === "cashBalance" ? v : (cur.cashBalance ?? "");
+    return { ...prev, [mk]: { ...cur, [field]: v, income: (parseFloat(online) || 0) + (parseFloat(cash) || 0) } };
+  });
   const income = financeMonthly[curMonth]?.income ?? "";
   const incomeNum = parseFloat(income) || 0;
   const expensesNum = expensesForMonth(curMonth);
@@ -4570,8 +4583,8 @@ function LifeTracker() {
                                       names always wrap and stay fully readable instead of being clipped with an
                                       ellipsis on a cramped single row. Date/time are already shown above so they're
                                       not repeated here, only what's specific to the booking. */}
-                                  <div style={{ display: "grid", gridTemplateColumns: "18px 1fr", columnGap: 10, rowGap: 14, marginBottom: t.bookingDetails ? 10 : 0 }}>
-                                    <div style={{ gridColumn: 1, gridRow: "1 / 3", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                                  <div style={{ display: "grid", gridTemplateColumns: "minmax(18px, auto) 1fr", columnGap: 10, rowGap: 14, marginBottom: t.bookingDetails ? 10 : 0 }}>
+                                    <div style={{ gridColumn: 1, gridRow: "1 / 3", display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
                                       <div style={{ width: 8, height: 8, borderRadius: "50%", border: `2px solid ${BRASS}`, background: PANEL_2, flexShrink: 0 }} />
                                       <div style={{ width: 1.5, flex: 1, minHeight: 10, background: `repeating-linear-gradient(to bottom, ${BRASS_DIM} 0, ${BRASS_DIM} 3px, transparent 3px, transparent 6px)`, margin: "3px 0" }} />
                                       {(() => {
@@ -4876,6 +4889,21 @@ function LifeTracker() {
                                 </div>
                               </div>
 
+                              <div style={{ marginTop: 14 }}>
+                                <div style={{ fontSize: 12, color: INK_FAINT, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6, fontWeight: 700 }}>Paid via</div>
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  {[{ key: "online", label: "Online / Account", icon: CreditCard }, { key: "cash", label: "Physical / Cash", icon: Wallet }].map((opt) => {
+                                    const Icon = opt.icon;
+                                    const sel = (flow.paymentMethod || "online") === opt.key;
+                                    return (
+                                      <button key={opt.key} onClick={() => setFlow("dailyExpense", { paymentMethod: opt.key })} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 40, background: sel ? hexA(BRASS_HEX, darkMode ? 0.22 : 0.13) : PANEL_2, border: sel ? `1.5px solid ${BRASS}` : `1px solid ${LINE}`, borderRadius: 12, color: sel ? BRASS : INK_DIM, cursor: "pointer", fontSize: 13.5, fontWeight: sel ? 700 : 500 }}>
+                                        <Icon size={15} /> {opt.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
                               <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
                                 <div style={{ position: "relative", flex: "1 1 140px" }}>
                                   <Store size={16} color={INK_FAINT} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
@@ -4914,7 +4942,7 @@ function LifeTracker() {
                                     </div>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{ fontSize: 14, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.subcategory}{e.vendor ? ` \u00b7 ${e.vendor}` : ""}</div>
-                                      <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 1 }}>{fmtTime(e.time)}</div>
+                                      <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 1 }}>{fmtTime(e.time)} &middot; {(e.paymentMethod || "online") === "cash" ? "Cash" : "Online"}</div>
                                     </div>
                                     <span style={{ fontFamily: mono, fontSize: 15, fontWeight: 700, color: CORAL, flexShrink: 0 }}>{inr(e.amount)}</span>
                                     <button onClick={() => deleteExpense(e.id)} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer", flexShrink: 0 }}><Trash2 size={14} /></button>
@@ -5257,33 +5285,72 @@ function LifeTracker() {
               })()}
             <div className="today-expand-enter">
 
-          {catTab === "finance" && (
-            <Card style={{ marginBottom: 12 }}>
-              <SectionLabel>Monthly money</SectionLabel>
-              <div style={{ display: "flex", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
-                <div style={{ flex: "1 1 120px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Month</div>
-                  <Select value={financeMonth} onChange={(e) => setFinanceMonth(e.target.value)} style={{ width: "100%" }}>
-                    {last12Months.map((m) => <option key={m.mk} value={m.mk}>{monthLabel(m.mk)}</option>)}
-                  </Select>
+          {catTab === "finance" && (() => {
+            const onlineBalanceNum = parseFloat(financeMonthly[financeMonth]?.onlineBalance) || 0;
+            const cashBalanceNum = parseFloat(financeMonthly[financeMonth]?.cashBalance) || 0;
+            const onlineExpenses = expensesForMonthByMethod(financeMonth, "online");
+            const cashExpenses = expensesForMonthByMethod(financeMonth, "cash");
+            const remainingOnline = onlineBalanceNum - onlineExpenses;
+            const remainingCash = cashBalanceNum - cashExpenses;
+            const totalAvailable = remainingOnline + remainingCash;
+            return (
+              <Card style={{ marginBottom: 12 }}>
+                <SectionLabel>How Much I Have</SectionLabel>
+                <div style={{ display: "flex", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 120px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                    <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Month</div>
+                    <Select value={financeMonth} onChange={(e) => setFinanceMonth(e.target.value)} style={{ width: "100%" }}>
+                      {last12Months.map((m) => <option key={m.mk} value={m.mk}>{monthLabel(m.mk)}</option>)}
+                    </Select>
+                  </div>
                 </div>
-                <div style={{ flex: "1 1 140px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>How much money I have</div>
-                  <TextField type="number" value={financeMonthly[financeMonth]?.income ?? ""} onChange={(e) => setFinanceField(financeMonth, "income", e.target.value)} placeholder="30000" style={{ width: "100%", fontFamily: mono }} />
+                <div style={{ display: "flex", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 140px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                    <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5, display: "flex", alignItems: "center", gap: 5 }}><CreditCard size={13} /> Online / Account Balance</div>
+                    <TextField type="number" value={financeMonthly[financeMonth]?.onlineBalance ?? ""} onChange={(e) => setFinanceBalanceField(financeMonth, "onlineBalance", e.target.value)} placeholder="20000" style={{ width: "100%", fontFamily: mono }} />
+                  </div>
+                  <div style={{ flex: "1 1 140px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                    <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5, display: "flex", alignItems: "center", gap: 5 }}><Wallet size={13} /> Physical / Cash Balance</div>
+                    <TextField type="number" value={financeMonthly[financeMonth]?.cashBalance ?? ""} onChange={(e) => setFinanceBalanceField(financeMonth, "cashBalance", e.target.value)} placeholder="10000" style={{ width: "100%", fontFamily: mono }} />
+                  </div>
                 </div>
-              </div>
-              <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 14, color: INK_FAINT }}>Expenses (auto-calculated from what you've logged)</span>
-                  <span style={{ fontFamily: mono, fontSize: 16, color: CORAL }}>{inr(expensesForMonth(financeMonth))}</span>
+                <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 14, color: INK_FAINT }}>Online / Account expenses this month</span>
+                    <span style={{ fontFamily: mono, fontSize: 15, color: CORAL }}>{inr(onlineExpenses)}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 14, color: INK_FAINT }}>Remaining Online / Account Balance</span>
+                    <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: remainingOnline >= 0 ? TEAL : CORAL }}>{remainingOnline < 0 ? `-${inr(Math.abs(remainingOnline))}` : inr(remainingOnline)}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 6, marginTop: 2 }}>
+                    <span style={{ fontSize: 14, color: INK_FAINT }}>Physical / Cash expenses this month</span>
+                    <span style={{ fontFamily: mono, fontSize: 15, color: CORAL }}>{inr(cashExpenses)}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 14, color: INK_FAINT }}>Remaining Cash Balance</span>
+                    <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: remainingCash >= 0 ? TEAL : CORAL }}>{remainingCash < 0 ? `-${inr(Math.abs(remainingCash))}` : inr(remainingCash)}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 8, marginTop: 3 }}>
+                    <span style={{ fontSize: 14.5, color: INK, fontWeight: 700 }}>Total Available Balance</span>
+                    <span style={{ fontFamily: mono, fontSize: 21, fontWeight: 750, color: totalAvailable >= 0 ? TEAL : CORAL }}>{totalAvailable < 0 ? `-${inr(Math.abs(totalAvailable))}` : inr(totalAvailable)}</span>
+                  </div>
+                  {(remainingOnline < 0 || remainingCash < 0) && (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 6, background: hexA(CORAL_HEX, 0.10), border: `1px solid ${hexA(CORAL_HEX, 0.3)}`, borderRadius: 10, padding: "8px 10px", marginTop: 6 }}>
+                      <XCircle size={14} color={CORAL} style={{ flexShrink: 0, marginTop: 1 }} />
+                      <span style={{ fontSize: 12.5, color: CORAL, lineHeight: 1.4 }}>
+                        {remainingOnline < 0 && remainingCash < 0 ? "Both your Online/Account and Cash balances have gone negative this month." : remainingOnline < 0 ? "Your Online/Account Balance has gone negative this month." : "Your Cash Balance has gone negative this month."}
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 8, marginTop: 3 }}>
+                    <span style={{ fontSize: 13, color: INK_FAINT }}>Available for goal funding (all-time)</span>
+                    <span style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, color: financeBalanceAvailable >= 0 ? TEAL : CORAL }}>{inr(financeBalanceAvailable)}</span>
+                  </div>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 6, marginTop: 2 }}>
-                  <span style={{ fontSize: 14, color: INK_FAINT }}>Total amount you have</span>
-                  <span style={{ fontFamily: mono, fontSize: 20, fontWeight: 600, color: financeBalanceAvailable >= 0 ? TEAL : CORAL }}>{inr(financeBalanceAvailable)}</span>
-                </div>
-              </div>
-            </Card>
-          )}
+              </Card>
+            );
+          })()}
 
           {(catTab === "trip" || catTab === "activity") ? (
             <>
@@ -6100,9 +6167,18 @@ function LifeTracker() {
                                 <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Amount</div><TextField type="number" value={editing.amount} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, amount: ev.target.value }))} /></div>
                                 <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Vendor</div><TextField value={editing.vendor || ""} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, vendor: ev.target.value }))} /></div>
                                 <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Remark</div><TextField value={editing.remarks || ""} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, remarks: ev.target.value }))} /></div>
+                                <div style={{ gridColumn: "1 / -1" }}>
+                                  <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Paid via</div>
+                                  <div style={{ display: "flex", gap: 6 }}>
+                                    {[{ key: "online", label: "Online / Account" }, { key: "cash", label: "Physical / Cash" }].map((opt) => {
+                                      const sel = (editing.paymentMethod || "online") === opt.key;
+                                      return <button key={opt.key} onClick={() => setEditingHistoryExpense((x) => ({ ...x, paymentMethod: opt.key }))} style={{ flex: 1, background: sel ? hexA(BRASS_HEX, 0.13) : "transparent", border: sel ? `1.5px solid ${BRASS}` : `1px solid ${LINE}`, borderRadius: 7, padding: "6px 4px", color: sel ? BRASS : INK_DIM, cursor: "pointer", fontSize: 12.5, fontWeight: sel ? 700 : 500 }}>{opt.label}</button>;
+                                    })}
+                                  </div>
+                                </div>
                                 <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 6 }}>
                                   <button onClick={() => setEditingHistoryExpense(null)} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                                  <button onClick={() => { updateHistoryExpense(e.date, e.id, { amount: Number(editing.amount) || 0, vendor: (editing.vendor || "").trim(), remarks: (editing.remarks || "").trim() }); setEditingHistoryExpense(null); }} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>Save</button>
+                                  <button onClick={() => { updateHistoryExpense(e.date, e.id, { amount: Number(editing.amount) || 0, vendor: (editing.vendor || "").trim(), remarks: (editing.remarks || "").trim(), paymentMethod: editing.paymentMethod || "online" }); setEditingHistoryExpense(null); }} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>Save</button>
                                 </div>
                               </div>
                             ) : (
@@ -6110,7 +6186,7 @@ function LifeTracker() {
                                 {(() => { const Icon = EXPENSE_GROUP_ICON[e.group] || Receipt; return <Icon size={18} color={BRASS} />; })()}
                                 <div className="history-main" style={{ flex: 1, minWidth: 0 }}>
                                   <div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{e.subcategory || e.group || "Expense"}</div>
-                                  <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>{formatDMY(e.date)} · {fmtTime(e.time)}</div>
+                                  <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>{formatDMY(e.date)} · {fmtTime(e.time)} · {(e.paymentMethod || "online") === "cash" ? "Cash" : "Online"}</div>
                                   {e.vendor && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 3 }}>Vendor: {e.vendor}</div>}
                                   {e.remarks && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Remark: {e.remarks}</div>}
                                 </div>
