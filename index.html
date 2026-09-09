@@ -4566,29 +4566,32 @@ function LifeTracker() {
                                   <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
                                     <Ticket size={13} /> Trip booking details
                                   </div>
-                                  {/* Ticket-style route: From/departure on the left, To/arrival on the right, with the
-                                      journey line between them — date/time are already shown above so they're not
-                                      repeated here, only what's specific to the booking. */}
-                                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: t.bookingDetails ? 10 : 0 }}>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                      <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 2 }}>From</div>
-                                      <div style={{ fontSize: 17, color: INK, fontWeight: 750, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.fromLocation}</div>
-                                      {t.travelTime && <div style={{ fontFamily: mono, fontSize: 13, color: BRASS, fontWeight: 700, marginTop: 3 }}>{fmtTimeString12(t.travelTime)}</div>}
-                                    </div>
-                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, padding: "0 2px" }}>
+                                  {/* Ticket-style route: a vertical timeline with From above To, so long station/city
+                                      names always wrap and stay fully readable instead of being clipped with an
+                                      ellipsis on a cramped single row. Date/time are already shown above so they're
+                                      not repeated here, only what's specific to the booking. */}
+                                  <div style={{ display: "grid", gridTemplateColumns: "18px 1fr", columnGap: 10, rowGap: 14, marginBottom: t.bookingDetails ? 10 : 0 }}>
+                                    <div style={{ gridColumn: 1, gridRow: "1 / 3", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                                      <div style={{ width: 8, height: 8, borderRadius: "50%", border: `2px solid ${BRASS}`, background: PANEL_2, flexShrink: 0 }} />
+                                      <div style={{ width: 1.5, flex: 1, minHeight: 10, background: `repeating-linear-gradient(to bottom, ${BRASS_DIM} 0, ${BRASS_DIM} 3px, transparent 3px, transparent 6px)`, margin: "3px 0" }} />
                                       {(() => {
                                         const durMin = travelDurationMinutes(t.travelTime, t.arrivalTime);
                                         return durMin != null ? (
-                                          <div style={{ fontFamily: mono, fontSize: 11, color: "#FFFFFF", fontWeight: 700, background: BRASS, borderRadius: 980, padding: "2px 8px", marginBottom: 5, whiteSpace: "nowrap" }}>{fmtDuration(durMin)}</div>
+                                          <div style={{ fontFamily: mono, fontSize: 10, color: "#FFFFFF", fontWeight: 700, background: BRASS, borderRadius: 980, padding: "2px 6px", marginBottom: 4, whiteSpace: "nowrap" }}>{fmtDuration(durMin)}</div>
                                         ) : null;
                                       })()}
-                                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: BRASS_DIM }} />
-                                      <div style={{ width: 28, height: 1.5, background: `repeating-linear-gradient(to right, ${BRASS_DIM} 0, ${BRASS_DIM} 3px, transparent 3px, transparent 6px)`, margin: "3px 0" }} />
-                                      <TravelModeIcon mode={t.mode} size={14} color={BRASS} />
+                                      <TravelModeIcon mode={t.mode} size={14} color={BRASS} style={{ flexShrink: 0, marginBottom: 4 }} />
+                                      <div style={{ width: 1.5, flex: 1, minHeight: 10, background: `repeating-linear-gradient(to bottom, ${BRASS_DIM} 0, ${BRASS_DIM} 3px, transparent 3px, transparent 6px)`, margin: "3px 0" }} />
+                                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: BRASS, flexShrink: 0 }} />
                                     </div>
-                                    <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
+                                    <div style={{ gridColumn: 2, gridRow: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 2 }}>From</div>
+                                      <div style={{ fontSize: 16, color: INK, fontWeight: 750, lineHeight: 1.3, wordBreak: "break-word" }}>{t.fromLocation}</div>
+                                      {t.travelTime && <div style={{ fontFamily: mono, fontSize: 13, color: BRASS, fontWeight: 700, marginTop: 3 }}>{fmtTimeString12(t.travelTime)}</div>}
+                                    </div>
+                                    <div style={{ gridColumn: 2, gridRow: 2, minWidth: 0 }}>
                                       <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 2 }}>To</div>
-                                      <div style={{ fontSize: 17, color: INK, fontWeight: 750, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.toLocation}</div>
+                                      <div style={{ fontSize: 16, color: INK, fontWeight: 750, lineHeight: 1.3, wordBreak: "break-word" }}>{t.toLocation}</div>
                                       {t.arrivalTime && <div style={{ fontFamily: mono, fontSize: 13, color: TEAL, fontWeight: 700, marginTop: 3 }}>{fmtTimeString12(t.arrivalTime)}</div>}
                                     </div>
                                   </div>
