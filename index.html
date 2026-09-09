@@ -5295,6 +5295,8 @@ function LifeTracker() {
           {catTab === "finance" && (() => {
             const cumulativeOnline = budgetUpToMonth(financeMonth, "onlineBalance") - expensesUpToMonthByMethod(financeMonth, "online");
             const cumulativeCash = budgetUpToMonth(financeMonth, "cashBalance") - expensesUpToMonthByMethod(financeMonth, "cash");
+            const currentOnline = budgetUpToMonth(curMonth, "onlineBalance") - expensesUpToMonthByMethod(curMonth, "online");
+            const currentCash = budgetUpToMonth(curMonth, "cashBalance") - expensesUpToMonthByMethod(curMonth, "cash");
             return (
               <Card style={{ marginBottom: 12 }}>
                 <SectionLabel>How Much I Have</SectionLabel>
@@ -5302,14 +5304,16 @@ function LifeTracker() {
                   <ChipButton label="Monthly Budget" active={financeViewTab === "budget"} onClick={() => setFinanceViewTab("budget")} />
                   <ChipButton label="Current Balance" active={financeViewTab === "balance"} onClick={() => setFinanceViewTab("balance")} />
                 </div>
-                <div style={{ display: "flex", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
-                  <div style={{ flex: "1 1 120px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-                    <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Month</div>
-                    <Select value={financeMonth} onChange={(e) => setFinanceMonth(e.target.value)} style={{ width: "100%" }}>
-                      {last12Months.map((m) => <option key={m.mk} value={m.mk}>{monthLabel(m.mk)}</option>)}
-                    </Select>
+                {financeViewTab === "budget" && (
+                  <div style={{ display: "flex", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
+                    <div style={{ flex: "1 1 120px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Month</div>
+                      <Select value={financeMonth} onChange={(e) => setFinanceMonth(e.target.value)} style={{ width: "100%" }}>
+                        {last12Months.map((m) => <option key={m.mk} value={m.mk}>{monthLabel(m.mk)}</option>)}
+                      </Select>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {financeViewTab === "budget" ? (
                   <>
@@ -5328,15 +5332,15 @@ function LifeTracker() {
                 ) : (
                   <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
                     <div style={{ fontSize: 12, color: INK_FAINT, lineHeight: 1.4, marginBottom: 4 }}>
-                      Automatic &middot; carries forward what was left after {monthLabel(financeMonth)}'s expenses and savings, plus this month's Available Amount.
+                      Automatic &middot; carries forward what was left after {monthLabel(curMonth)}'s expenses and savings, plus this month's Available Amount.
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: 14, color: INK_FAINT, display: "flex", alignItems: "center", gap: 5 }}><CreditCard size={13} /> Online / Account Balance</span>
-                      <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: cumulativeOnline >= 0 ? TEAL : CORAL }}>{cumulativeOnline < 0 ? `-${inr(Math.abs(cumulativeOnline))}` : inr(cumulativeOnline)}</span>
+                      <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: currentOnline >= 0 ? TEAL : CORAL }}>{currentOnline < 0 ? `-${inr(Math.abs(currentOnline))}` : inr(currentOnline)}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 6, marginTop: 2 }}>
                       <span style={{ fontSize: 14, color: INK_FAINT, display: "flex", alignItems: "center", gap: 5 }}><Wallet size={13} /> Physical / Cash Balance</span>
-                      <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: cumulativeCash >= 0 ? TEAL : CORAL }}>{cumulativeCash < 0 ? `-${inr(Math.abs(cumulativeCash))}` : inr(cumulativeCash)}</span>
+                      <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: currentCash >= 0 ? TEAL : CORAL }}>{currentCash < 0 ? `-${inr(Math.abs(currentCash))}` : inr(currentCash)}</span>
                     </div>
                   </div>
                 )}
