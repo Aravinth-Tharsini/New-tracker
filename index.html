@@ -3788,6 +3788,27 @@ function LifeTracker() {
         @media (max-width: 340px) {
           .header-date-chevron { display: none; }
         }
+        /* ===== Reference-style visual polish ===== */
+        .home-progress-hero {
+          position: relative; overflow: hidden; border-radius: 22px !important;
+          background: linear-gradient(135deg, var(--panel) 0%, color-mix(in srgb, var(--panel-2) 78%, transparent) 100%) !important;
+          border: 1px solid var(--line) !important; box-shadow: 0 5px 20px rgba(20,30,45,.06) !important;
+        }
+        .home-progress-ring { position: relative; width: 82px; height: 82px; display: grid; place-items: center; }
+        .home-progress-ring > svg { display: block; }
+        .home-progress-ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+        .home-progress-ring-number { font-family: 'JetBrains Mono', ui-rounded, monospace; font-size: 16px; font-weight: 850; line-height: 1; color: var(--ink); }
+        .home-progress-ring-number span { font-size: 10px; color: var(--ink-faint); margin-left: 1px; }
+        .home-progress-ring-caption { font-size: 8px; color: var(--ink-faint); font-weight: 800; text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
+        .progress-hero { box-shadow: 0 5px 20px rgba(20,30,45,.06) !important; }
+        .progress-tabs-card { border-radius: 17px !important; }
+        .progress-period-card { border-radius: 18px !important; }
+        @media (max-width: 420px) {
+          .home-progress-hero { padding: 14px !important; }
+          .home-progress-ring, .home-progress-ring svg { width: 74px !important; height: 74px !important; }
+          .home-progress-ring-number { font-size: 14px; }
+        }
+
         /* Today category cards: clean, visual-first UI */
         .today-hero {
           display: flex; align-items: center; justify-content: space-between; gap: 14px;
@@ -4007,7 +4028,7 @@ function LifeTracker() {
 
       <div className="app-header-bar" style={{ padding: "calc(16px + env(safe-area-inset-top)) 16px 8px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span className="app-header-title" style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: INK, fontFamily: disp }}>
-          {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "Data Link" : "Insights"}
+          {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "Data Link" : "Progress"}
         </span>
         <div className="app-header-icons" style={{ display: "flex", alignItems: "center", position: "relative" }}>
           <button onClick={() => setDarkMode((v) => !v)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} style={{ background: "transparent", border: "none", color: INK, cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}>
@@ -4172,6 +4193,30 @@ function LifeTracker() {
               </div>
             </div>
           </div>
+          {totalActivities > 0 && (
+            <Card className="home-progress-hero" style={{ marginBottom: 14, padding: "16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 15 }}>
+                <div className="home-progress-ring" style={{ flexShrink: 0 }}>
+                  <RingProgress pct={progressPercent} size={82} color={BRASS} />
+                  <div className="home-progress-ring-label">
+                    <div className="home-progress-ring-number">{progressPercentLabel}<span>%</span></div>
+                    <div className="home-progress-ring-caption">Today</div>
+                  </div>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: INK }}>Today's Progress</div>
+                  <div style={{ marginTop: 3, fontSize: 12.5, color: INK_DIM, lineHeight: 1.35 }}>
+                    {completedActivities} of {totalActivities} activities completed
+                  </div>
+                  <div style={{ height: 7, borderRadius: 999, background: PANEL_2, overflow: "hidden", marginTop: 10 }}>
+                    <div style={{ width: `${progressPercent}%`, height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${BRASS}, ${TEAL})`, transition: "width 0.25s ease" }} />
+                  </div>
+                  <div style={{ marginTop: 7, fontSize: 11.5, color: INK_FAINT }}>Timing-aware completion score</div>
+                </div>
+              </div>
+            </Card>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 7, marginBottom: 12 }}>
             {statCards.map((s) => {
               const SIcon = s.icon;
@@ -4187,26 +4232,6 @@ function LifeTracker() {
               );
             })}
           </div>
-
-          {totalActivities > 0 && (
-            <Card style={{ marginBottom: 14, padding: "14px 16px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Today's Progress</div>
-                    <div style={{ fontSize: 14, color: BRASS, fontFamily: mono, fontWeight: 800 }}>{progressPercentLabel}%</div>
-                  </div>
-                  <div style={{ height: 8, borderRadius: 999, background: PANEL_2, overflow: "hidden" }}>
-                    <div style={{ width: `${progressPercent}%`, height: "100%", borderRadius: 999, background: BRASS, transition: "width 0.25s ease" }} />
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: 12, color: INK_DIM }}>{completedActivities} of {totalActivities} activities completed</div>
-                </div>
-                <div style={{ flexShrink: 0, width: 52, height: 52, borderRadius: "50%", background: "radial-gradient(circle at 35% 30%, #DCEBFB, #AFCCF2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Rocket size={22} color={BRASS} />
-                </div>
-              </div>
-            </Card>
-          )}
 
           {nextActivities.length > 0 && (
             <>
@@ -4242,37 +4267,6 @@ function LifeTracker() {
               </Card>
             </>
           )}
-
-          {(() => {
-            // "Add Expense" is always offered; up to 3 more slots surface today's soonest
-            // loggable items (config-driven, so this adapts to whatever the person has set up).
-            const quickActionItems = [
-              { key: "expense", icon: Wallet, label: "Add Expense", accent: TODAY_CARD_ACCENT.expense, onClick: () => { setExpandedDailyCategory("expense"); setPage("daily"); } },
-              ...pendingItemsToday.slice(0, 3).map((i) => ({
-                key: i.id, icon: ICON_MAP[i.icon] || Activity, label: i.name,
-                accent: TODAY_CARD_ACCENT[i.category] || BRASS_HEX,
-                onClick: () => { setExpandedDailyCategory(i.category); setActiveTab(i.id); setPage("daily"); },
-              })),
-            ];
-            return (
-              <>
-                <SectionLabel>Quick Actions</SectionLabel>
-                <div style={{ display: "grid", gridTemplateColumns: `repeat(${quickActionItems.length}, 1fr)`, gap: 8, marginBottom: 16 }}>
-                  {quickActionItems.map((qa) => {
-                    const QIcon = qa.icon;
-                    return (
-                      <button key={qa.key} onClick={qa.onClick} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 16, padding: "14px 6px", cursor: "pointer", boxShadow: CARD_SHADOW }}>
-                        <div style={{ width: 34, height: 34, borderRadius: "50%", border: `2px solid ${qa.accent}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <QIcon size={16} color={qa.accent} strokeWidth={2.2} />
-                        </div>
-                        <span style={{ fontSize: 11.5, fontWeight: 650, color: INK, textAlign: "center", lineHeight: 1.2 }}>{qa.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            );
-          })()}
 
           {(() => {
             // Pick one goal category (career preferred, else the first with any goals set) to
@@ -6359,7 +6353,7 @@ function LifeTracker() {
           <div className="progress-hero">
             <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}>
               <div style={{minWidth:0}}>
-                <div className="progress-hero-title">Your Financial<br />Journey</div>
+                <div className="progress-hero-title">Progress<br />Overview</div>
                 <div className="progress-hero-sub">
                   Stay consistent today, better tomorrow
                   <Sparkles size={13} color={BRASS} style={{display:"inline",verticalAlign:-1,marginLeft:3}} />
