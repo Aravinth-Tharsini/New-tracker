@@ -1599,12 +1599,14 @@ function Time24Input({ value, onChange, style }) {
     </div>
   );
 }
-function IconBtn({ onClick, children }) { return <button onClick={onClick} style={{ background: PANEL_2, border: "none", borderRadius: 10, padding: "0 11px", height: 38, color: BRASS, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>{children}</button>; }
-function IconAction({ onClick, children, disabled, tone, style }) {
+function IconBtn({ onClick, children, title }) { return <button onClick={onClick} title={title} aria-label={title} style={{ background: PANEL_2, border: "none", borderRadius: 10, padding: "0 11px", height: 38, color: BRASS, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>{children}</button>; }
+function IconAction({ onClick, children, disabled, tone, style, title }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
+      aria-label={title}
       style={{
         width: 30, height: 30, minWidth: 30, borderRadius: 8, padding: 0,
         background: "transparent", border: "none",
@@ -1890,23 +1892,34 @@ function LifeTracker() {
 
   // ---- Data Link: online sync (Google Sheet via Apps Script Web App URL) ----
   const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, syncedAt: new Date().toISOString() });
+  // Google Apps Script can hang instead of erroring (e.g. a stale/misconfigured deployment),
+  // which would otherwise leave the "Syncing…" spinner running forever with no way out for the
+  // user. Aborting after 15s guarantees pushToSheet/pullFromSheet always settle into success or
+  // error.
+  const SYNC_TIMEOUT_MS = 15000;
   const pushToSheet = async () => {
     if (!sheetUrl) return;
     setSyncStatus("syncing");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
     try {
-      await fetch(sheetUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: buildSyncPayload() });
+      await fetch(sheetUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: buildSyncPayload(), signal: controller.signal });
       setSyncStatus("success");
       setLastSyncedAt(new Date().toISOString());
     } catch (e) {
       setSyncStatus("error");
+    } finally {
+      clearTimeout(timeoutId);
     }
   };
   const pullFromSheet = async () => {
     if (!sheetUrl) return;
     setSyncStatus("syncing");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
     try {
       const sep = sheetUrl.includes("?") ? "&" : "?";
-      const res = await fetch(sheetUrl + sep + "t=" + Date.now());
+      const res = await fetch(sheetUrl + sep + "t=" + Date.now(), { signal: controller.signal });
       const data = await res.json();
       applyImportedData(data);
       setSyncStatus("success");
@@ -1914,6 +1927,7 @@ function LifeTracker() {
     } catch (e) {
       setSyncStatus("error");
     } finally {
+      clearTimeout(timeoutId);
       pullSettledRef.current = true;
     }
   };
@@ -2147,6 +2161,9 @@ function LifeTracker() {
     setUndoAction({ message, undo });
     undoTimerRef.current = setTimeout(() => setUndoAction(null), 6000);
   };
+  // Same bottom toast as showUndo, for a plain message with no undo action (e.g. replacing a
+  // native alert() so in-app messages look and feel consistent everywhere).
+  const showToast = (message) => showUndo(message, null);
   const deleteExpense = (id) => {
     const removed = todayLog.expenses.find((e) => e.id === id);
     if (!removed) return;
@@ -3073,7 +3090,7 @@ function LifeTracker() {
                           <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Trip plan &amp; notes (Shopping, Take wallet, Pack clothes\u2026)</div>
                           <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>
                             <TextField placeholder="Add a task or note" value={newTravelNoteText} onChange={(e) => setNewTravelNoteText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addNoteToTravelForm(); } }} style={{ flex: 1 }} />
-                            <IconBtn onClick={addNoteToTravelForm}><Plus size={15} /></IconBtn>
+                            <IconBtn onClick={addNoteToTravelForm} title="Add note"><Plus size={15} /></IconBtn>
                           </div>
                           {(travelForm.notes || []).length > 0 && (
                             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -3534,7 +3551,7 @@ function LifeTracker() {
                             <div key={it.id} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 11, padding: 14, display: "flex", flexDirection: "column", gap: 9, boxSizing: "border-box" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <span style={{ fontSize: 13, fontWeight: 700, color: INK_FAINT, textTransform: "uppercase", letterSpacing: "0.05em" }}>Item {idx + 1}</span>
-                                <IconAction onClick={() => removeShoppingItem(it.id)} style={{ width: 28, height: 28, minWidth: 28, borderRadius: 7 }}><Trash2 size={15} /></IconAction>
+                                <IconAction onClick={() => removeShoppingItem(it.id)} title="Remove item" style={{ width: 28, height: 28, minWidth: 28, borderRadius: 7 }}><Trash2 size={15} /></IconAction>
                               </div>
 
                               <div>
@@ -5320,8 +5337,8 @@ function LifeTracker() {
                           )}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                          <IconAction onClick={() => openEditTravel(t)}><Pencil size={15} /></IconAction>
-                          <IconAction onClick={() => deleteTravelPlan(t.id)}><Trash2 size={15} /></IconAction>
+                          <IconAction onClick={() => openEditTravel(t)} title="Edit trip"><Pencil size={15} /></IconAction>
+                          <IconAction onClick={() => deleteTravelPlan(t.id)} title="Delete trip"><Trash2 size={15} /></IconAction>
                         </div>
                       </Card>
                       </div>
@@ -5359,12 +5376,12 @@ function LifeTracker() {
                             )}
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
-                            <IconAction onClick={() => moveItem(item.id, -1)} disabled={idx === 0} style={{ width: 28, height: 17 }}><ChevronUp size={14} /></IconAction>
-                            <IconAction onClick={() => moveItem(item.id, 1)} disabled={idx === dailyItems.length - 1} style={{ width: 28, height: 17 }}><ChevronDown size={14} /></IconAction>
+                            <IconAction onClick={() => moveItem(item.id, -1)} disabled={idx === 0} title="Move up" style={{ width: 28, height: 17 }}><ChevronUp size={14} /></IconAction>
+                            <IconAction onClick={() => moveItem(item.id, 1)} disabled={idx === dailyItems.length - 1} title="Move down" style={{ width: 28, height: 17 }}><ChevronDown size={14} /></IconAction>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                            <IconAction onClick={() => openEditItemForm(item)}><Pencil size={15} /></IconAction>
-                            <IconAction onClick={() => deleteItem(item.id)}><Trash2 size={15} /></IconAction>
+                            <IconAction onClick={() => openEditItemForm(item)} title="Edit item"><Pencil size={15} /></IconAction>
+                            <IconAction onClick={() => deleteItem(item.id)} title="Delete item"><Trash2 size={15} /></IconAction>
                           </div>
                         </Card>
                         </div>
@@ -5438,7 +5455,7 @@ function LifeTracker() {
                           <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                             <button onClick={() => setPreviewShoppingId(previewing ? null : list.id)} style={{ display: "flex", alignItems: "center", gap: 4, background: previewing ? "rgba(0,113,227,0.10)" : "transparent", border: `1px solid ${previewing ? BRASS : LINE}`, color: previewing ? BRASS : INK_DIM, borderRadius: 7, padding: "5px 9px", fontSize: 14, cursor: "pointer" }}><Eye size={13} /> Preview</button>
                             <button onClick={() => openEditShoppingForm(list)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: `1px solid ${LINE}`, color: INK_DIM, borderRadius: 7, padding: "5px 9px", fontSize: 14, cursor: "pointer" }}><Pencil size={13} /> Edit</button>
-                            <IconAction onClick={() => deleteShoppingList(list.id)} style={{ marginLeft: "auto" }}><Trash2 size={15} /></IconAction>
+                            <IconAction onClick={() => deleteShoppingList(list.id)} title="Delete list" style={{ marginLeft: "auto" }}><Trash2 size={15} /></IconAction>
                           </div>
                           {previewing && (
                             <div style={{ marginTop: 9, borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
@@ -5504,9 +5521,9 @@ function LifeTracker() {
                         </div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                        <IconAction onClick={() => toggleMyDayCompleted(e.id)}><Check size={15} /></IconAction>
-                        <IconAction onClick={() => openEditMyDay(e)}><Pencil size={15} /></IconAction>
-                        <IconAction onClick={() => deleteMyDayEvent(e.id)}><Trash2 size={15} /></IconAction>
+                        <IconAction onClick={() => toggleMyDayCompleted(e.id)} title="Mark done"><Check size={15} /></IconAction>
+                        <IconAction onClick={() => openEditMyDay(e)} title="Edit event"><Pencil size={15} /></IconAction>
+                        <IconAction onClick={() => deleteMyDayEvent(e.id)} title="Delete event"><Trash2 size={15} /></IconAction>
                       </div>
                     </Card>
                     </div>
@@ -5524,8 +5541,8 @@ function LifeTracker() {
                             <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>{formatDMY(e.eventDate)}</div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-                            <IconAction onClick={() => toggleMyDayCompleted(e.id)}><Undo2 size={14} /></IconAction>
-                            <IconAction onClick={() => deleteMyDayEvent(e.id)}><Trash2 size={15} /></IconAction>
+                            <IconAction onClick={() => toggleMyDayCompleted(e.id)} title="Undo"><Undo2 size={14} /></IconAction>
+                            <IconAction onClick={() => deleteMyDayEvent(e.id)} title="Delete event"><Trash2 size={15} /></IconAction>
                           </div>
                         </Card>
                       ))}
@@ -5673,8 +5690,8 @@ function LifeTracker() {
                                   )}
                                 </>
                               )}
-                              <IconAction onClick={() => openEditRepayment(r)}><Pencil size={15} /></IconAction>
-                              <IconAction onClick={() => deleteRepayment(r.id)}><Trash2 size={15} /></IconAction>
+                              <IconAction onClick={() => openEditRepayment(r)} title="Edit repayment"><Pencil size={15} /></IconAction>
+                              <IconAction onClick={() => deleteRepayment(r.id)} title="Delete repayment"><Trash2 size={15} /></IconAction>
                             </div>
                           </div>
                           {(cls === "gold" || cls === "loan") && (
@@ -5839,8 +5856,8 @@ function LifeTracker() {
                           ) : (
                             <button onClick={() => toggleGoalDone(g.id)} style={{ width: 30, height: 30, borderRadius: 7, border: `1.5px solid ${g.done ? BRASS : INK_FAINT}`, background: g.done ? BRASS : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>{g.done && <Check size={15} strokeWidth={3} color={BG} />}</button>
                           )}
-                          <IconAction onClick={() => openEditGoal(g)}><Pencil size={15} /></IconAction>
-                          <IconAction onClick={() => deleteGoal(g.id)}><Trash2 size={15} /></IconAction>
+                          <IconAction onClick={() => openEditGoal(g)} title="Edit goal"><Pencil size={15} /></IconAction>
+                          <IconAction onClick={() => deleteGoal(g.id)} title="Delete goal"><Trash2 size={15} /></IconAction>
                         </div>
                       </div>
                       {isFinanceGoalsTab && g.targetAmount > 0 && (
@@ -6227,7 +6244,7 @@ function LifeTracker() {
         });
 
         const downloadProgressPdf = () => {
-          if (!window.jspdf || !window.jspdf.jsPDF) { alert("PDF generator is still loading. Please try again in a moment."); return; }
+          if (!window.jspdf || !window.jspdf.jsPDF) { showToast("PDF generator is still loading. Please try again in a moment."); return; }
           const { jsPDF } = window.jspdf;
           const pdf = new jsPDF({ unit: "pt", format: "a4" });
           const lines = [
@@ -6939,7 +6956,7 @@ function LifeTracker() {
                 <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 8 }}>Paste your Google Apps Script Web App URL below (see setup guide). Your data auto-saves to it a couple seconds after any change, and auto-loads from it once when you switch on Online mode.</div>
                 <div style={{ display: "flex", gap: 5, marginBottom: 8 }}>
                   <TextField value={sheetUrlDraft || sheetUrl} onChange={(e) => setSheetUrlDraft(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec" style={{ flex: 1, fontSize: 14 }} />
-                  <IconBtn onClick={() => { setSheetUrl(sheetUrlDraft.trim()); didInitialPull.current = false; pullSettledRef.current = false; }}><Check size={15} /></IconBtn>
+                  <IconBtn onClick={() => { setSheetUrl(sheetUrlDraft.trim()); didInitialPull.current = false; pullSettledRef.current = false; }} title="Confirm sheet URL"><Check size={15} /></IconBtn>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
                   <ActionButton onClick={pushToSheet} label="Sync now" icon={RefreshCw} tone={BRASS} spinning={syncStatus === "syncing"} />
@@ -7012,7 +7029,7 @@ function doPost(e) {
         </div>
       )}
 
-      {undoAction && <div className="toast-slide-enter" style={{ position: "fixed", left: "50%", bottom: 74, zIndex: 20, width: "calc(100% - 32px)", maxWidth: 448, background: INK, color: "#fff", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: CARD_SHADOW }}><span style={{ flex: 1, fontSize: 14 }}>{undoAction.message}</span><button onClick={() => { undoAction.undo(); setUndoAction(null); }} style={{ background: "transparent", border: "none", color: BRASS_DIM, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Undo2 size={14} /> Undo</button></div>}
+      {undoAction && <div className="toast-slide-enter" style={{ position: "fixed", left: "50%", bottom: 74, zIndex: 20, width: "calc(100% - 32px)", maxWidth: 448, background: INK, color: "#fff", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: CARD_SHADOW }}><span style={{ flex: 1, fontSize: 14 }}>{undoAction.message}</span>{undoAction.undo && <button onClick={() => { undoAction.undo(); setUndoAction(null); }} style={{ background: "transparent", border: "none", color: BRASS_DIM, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Undo2 size={14} /> Undo</button>}</div>}
 
       {pendingImportData && (
         <div className="modal-backdrop-enter" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 10001, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
