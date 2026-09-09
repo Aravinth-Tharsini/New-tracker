@@ -5342,6 +5342,10 @@ function LifeTracker() {
                       <span style={{ fontSize: 14, color: INK_FAINT, display: "flex", alignItems: "center", gap: 5 }}><Wallet size={13} /> Physical / Cash Balance</span>
                       <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: currentCash >= 0 ? TEAL : CORAL }}>{currentCash < 0 ? `-${inr(Math.abs(currentCash))}` : inr(currentCash)}</span>
                     </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 8, marginTop: 3 }}>
+                      <span style={{ fontSize: 14.5, color: INK, fontWeight: 700 }}>Total</span>
+                      <span style={{ fontFamily: mono, fontSize: 21, fontWeight: 750, color: (currentOnline + currentCash) >= 0 ? TEAL : CORAL }}>{(currentOnline + currentCash) < 0 ? `-${inr(Math.abs(currentOnline + currentCash))}` : inr(currentOnline + currentCash)}</span>
+                    </div>
                   </div>
                 )}
               </Card>
