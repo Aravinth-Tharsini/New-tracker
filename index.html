@@ -117,6 +117,27 @@ button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Home "Good Morning" card: hand wave + gentle entrance for the motivation chip. */
+@keyframes goodMorningWave {
+  0%, 100% { transform: rotate(0deg); }
+  15% { transform: rotate(16deg); }
+  30% { transform: rotate(-8deg); }
+  45% { transform: rotate(14deg); }
+  60% { transform: rotate(-4deg); }
+  75% { transform: rotate(6deg); }
+}
+.good-morning-wave {
+  animation: goodMorningWave 2.4s ease-in-out .3s 1;
+  transform-origin: 70% 70%;
+}
+@keyframes goodMorningRiseIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.good-morning-motivation {
+  animation: goodMorningRiseIn .5s cubic-bezier(.22,.8,.25,1) .15s both;
+}
+
 /* ===== Celebration pop-up: pops in, holds briefly, fades out on its own ===== */
 @keyframes celebrationPop {
   0%   { opacity: 0; transform: translateX(-50%) scale(0.75) translateY(-6px); }
@@ -574,6 +595,32 @@ function welcomeRibbonGradient(date, darkMode) {
   const t = (hour - prev.h) / (next.h - prev.h);
   const [c0, c1, c2] = prev.c.map((c, i) => lerpHexColor(c, next.c[i], t));
   return `linear-gradient(120deg, ${c0} 0%, ${c1} 58%, ${c2} 100%)`;
+}
+// One short line of daily motivation for the Good Morning card. Picked deterministically from
+// the day of the year so it stays fixed all day (no flicker on re-renders / every-second clock
+// ticks) but automatically rotates to a new line tomorrow.
+const DAILY_MOTIVATION_MESSAGES = [
+  "Start small. Stay consistent. Make today count.",
+  "Your goals don\u2019t need perfection \u2014 they need progress.",
+  "One task at a time. One step closer to your goal.",
+  "Discipline today creates the freedom you want tomorrow.",
+  "Don\u2019t wait for motivation. Start, and motivation will follow.",
+  "A better future is built from what you do today.",
+  "Focus on progress, not perfection.",
+  "You have a new day. Make it meaningful.",
+  "Small wins, done daily, add up to big change.",
+  "Show up for yourself today \u2014 that's how momentum starts.",
+  "Every task you finish is a promise kept to yourself.",
+  "Steady effort beats occasional bursts. Keep going.",
+  "The best day to move forward is today.",
+  "Progress loves a plan. You already have one \u2014 use it.",
+  "Consistency is the quiet force behind every big result.",
+  "Do it now. Your future self will thank you.",
+];
+function dailyMotivationFor(date) {
+  const start = new Date(date.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((date - start) / 86400000);
+  return DAILY_MOTIVATION_MESSAGES[((dayOfYear % DAILY_MOTIVATION_MESSAGES.length) + DAILY_MOTIVATION_MESSAGES.length) % DAILY_MOTIVATION_MESSAGES.length];
 }
 // Same idea as dayLabelFor, but also recognizes Yesterday \u2014 used for My Day plans so a plan
 // that was due yesterday and never marked done still shows a clear label instead of just a date.
@@ -4207,6 +4254,8 @@ function LifeTracker() {
         const progressPercentLabel = totalActivities === 0 ? "0" : Number.isInteger(progressPercentExact) ? String(progressPercentExact) : progressPercentExact.toFixed(1);
         const currentHour = new Date().getHours();
         const greeting = currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
+        const GreetingIcon = currentHour < 12 ? Sunrise : currentHour < 18 ? Sun : Moon;
+        const dailyMotivation = dailyMotivationFor(now);
         const remainingActivities = Math.max(0, totalActivities - completedActivities);
         const nowHHMM = buildHHMM(new Date().getHours(), new Date().getMinutes());
         const incompleteScheduled = validItems
@@ -4229,8 +4278,10 @@ function LifeTracker() {
         ];
         return <div key="dashboard-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, width: "100%" }}>
           <div className="notificationStickyBar">
-            <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, marginBottom: 10, padding: "18px 18px 16px", background: welcomeRibbonGradient(now, darkMode), transition: "background 1.5s ease", border: `1px solid ${LINE}` }}>
-              <svg width="112" height="98" viewBox="0 0 112 98" style={{ position: "absolute", right: -6, bottom: -10, opacity: darkMode ? 0.6 : 0.9 }}>
+            <div style={{ position: "relative", overflow: "hidden", borderRadius: 22, marginBottom: 10, padding: "19px 19px 17px", background: welcomeRibbonGradient(now, darkMode), transition: "background 1.5s ease", border: `1px solid ${LINE}`, boxShadow: darkMode ? "0 12px 30px rgba(0,0,0,0.38)" : "0 12px 26px rgba(15,23,42,0.10)" }}>
+              {/* subtle glass sheen across the top for a premium, layered feel */}
+              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 38%)", pointerEvents: "none" }} />
+              <svg width="130" height="112" viewBox="0 0 112 98" style={{ position: "absolute", right: -8, bottom: -12, opacity: darkMode ? 0.5 : 0.85 }}>
                 <circle cx="82" cy="60" r="26" fill="#FFFFFF" opacity={darkMode ? 0.12 : 0.55} />
                 <circle cx="82" cy="60" r="26" fill="#F2A65A" opacity="0.6" />
                 <circle cx="82" cy="60" r="14" fill="#FFF8EF" opacity={darkMode ? 0.85 : 1} />
@@ -4240,14 +4291,28 @@ function LifeTracker() {
                 <path d="M12 40 q4 -4 8 0 q4 -4 8 0" stroke="#8FA3C9" strokeWidth="1.6" fill="none" strokeLinecap="round" opacity={darkMode ? 0.4 : 1} />
                 <path d="M30 32 q3.5 -3.5 7 0" stroke="#8FA3C9" strokeWidth="1.6" fill="none" strokeLinecap="round" opacity={darkMode ? 0.4 : 1} />
               </svg>
-              <div style={{ position: "relative", maxWidth: "72%" }}>
-                <div style={{ fontSize: 25, fontWeight: 800, color: INK, letterSpacing: "-0.02em" }}>{greeting}! <span style={{ display: "inline-block" }}>👋</span></div>
-                <div style={{ fontSize: 14, color: INK_DIM, marginTop: 5, lineHeight: 1.4 }}>
+              <div style={{ position: "relative" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: "80%" }}>
+                  <div style={{ flexShrink: 0, width: 42, height: 42, borderRadius: 13, background: darkMode ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${darkMode ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.75)"}`, boxShadow: "0 4px 10px rgba(0,0,0,0.08)" }}>
+                    <GreetingIcon size={21} color={darkMode ? "#FFD9A0" : "#B9741E"} strokeWidth={2.1} />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 750, color: INK_DIM, textTransform: "uppercase", letterSpacing: "0.06em" }}>{formatDateLong(now)}</div>
+                    <div style={{ fontSize: 23, fontWeight: 800, color: INK, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 6, lineHeight: 1.2 }}>
+                      {greeting}<span className="good-morning-wave" style={{ display: "inline-block" }}>👋</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 14, color: INK_DIM, marginTop: 10, lineHeight: 1.4, maxWidth: "86%" }}>
                   {totalActivities === 0
                     ? "Plan your day and get started."
                     : completedActivities === totalActivities
                       ? "Great work! Everything planned for today is completed."
                       : "You've got this. Let's make today count."}
+                </div>
+                <div className="good-morning-motivation" style={{ marginTop: 13, display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 12px", borderRadius: 13, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.7)"}`, maxWidth: "90%" }}>
+                  <Sparkles size={15} color={darkMode ? "#FFD9A0" : "#B9741E"} strokeWidth={2.2} style={{ flexShrink: 0, marginTop: 1.5 }} />
+                  <div style={{ fontSize: 13, fontWeight: 650, color: INK, lineHeight: 1.45, fontStyle: "italic" }}>{dailyMotivation}</div>
                 </div>
               </div>
             </div>
