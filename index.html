@@ -533,6 +533,48 @@ function dayLabelFor(dateStr, todayStr) {
   if (dateStr === addDays(todayStr, 1)) return "Tomorrow";
   return "";
 }
+// Blends two hex colors at position t (0-1) — used to fade smoothly between the
+// welcome-ribbon's time-of-day color keyframes instead of snapping between them.
+function lerpHexColor(hexA, hexB, t) {
+  const pa = hexA.match(/\w\w/g).map((h) => parseInt(h, 16));
+  const pb = hexB.match(/\w\w/g).map((h) => parseInt(h, 16));
+  const rgb = pa.map((a, i) => Math.round(a + (pb[i] - a) * t));
+  return "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+// Keyframes (hour-of-day -> 3 gradient-stop colors) the Home welcome ribbon cycles through.
+// Each mode's list starts before midnight and ends after it (negative/25+ hour entries) purely so
+// the interpolation below can wrap around midnight without special-casing it.
+const WELCOME_RIBBON_KEYFRAMES = {
+  light: [
+    { h: -3, c: ["#3B3467", "#463A78", "#524086"] }, // night (pre-midnight wrap)
+    { h: 5, c: ["#D7E3F7", "#E7DCEE", "#F3D9DE"] }, // dawn
+    { h: 8, c: ["#E4EAF7", "#F1E4D8", "#F7DFC4"] }, // morning
+    { h: 14, c: ["#FDEFD9", "#FCE4C0", "#FAD9A8"] }, // afternoon
+    { h: 18.5, c: ["#FBE0C2", "#EFAF7C", "#E28F5C"] }, // evening / golden hour
+    { h: 22, c: ["#3B3467", "#463A78", "#524086"] }, // night
+    { h: 29, c: ["#D7E3F7", "#E7DCEE", "#F3D9DE"] }, // dawn (post-midnight wrap)
+  ],
+  dark: [
+    { h: -3, c: ["#17171C", "#1F1B2E", "#241F3A"] }, // night (pre-midnight wrap)
+    { h: 5, c: ["#1C1C1E", "#241C1A", "#2A2019"] }, // dawn
+    { h: 8, c: ["#1C1C1E", "#2A2019", "#33240F"] }, // morning
+    { h: 14, c: ["#1C1C1E", "#2B2216", "#3A2A12"] }, // afternoon
+    { h: 18.5, c: ["#1E1B1F", "#33202A", "#432A2E"] }, // evening / golden hour
+    { h: 22, c: ["#17171C", "#1F1B2E", "#241F3A"] }, // night
+    { h: 29, c: ["#1C1C1E", "#241C1A", "#2A2019"] }, // dawn (post-midnight wrap)
+  ],
+};
+function welcomeRibbonGradient(date, darkMode) {
+  const hour = date.getHours() + date.getMinutes() / 60;
+  const frames = WELCOME_RIBBON_KEYFRAMES[darkMode ? "dark" : "light"];
+  let prev = frames[0], next = frames[frames.length - 1];
+  for (let i = 0; i < frames.length - 1; i++) {
+    if (hour >= frames[i].h && hour <= frames[i + 1].h) { prev = frames[i]; next = frames[i + 1]; break; }
+  }
+  const t = (hour - prev.h) / (next.h - prev.h);
+  const [c0, c1, c2] = prev.c.map((c, i) => lerpHexColor(c, next.c[i], t));
+  return `linear-gradient(120deg, ${c0} 0%, ${c1} 58%, ${c2} 100%)`;
+}
 // Same idea as dayLabelFor, but also recognizes Yesterday \u2014 used for My Day plans so a plan
 // that was due yesterday and never marked done still shows a clear label instead of just a date.
 function dayLabelForExt(dateStr, todayStr) {
@@ -4187,7 +4229,7 @@ function LifeTracker() {
         ];
         return <div key="dashboard-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, width: "100%" }}>
           <div className="notificationStickyBar">
-            <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, marginBottom: 10, padding: "18px 18px 16px", background: darkMode ? "linear-gradient(120deg, #1C1C1E 0%, #2A2019 55%, #33240F 100%)" : "linear-gradient(120deg, #E4EAF7 0%, #F1E4D8 60%, #F7DFC4 100%)", border: `1px solid ${LINE}` }}>
+            <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, marginBottom: 10, padding: "18px 18px 16px", background: welcomeRibbonGradient(now, darkMode), transition: "background 1.5s ease", border: `1px solid ${LINE}` }}>
               <svg width="112" height="98" viewBox="0 0 112 98" style={{ position: "absolute", right: -6, bottom: -10, opacity: darkMode ? 0.6 : 0.9 }}>
                 <circle cx="82" cy="60" r="26" fill="#FFFFFF" opacity={darkMode ? 0.12 : 0.55} />
                 <circle cx="82" cy="60" r="26" fill="#F2A65A" opacity="0.6" />
@@ -4369,10 +4411,8 @@ function LifeTracker() {
       })()}
 
       {page === "daily" && (() => {
-        const currentHour = new Date().getHours();
-        const greeting = currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
         // One pass over the categories to derive every count/label the header and cards need,
-        // so the hero summary and each card read from the same numbers instead of drifting.
+        // so each card reads from the same numbers instead of drifting.
         const categoryStats = availableDailyCategories.map((cat) => {
           const expanded = expandedDailyCategory === cat.id;
           const itemsForCat = validItems.filter((i) => i.category === cat.id).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
@@ -4394,48 +4434,8 @@ function LifeTracker() {
           const accent = TODAY_CARD_ACCENT[cat.id] || BRASS_HEX;
           return { cat, expanded, CatIcon: cat.icon, itemsForCat, pendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent };
         });
-        // Purely a display aggregate for the hero progress ring below \u2014 sums the same
-        // per-category done/trackable numbers already computed above, nothing new is tracked.
-        const heroTrackable = categoryStats.reduce((s, cs) => s + (cs.trackableCount || 0), 0);
-        const heroDone = categoryStats.reduce((s, cs) => s + (cs.doneCount || 0), 0);
-        const heroPct = heroTrackable > 0 ? Math.min(1, heroDone / heroTrackable) : 0;
-        const heroRingR = 26;
-        const heroRingCirc = 2 * Math.PI * heroRingR;
         return (
         <div key="daily-page" className="daily-page-content" style={{ padding: "6px 0 14px", flex: 1, minHeight: 0, width: "100%" }}>
-          {!expandedDailyCategory && (
-            <>
-              <div style={{ position: "relative", overflow: "hidden", borderRadius: 22, margin: "2px 16px 12px", padding: "18px 20px 16px", background: darkMode ? "linear-gradient(120deg, #1C1C1E 0%, #2A2019 55%, #33240F 100%)" : "linear-gradient(120deg, #E4EAF7 0%, #F1E4D8 60%, #F7DFC4 100%)", border: `1px solid ${LINE}` }}>
-                <svg width="112" height="98" viewBox="0 0 112 98" style={{ position: "absolute", right: -6, bottom: -10, opacity: darkMode ? 0.6 : 0.9 }}>
-                  <circle cx="82" cy="60" r="26" fill="#FFFFFF" opacity={darkMode ? 0.12 : 0.55} />
-                  <circle cx="82" cy="60" r="26" fill="#F2A65A" opacity="0.6" />
-                  <circle cx="82" cy="60" r="14" fill="#FFF8EF" opacity={darkMode ? 0.85 : 1} />
-                  <path d="M0 82 Q30 58 60 78 T112 70 V98 H0 Z" fill="#B9C8E8" opacity={darkMode ? 0.18 : 0.75} />
-                  <ellipse cx="24" cy="24" rx="13" ry="7" fill="#FFFFFF" opacity={darkMode ? 0.18 : 0.8} />
-                  <ellipse cx="46" cy="16" rx="9" ry="5" fill="#FFFFFF" opacity={darkMode ? 0.14 : 0.7} />
-                  <path d="M12 40 q4 -4 8 0 q4 -4 8 0" stroke="#8FA3C9" strokeWidth="1.6" fill="none" strokeLinecap="round" opacity={darkMode ? 0.4 : 1} />
-                  <path d="M30 32 q3.5 -3.5 7 0" stroke="#8FA3C9" strokeWidth="1.6" fill="none" strokeLinecap="round" opacity={darkMode ? 0.4 : 1} />
-                </svg>
-                <div style={{ position: "relative", maxWidth: "72%" }}>
-                  <div style={{ fontSize: 21, fontWeight: 800, color: INK, letterSpacing: "-0.02em" }}>{greeting}! <span aria-hidden="true">👋</span></div>
-                  <div style={{ fontSize: 13, color: INK_DIM, marginTop: 5, lineHeight: 1.4 }}>Plan better, stay consistent, achieve your goals.</div>
-                </div>
-              </div>
-              {heroTrackable > 0 && (
-                <div style={{ margin: "0 16px 16px" }}>
-                  <Card style={{ padding: "14px 16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                      <RingProgress pct={heroPct * 100} size={68} color={TEAL} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 15, fontWeight: 750, color: INK }}>Today's Progress</div>
-                        <div style={{ marginTop: 4, fontSize: 12.5, color: INK_DIM }}>{heroDone} of {heroTrackable} activities completed</div>
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-              )}
-            </>
-          )}
           {availableDailyCategories.length === 0 ? (
             <div className="today-empty-state">
               <div className="today-empty-icon">
