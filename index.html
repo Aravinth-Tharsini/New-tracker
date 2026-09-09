@@ -2297,25 +2297,11 @@ function LifeTracker() {
   // "online" — the safest assumption since most of those are bank transfers rather than cash-in-hand.
   const expensesForMonthByMethod = (mk, method) => Object.entries(dailyLogs).filter(([d]) => d.slice(0, 7) === mk).reduce((s, [, log]) => s + (log.expenses || []).filter((e) => (e.paymentMethod || "online") === method).reduce((s2, e) => s2 + e.amount, 0), 0);
   // Cumulative (every month up to and including mk) budget entered and expenses logged, by payment
-  // method — this is what lets "Current Balance" carry forward each prior month's leftover instead of
-  // resetting to a fresh snapshot every month the way "Monthly Budget" does.
-  // A month can be flagged isBaseline: true to mark "this month's numbers are my real, actual balance,
-  // not a top-up" — the cumulative sum below then starts counting from the most recent baseline at or
-  // before the selected month, instead of from the very first month ever entered. Without a baseline,
-  // it still falls back to summing all history (previous behavior).
-  const latestBaselineMonth = (mk) => {
-    const baselines = Object.keys(financeMonthly).filter((k) => financeMonthly[k]?.isBaseline && k <= mk).sort();
-    return baselines.length ? baselines[baselines.length - 1] : null;
-  };
-  const budgetUpToMonth = (mk, field) => {
-    const baseline = latestBaselineMonth(mk);
-    return Object.entries(financeMonthly).filter(([fmk]) => fmk <= mk && (!baseline || fmk >= baseline)).reduce((s, [, v]) => s + (parseFloat(v?.[field]) || 0), 0);
-  };
-  const expensesUpToMonthByMethod = (mk, method) => {
-    const baseline = latestBaselineMonth(mk);
-    return Object.entries(dailyLogs).filter(([d]) => { const dm = d.slice(0, 7); return dm <= mk && (!baseline || dm >= baseline); }).reduce((s, [, log]) => s + (log.expenses || []).filter((e) => (e.paymentMethod || "online") === method).reduce((s2, e) => s2 + e.amount, 0), 0);
-  };
-  const toggleFinanceBaseline = (mk) => setFinanceMonthly((prev) => ({ ...prev, [mk]: { ...prev[mk], isBaseline: !prev[mk]?.isBaseline } }));
+  // method — this is what lets "Current Balance" automatically carry forward each prior month's
+  // actual remaining balance (after that month's expenses/savings) and add the current month's
+  // budgeted Available Amount on top, always summing from the very first month ever entered.
+  const budgetUpToMonth = (mk, field) => Object.entries(financeMonthly).filter(([fmk]) => fmk <= mk).reduce((s, [, v]) => s + (parseFloat(v?.[field]) || 0), 0);
+  const expensesUpToMonthByMethod = (mk, method) => Object.entries(dailyLogs).filter(([d]) => d.slice(0, 7) <= mk).reduce((s, [, log]) => s + (log.expenses || []).filter((e) => (e.paymentMethod || "online") === method).reduce((s2, e) => s2 + e.amount, 0), 0);
   const [financeMonth, setFinanceMonth] = useState(curMonth);
   const [financeViewTab, setFinanceViewTab] = useState("budget"); // "budget" (manual monthly input) | "balance" (read-only running total)
   const setFinanceField = (mk, f, v) => setFinanceMonthly((prev) => ({ ...prev, [mk]: { ...prev[mk], [f]: v } }));
@@ -5307,11 +5293,8 @@ function LifeTracker() {
             <div className="today-expand-enter">
 
           {catTab === "finance" && (() => {
-            const onlineExpenses = expensesForMonthByMethod(financeMonth, "online");
-            const cashExpenses = expensesForMonthByMethod(financeMonth, "cash");
             const cumulativeOnline = budgetUpToMonth(financeMonth, "onlineBalance") - expensesUpToMonthByMethod(financeMonth, "online");
             const cumulativeCash = budgetUpToMonth(financeMonth, "cashBalance") - expensesUpToMonthByMethod(financeMonth, "cash");
-            const cumulativeTotal = cumulativeOnline + cumulativeCash;
             return (
               <Card style={{ marginBottom: 12 }}>
                 <SectionLabel>How Much I Have</SectionLabel>
@@ -5330,7 +5313,7 @@ function LifeTracker() {
 
                 {financeViewTab === "budget" ? (
                   <>
-                    <div style={{ fontSize: 12, color: INK_FAINT, lineHeight: 1.4, marginBottom: 9 }}>Manually set what you're budgeting for {monthLabel(financeMonth)}. Switch to Current Balance to see what's actually left after expenses.</div>
+                    <div style={{ fontSize: 12, color: INK_FAINT, lineHeight: 1.4, marginBottom: 9 }}>Set the Available Amount you're budgeting for {monthLabel(financeMonth)}. Switch to Current Balance to see what's actually left after expenses.</div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <div style={{ flex: "1 1 140px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5, display: "flex", alignItems: "center", gap: 5 }}><CreditCard size={13} /> Online / Account Balance</div>
@@ -5341,50 +5324,19 @@ function LifeTracker() {
                         <TextField type="number" value={financeMonthly[financeMonth]?.cashBalance ?? ""} onChange={(e) => setFinanceBalanceField(financeMonth, "cashBalance", e.target.value)} placeholder="10000" style={{ width: "100%", fontFamily: mono }} />
                       </div>
                     </div>
-                    <div style={{ marginTop: 10 }}>
-                      <button onClick={() => toggleFinanceBaseline(financeMonth)} style={{ display: "flex", alignItems: "center", gap: 6, background: financeMonthly[financeMonth]?.isBaseline ? hexA(TEAL_HEX, 0.14) : PANEL_2, border: financeMonthly[financeMonth]?.isBaseline ? `1.5px solid ${TEAL}` : `1px solid ${LINE}`, borderRadius: 10, padding: "7px 11px", color: financeMonthly[financeMonth]?.isBaseline ? TEAL : INK_DIM, cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>
-                        {financeMonthly[financeMonth]?.isBaseline ? <CheckCircle2 size={14} /> : <MapPin size={14} />}
-                        {financeMonthly[financeMonth]?.isBaseline ? "Starting point for Current Balance" : "Set as starting point"}
-                      </button>
-                      <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 6, lineHeight: 1.4 }}>Mark the month whose numbers above are your real, actual balance — not a top-up. Current Balance will start counting from here instead of adding up every month you've ever entered.</div>
-                    </div>
                   </>
                 ) : (
                   <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
                     <div style={{ fontSize: 12, color: INK_FAINT, lineHeight: 1.4, marginBottom: 4 }}>
-                      Read-only &middot; counting from {(() => { const b = latestBaselineMonth(financeMonth); return b ? `your starting point (${monthLabel(b)})` : "the earliest month you've entered"; })()} through {monthLabel(financeMonth)}.
+                      Automatic &middot; carries forward what was left after {monthLabel(financeMonth)}'s expenses and savings, plus this month's Available Amount.
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 14, color: INK_FAINT }}>Online / Account expenses ({monthLabel(financeMonth)})</span>
-                      <span style={{ fontFamily: mono, fontSize: 15, color: CORAL }}>{inr(onlineExpenses)}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 14, color: INK_FAINT }}>Remaining Online / Account Balance</span>
+                      <span style={{ fontSize: 14, color: INK_FAINT, display: "flex", alignItems: "center", gap: 5 }}><CreditCard size={13} /> Online / Account Balance</span>
                       <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: cumulativeOnline >= 0 ? TEAL : CORAL }}>{cumulativeOnline < 0 ? `-${inr(Math.abs(cumulativeOnline))}` : inr(cumulativeOnline)}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 6, marginTop: 2 }}>
-                      <span style={{ fontSize: 14, color: INK_FAINT }}>Physical / Cash expenses ({monthLabel(financeMonth)})</span>
-                      <span style={{ fontFamily: mono, fontSize: 15, color: CORAL }}>{inr(cashExpenses)}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 14, color: INK_FAINT }}>Remaining Cash Balance</span>
+                      <span style={{ fontSize: 14, color: INK_FAINT, display: "flex", alignItems: "center", gap: 5 }}><Wallet size={13} /> Physical / Cash Balance</span>
                       <span style={{ fontFamily: mono, fontSize: 16, fontWeight: 700, color: cumulativeCash >= 0 ? TEAL : CORAL }}>{cumulativeCash < 0 ? `-${inr(Math.abs(cumulativeCash))}` : inr(cumulativeCash)}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 8, marginTop: 3 }}>
-                      <span style={{ fontSize: 14.5, color: INK, fontWeight: 700 }}>Total Available Balance</span>
-                      <span style={{ fontFamily: mono, fontSize: 21, fontWeight: 750, color: cumulativeTotal >= 0 ? TEAL : CORAL }}>{cumulativeTotal < 0 ? `-${inr(Math.abs(cumulativeTotal))}` : inr(cumulativeTotal)}</span>
-                    </div>
-                    {(cumulativeOnline < 0 || cumulativeCash < 0) && (
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: 6, background: hexA(CORAL_HEX, 0.10), border: `1px solid ${hexA(CORAL_HEX, 0.3)}`, borderRadius: 10, padding: "8px 10px", marginTop: 6 }}>
-                        <XCircle size={14} color={CORAL} style={{ flexShrink: 0, marginTop: 1 }} />
-                        <span style={{ fontSize: 12.5, color: CORAL, lineHeight: 1.4 }}>
-                          {cumulativeOnline < 0 && cumulativeCash < 0 ? "Both your Online/Account and Cash balances have gone negative." : cumulativeOnline < 0 ? "Your Online/Account Balance has gone negative." : "Your Cash Balance has gone negative."}
-                        </span>
-                      </div>
-                    )}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${LINE}`, paddingTop: 8, marginTop: 3 }}>
-                      <span style={{ fontSize: 13, color: INK_FAINT }}>Available for goal funding (all-time)</span>
-                      <span style={{ fontFamily: mono, fontSize: 15, fontWeight: 600, color: financeBalanceAvailable >= 0 ? TEAL : CORAL }}>{inr(financeBalanceAvailable)}</span>
                     </div>
                   </div>
                 )}
