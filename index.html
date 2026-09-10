@@ -4470,13 +4470,13 @@ function LifeTracker() {
                     {greeting}<span className="good-morning-wave" style={{ display: "inline-block" }}>👋</span>
                   </div>
                 </div>
-                <div style={{ fontSize: 12, color: INK_DIM, marginTop: 4, lineHeight: 1.35, maxWidth: "88%" }}>
-                  {totalActivities === 0
-                    ? "Plan your day and get started."
-                    : completedActivities === totalActivities
-                      ? "Great work! Everything planned for today is completed."
-                      : "You've got this. Let's make today count."}
-                </div>
+                {(totalActivities === 0 || completedActivities === totalActivities) && (
+                  <div style={{ fontSize: 12, color: INK_DIM, marginTop: 4, lineHeight: 1.35, maxWidth: "88%" }}>
+                    {totalActivities === 0
+                      ? "Plan your day and get started."
+                      : "Great work! Everything planned for today is completed."}
+                  </div>
+                )}
                 <div className="good-morning-motivation" style={{ marginTop: 7, display: "flex", alignItems: "flex-start", gap: 7, padding: "6px 10px", borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.7)"}`, maxWidth: "92%" }}>
                   <Sparkles size={12} color={darkMode ? "#FFD9A0" : "#B9741E"} strokeWidth={2.2} style={{ flexShrink: 0, marginTop: 1.5 }} />
                   <div style={{ fontSize: 11.5, fontWeight: 650, color: INK, lineHeight: 1.35, fontStyle: "italic" }}>{dailyMotivation}</div>
