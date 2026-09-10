@@ -4426,7 +4426,7 @@ function LifeTracker() {
         ];
         return <div key="dashboard-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, width: "100%" }}>
           <div className="notificationStickyBar">
-            <div style={{ position: "relative", overflow: "hidden", borderRadius: 20, marginBottom: 10, padding: "14px 16px 13px", background: welcomeRibbonGradient(now, darkMode), transition: "background 2.5s ease", border: `1px solid ${LINE}`, boxShadow: darkMode ? "0 10px 24px rgba(0,0,0,0.34)" : "0 8px 18px rgba(15,23,42,0.09)" }}>
+            <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, marginBottom: 8, padding: "10px 13px 9px", background: welcomeRibbonGradient(now, darkMode), transition: "background 2.5s ease", border: `1px solid ${LINE}`, boxShadow: darkMode ? "0 8px 18px rgba(0,0,0,0.30)" : "0 6px 14px rgba(15,23,42,0.08)" }}>
               {/* Atmosphere layer: realistic soft-lit sky that cross-fades between sun / cloud /
                   moon / star elements as ribbonAtmosphereFor(now) changes through the day, instead
                   of the old flat sun-and-hills illustration. */}
@@ -4441,13 +4441,13 @@ function LifeTracker() {
                 </div>
 
                 {/* sun: warm glowing orb, tint shifts golden midday -> deep orange sunrise/sunset */}
-                <div style={{ position: "absolute", right: -18, bottom: -22, width: 100, height: 100, borderRadius: "50%", opacity: atmosphere.sunOpacity, transition: "opacity 2.5s ease, background 2.5s ease", background: `radial-gradient(circle at 38% 34%, ${atmosphere.sunColor} 0%, ${atmosphere.sunGlowColor} 45%, rgba(255,196,138,0) 72%)`, boxShadow: `0 0 34px 6px ${hexA(atmosphere.sunGlowColor, darkMode ? 0.22 : 0.4)}` }} />
+                <div style={{ position: "absolute", right: -14, bottom: -18, width: 82, height: 82, borderRadius: "50%", opacity: atmosphere.sunOpacity, transition: "opacity 2.5s ease, background 2.5s ease", background: `radial-gradient(circle at 38% 34%, ${atmosphere.sunColor} 0%, ${atmosphere.sunGlowColor} 45%, rgba(255,196,138,0) 72%)`, boxShadow: `0 0 28px 5px ${hexA(atmosphere.sunGlowColor, darkMode ? 0.22 : 0.4)}` }} />
 
                 {/* moon: soft sphere shading + offset shadow disc for a realistic crescent, plus glow halo */}
-                <div style={{ position: "absolute", right: 14, top: 14, width: 40, height: 40, opacity: atmosphere.moonOpacity, transition: "opacity 2.5s ease" }}>
-                  <div style={{ position: "absolute", inset: -10, borderRadius: "50%", background: "radial-gradient(circle, rgba(214,224,245,0.28) 0%, rgba(214,224,245,0) 70%)" }} />
-                  <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "radial-gradient(circle at 34% 32%, #F4F7FC 0%, #D9E1F0 55%, #B9C4DC 100%)", boxShadow: "inset -5px -4px 8px rgba(40,48,72,0.28)" }} />
-                  <div style={{ position: "absolute", top: -3, left: 9, width: 40, height: 40, borderRadius: "50%", background: welcomeRibbonGradient(now, darkMode) }} />
+                <div style={{ position: "absolute", right: 12, top: 10, width: 33, height: 33, opacity: atmosphere.moonOpacity, transition: "opacity 2.5s ease" }}>
+                  <div style={{ position: "absolute", inset: -8, borderRadius: "50%", background: "radial-gradient(circle, rgba(214,224,245,0.28) 0%, rgba(214,224,245,0) 70%)" }} />
+                  <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "radial-gradient(circle at 34% 32%, #F4F7FC 0%, #D9E1F0 55%, #B9C4DC 100%)", boxShadow: "inset -4px -3px 7px rgba(40,48,72,0.28)" }} />
+                  <div style={{ position: "absolute", top: -2, left: 7, width: 33, height: 33, borderRadius: "50%", background: welcomeRibbonGradient(now, darkMode) }} />
                 </div>
 
                 {/* stars: a handful of soft, individually-timed twinkles \u2014 kept faint so it stays subtle */}
@@ -4462,24 +4462,24 @@ function LifeTracker() {
               </div>
 
               <div style={{ position: "relative" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${darkMode ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.75)"}`, boxShadow: "0 4px 10px rgba(0,0,0,0.08)" }}>
-                    <GreetingIcon size={18} color={darkMode ? "#FFD9A0" : "#B9741E"} strokeWidth={2.1} />
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ flexShrink: 0, width: 29, height: 29, borderRadius: 9, background: darkMode ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${darkMode ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.75)"}`, boxShadow: "0 3px 8px rgba(0,0,0,0.08)" }}>
+                    <GreetingIcon size={15} color={darkMode ? "#FFD9A0" : "#B9741E"} strokeWidth={2.1} />
                   </div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: INK, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 6, lineHeight: 1.2 }}>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: INK, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 5, lineHeight: 1.2 }}>
                     {greeting}<span className="good-morning-wave" style={{ display: "inline-block" }}>👋</span>
                   </div>
                 </div>
-                <div style={{ fontSize: 13, color: INK_DIM, marginTop: 7, lineHeight: 1.4, maxWidth: "88%" }}>
+                <div style={{ fontSize: 12, color: INK_DIM, marginTop: 4, lineHeight: 1.35, maxWidth: "88%" }}>
                   {totalActivities === 0
                     ? "Plan your day and get started."
                     : completedActivities === totalActivities
                       ? "Great work! Everything planned for today is completed."
                       : "You've got this. Let's make today count."}
                 </div>
-                <div className="good-morning-motivation" style={{ marginTop: 10, display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 11px", borderRadius: 12, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.7)"}`, maxWidth: "92%" }}>
-                  <Sparkles size={13} color={darkMode ? "#FFD9A0" : "#B9741E"} strokeWidth={2.2} style={{ flexShrink: 0, marginTop: 1.5 }} />
-                  <div style={{ fontSize: 12.5, fontWeight: 650, color: INK, lineHeight: 1.4, fontStyle: "italic" }}>{dailyMotivation}</div>
+                <div className="good-morning-motivation" style={{ marginTop: 7, display: "flex", alignItems: "flex-start", gap: 7, padding: "6px 10px", borderRadius: 11, background: darkMode ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.7)"}`, maxWidth: "92%" }}>
+                  <Sparkles size={12} color={darkMode ? "#FFD9A0" : "#B9741E"} strokeWidth={2.2} style={{ flexShrink: 0, marginTop: 1.5 }} />
+                  <div style={{ fontSize: 11.5, fontWeight: 650, color: INK, lineHeight: 1.35, fontStyle: "italic" }}>{dailyMotivation}</div>
                 </div>
               </div>
             </div>
