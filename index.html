@@ -153,6 +153,13 @@ button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
   0% { transform: translateX(0); }
   100% { transform: translateX(-16px); }
 }
+@keyframes ribbonBirdFly {
+  0% { transform: translate(0, 0); opacity: 0; }
+  8% { opacity: 1; }
+  50% { transform: translate(220%, -6px); }
+  92% { opacity: 1; }
+  100% { transform: translate(440%, 0); opacity: 0; }
+}
 
 /* ===== Celebration pop-up: pops in, holds briefly, fades out on its own ===== */
 @keyframes celebrationPop {
@@ -590,22 +597,22 @@ function lerpHexColor(hexA, hexB, t) {
 // the interpolation below can wrap around midnight without special-casing it.
 const WELCOME_RIBBON_KEYFRAMES = {
   light: [
-    { h: -3, c: ["#3B3467", "#463A78", "#524086"] }, // night (pre-midnight wrap)
-    { h: 5, c: ["#D7E3F7", "#E7DCEE", "#F3D9DE"] }, // dawn
-    { h: 8, c: ["#E4EAF7", "#F1E4D8", "#F7DFC4"] }, // morning
-    { h: 14, c: ["#FDEFD9", "#FCE4C0", "#FAD9A8"] }, // afternoon
-    { h: 18.5, c: ["#FBE0C2", "#EFAF7C", "#E28F5C"] }, // evening / golden hour
-    { h: 22, c: ["#3B3467", "#463A78", "#524086"] }, // night
-    { h: 29, c: ["#D7E3F7", "#E7DCEE", "#F3D9DE"] }, // dawn (post-midnight wrap)
+    { h: -3, c: ["#2E2A55", "#39335F", "#463B72"] }, // night (pre-midnight wrap)
+    { h: 5, c: ["#F6D8BE", "#F3C6AC", "#EFB79E"] }, // dawn: warm sunrise
+    { h: 8, c: ["#D9E9FA", "#E8F2FB", "#F4F9FD"] }, // morning: cooling into clean sky
+    { h: 14, c: ["#BFE0F5", "#D7ECFA", "#EFF8FD"] }, // midday: clean daylight, soft sky blue
+    { h: 18.5, c: ["#F7CC98", "#EE9A62", "#D96B45"] }, // evening / golden hour
+    { h: 22, c: ["#2E2A55", "#39335F", "#463B72"] }, // night
+    { h: 29, c: ["#F6D8BE", "#F3C6AC", "#EFB79E"] }, // dawn (post-midnight wrap)
   ],
   dark: [
-    { h: -3, c: ["#17171C", "#1F1B2E", "#241F3A"] }, // night (pre-midnight wrap)
-    { h: 5, c: ["#1C1C1E", "#241C1A", "#2A2019"] }, // dawn
-    { h: 8, c: ["#1C1C1E", "#2A2019", "#33240F"] }, // morning
-    { h: 14, c: ["#1C1C1E", "#2B2216", "#3A2A12"] }, // afternoon
-    { h: 18.5, c: ["#1E1B1F", "#33202A", "#432A2E"] }, // evening / golden hour
-    { h: 22, c: ["#17171C", "#1F1B2E", "#241F3A"] }, // night
-    { h: 29, c: ["#1C1C1E", "#241C1A", "#2A2019"] }, // dawn (post-midnight wrap)
+    { h: -3, c: ["#111319", "#161826", "#1A1830" ] }, // night (pre-midnight wrap)
+    { h: 5, c: ["#221D22", "#2A1F1E", "#301F1B"] }, // dawn: faint warm glow
+    { h: 8, c: ["#1B1F26", "#1E232C", "#212832"] }, // morning: cool slate
+    { h: 14, c: ["#1A1E24", "#1D222A", "#20262F"] }, // midday: cool slate, calmest tone
+    { h: 18.5, c: ["#241D22", "#332027", "#3D242A"] }, // evening / golden hour
+    { h: 22, c: ["#111319", "#161826", "#1A1830"] }, // night
+    { h: 29, c: ["#221D22", "#2A1F1E", "#301F1B"] }, // dawn (post-midnight wrap)
   ],
 };
 function welcomeRibbonGradient(date, darkMode) {
@@ -4440,8 +4447,15 @@ function LifeTracker() {
                   <div style={{ position: "absolute", bottom: "-6%", right: "18%", width: "46%", height: "40%", borderRadius: "50%", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.4)", filter: "blur(14px)", animation: "ribbonCloudDrift 32s ease-in-out infinite alternate-reverse" }} />
                 </div>
 
-                {/* sun: warm glowing orb, tint shifts golden midday -> deep orange sunrise/sunset */}
-                <div style={{ position: "absolute", right: -14, bottom: -18, width: 82, height: 82, borderRadius: "50%", opacity: atmosphere.sunOpacity, transition: "opacity 2.5s ease, background 2.5s ease", background: `radial-gradient(circle at 38% 34%, ${atmosphere.sunColor} 0%, ${atmosphere.sunGlowColor} 45%, rgba(255,196,138,0) 72%)`, boxShadow: `0 0 28px 5px ${hexA(atmosphere.sunGlowColor, darkMode ? 0.22 : 0.4)}` }} />
+                {/* sun: warm glowing orb with a bright inner core so it reads clearly against the sky, tint shifts golden midday -> deep orange sunrise/sunset */}
+                <div style={{ position: "absolute", right: -4, top: 12, width: 46, height: 46, borderRadius: "50%", opacity: atmosphere.sunOpacity, transition: "opacity 2.5s ease, background 2.5s ease", background: `radial-gradient(circle at 40% 36%, #FFFAF0 0%, ${atmosphere.sunColor} 38%, ${atmosphere.sunGlowColor} 68%, rgba(255,196,138,0) 100%)`, boxShadow: `0 0 30px 8px ${hexA(atmosphere.sunGlowColor, darkMode ? 0.3 : 0.45)}, 0 0 0 1px ${hexA("#FFFFFF", darkMode ? 0.08 : 0.35)}` }} />
+
+                {/* birds: a couple of faint distant silhouettes drifting across the daytime sky only */}
+                {atmosphere.sunOpacity > 0.08 && [0, 1].map((i) => (
+                  <svg key={i} viewBox="0 0 24 12" style={{ position: "absolute", top: `${20 + i * 14}%`, left: "-10%", width: 18 - i * 4, height: 9 - i * 2, opacity: atmosphere.sunOpacity * 0.4, transition: "opacity 2.5s ease", animation: `ribbonBirdFly ${16 + i * 6}s linear ${i * 5}s infinite` }}>
+                    <path d="M2 8 Q6 1 12 8 Q18 1 22 8" fill="none" stroke={darkMode ? "rgba(255,255,255,0.55)" : "rgba(60,50,40,0.4)"} strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                ))}
 
                 {/* moon: soft sphere shading + offset shadow disc for a realistic crescent, plus glow halo */}
                 <div style={{ position: "absolute", right: 12, top: 10, width: 33, height: 33, opacity: atmosphere.moonOpacity, transition: "opacity 2.5s ease" }}>
