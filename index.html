@@ -659,6 +659,16 @@ function timingStatus(scheduledTime, nowDate) {
   return { label: `Late by ${fmtDuration(diff)}`, diff, color: "#D9534F" };
 }
 function fmtDuration(min) { if (min == null) return "-"; const h = Math.floor(min / 60), m = Math.round(min % 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; }
+// Visibility rule for the Routine tab and Home's "Next Up": an item with a scheduledTime only
+// becomes visible once it's within 30 minutes of that time (e.g. a 10:00 AM item shows from
+// 9:30 AM onward). Items with no scheduledTime are always visible \u2014 this only gates items
+// that have a set time, and only how early they show up, not completion/activity logic.
+const ROUTINE_VISIBILITY_LEAD_MIN = 30;
+function isWithinVisibilityWindow(item, nowDate) {
+  if (!item || !item.scheduledTime) return true;
+  const nowMins = nowDate.getHours() * 60 + nowDate.getMinutes() + nowDate.getSeconds() / 60;
+  return nowMins >= scheduledMinutes(item) - ROUTINE_VISIBILITY_LEAD_MIN;
+}
 // Minutes between a departure and arrival "HH:MM" pair. If arrival is earlier in the clock than
 // departure, the trip is assumed to cross midnight rather than treated as a negative duration.
 function travelDurationMinutes(travelTime, arrivalTime) {
@@ -4305,7 +4315,9 @@ function LifeTracker() {
           .sort((a, b) => String(a.scheduledTime).localeCompare(String(b.scheduledTime)));
         const upcomingToday = incompleteScheduled.filter((i) => String(i.scheduledTime) >= nowHHMM);
         const overdueToday = incompleteScheduled.filter((i) => String(i.scheduledTime) < nowHHMM).reverse();
-        const nextActivities = [...upcomingToday, ...overdueToday].slice(0, 4);
+        // "Next Up" only surfaces upcoming (not-yet-due) items once within 30 minutes of their
+        // scheduled time; overdue items and unscheduled items are unaffected by this visibility rule.
+        const nextActivities = [...upcomingToday.filter((i) => isWithinVisibilityWindow(i, now)), ...overdueToday].slice(0, 4);
         // The single most urgent pending (non-interval) activity, used so tapping the "activities still pending"
         // reminder can jump straight to it instead of leaving the user to find it themselves: overdue first,
         // then the next upcoming one, then any unscheduled pending activity as a fallback.
@@ -4527,6 +4539,10 @@ function LifeTracker() {
           // items drop off once marked done, and interval items drop off once their repeat count for
           // the day has been logged in full.
           const pendingItemsForCat = itemsForCat.filter((i) => i.type === "interval" ? !isIntervalComplete(i, todayLog) : field(i.id).status !== "done");
+          // Routine tab only: items with a scheduledTime stay out of the visible pill strip until
+          // within 30 minutes of that time. Counts/progress above still use the unfiltered
+          // pendingItemsForCat, so this only affects which items are shown, not completion logic.
+          const visiblePendingItemsForCat = cat.id === "activity" ? pendingItemsForCat.filter((i) => isWithinVisibilityWindow(i, now)) : pendingItemsForCat;
           const todaysExpenseCount = todayLog.expenses.length;
           const todaysExpenseTotal = todayLog.expenses.reduce((s, e) => s + e.amount, 0);
           const visibleTrips = todaysTravelPlans;
@@ -4539,7 +4555,7 @@ function LifeTracker() {
           const trackableCount = cat.id === "trip" || cat.id === "expense" || cat.id === "myday" || cat.id === "shopping" ? 0 : itemsForCat.filter((i) => i.type !== "interval").length;
           const attentionCount = cat.id === "trip" ? todaysTravelPlans.length : cat.id === "myday" ? todaysMyDayEvents.length : cat.id === "shopping" ? shoppingDueCount : cat.id === "expense" ? expenseDueCount : Math.max(0, trackableCount - doneCount);
           const accent = TODAY_CARD_ACCENT[cat.id] || BRASS_HEX;
-          return { cat, expanded, CatIcon: cat.icon, itemsForCat, pendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent };
+          return { cat, expanded, CatIcon: cat.icon, itemsForCat, pendingItemsForCat, visiblePendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent };
         });
         return (
         <div key="daily-page" className="daily-page-content" style={{ padding: "6px 0 14px", flex: 1, minHeight: 0, width: "100%" }}>
@@ -4555,7 +4571,7 @@ function LifeTracker() {
             <div className="today-category-grid" style={{ padding: "0 16px" }}>
 
               {categoryStats.map((cs) => {
-                const { cat, expanded, CatIcon, itemsForCat, pendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent } = cs;
+                const { cat, expanded, CatIcon, itemsForCat, pendingItemsForCat, visiblePendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent } = cs;
                 const badge = attentionCount > 0 && (
                   <div style={{ position: "absolute", top: -7, right: -7, minWidth: 22, height: 22, borderRadius: 999, background: CORAL, color: "#FFFFFF", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid " + BG, fontFamily: mono }}>
                     {attentionCount > 9 ? "9+" : attentionCount}
@@ -5095,7 +5111,7 @@ function LifeTracker() {
               {/* Compact pill strip: icon + name only, with a colored ring for status, so the eye
                   isn't parsing five pieces of text per chip — full detail lives in the focus card below. */}
               <div className="no-scrollbar" style={{ display: "flex", gap: 8, paddingBottom: 14, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                {pendingItemsForCat.map((item) => {
+                {visiblePendingItemsForCat.map((item) => {
                   const active = activeTab === item.id;
                   const done = (item.type === "instant" || item.type === "duration") && field(item.id).status === "done";
                   const due = item.type === "interval" && isIntervalDue(item, todayLog, now.getTime());
