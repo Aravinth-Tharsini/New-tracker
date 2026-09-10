@@ -1931,6 +1931,11 @@ function LifeTracker() {
   // is finished (instant, duration-stop, or logged-time items). Distinct from the small inline
   // `celebration` toast above, which still covers other completions (goals, bills, trips, etc.).
   const [dailyCompletionPopup, setDailyCompletionPopup] = useState(null);
+  useEffect(() => {
+    if (!dailyCompletionPopup) return;
+    const t = setTimeout(() => setDailyCompletionPopup(null), 1400);
+    return () => clearTimeout(t);
+  }, [dailyCompletionPopup]);
   const showDailyCompletion = (item) => {
     setDailyCompletionPopup({ key: Date.now(), itemId: item ? item.id : null, quote: TASK_DONE_QUOTES[Math.floor(Math.random() * TASK_DONE_QUOTES.length)] });
   };
@@ -7337,66 +7342,28 @@ function doPost(e) {
       )}
 
       {dailyCompletionPopup && (() => {
-        const streakVal = streaks[dailyCompletionPopup.itemId] || 0;
         const closePopup = () => setDailyCompletionPopup(null);
         return (
-          <div key={dailyCompletionPopup.key} className="modal-backdrop-enter" onClick={closePopup} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 10010, display: "flex", alignItems: "center", justifyContent: "center", padding: 22 }}>
-            <div className="modal-pop-enter" onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "100%", maxWidth: 360, background: PANEL, borderRadius: 28, boxShadow: CARD_SHADOW, padding: "34px 24px 24px", textAlign: "center", overflow: "hidden" }}>
-              <button onClick={closePopup} aria-label="Close" style={{ position: "absolute", top: 14, right: 14, width: 32, height: 32, borderRadius: 16, background: hexA(INK, 0.06), border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: INK_DIM }}>
-                <X size={16} />
-              </button>
-
-              <div style={{ position: "relative", width: 180, height: 100, margin: "0 auto" }}>
-                {TASK_DONE_CONFETTI.map((p, i) => (
-                  <span key={i} className="pop-in" style={{
-                    position: "absolute", top: "50%", left: "50%", width: p.w, height: p.h,
-                    background: p.color, borderRadius: p.shape === "circle" ? "50%" : p.shape === "rect" ? 2 : 0,
-                    clipPath: p.shape === "star" ? CONFETTI_STAR_CLIP : undefined,
-                    transform: `translate(calc(-50% + ${p.x}px), calc(-50% + ${p.y}px)) rotate(${p.rot}deg)`,
-                    animationDelay: `${p.delay}ms`, animationFillMode: "both",
-                  }} />
-                ))}
-                <div className="pop-in" style={{
-                  position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-                  width: 84, height: 84, borderRadius: "50%",
-                  background: `linear-gradient(145deg, ${TEAL} 0%, ${TEAL} 100%)`,
-                  boxShadow: `0 0 0 8px ${hexA(TEAL, 0.16)}, 0 10px 26px ${hexA(TEAL, 0.4)}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <Check size={40} color="#FFFFFF" strokeWidth={3} />
-                </div>
+          <div key={dailyCompletionPopup.key} className="modal-backdrop-enter" onClick={closePopup} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 10010, display: "flex", alignItems: "center", justifyContent: "center", padding: 22 }}>
+            <div style={{ position: "relative", width: 180, height: 180, margin: "0 auto" }}>
+              {TASK_DONE_CONFETTI.map((p, i) => (
+                <span key={i} className="pop-in" style={{
+                  position: "absolute", top: "50%", left: "50%", width: p.w, height: p.h,
+                  background: p.color, borderRadius: p.shape === "circle" ? "50%" : p.shape === "rect" ? 2 : 0,
+                  clipPath: p.shape === "star" ? CONFETTI_STAR_CLIP : undefined,
+                  transform: `translate(calc(-50% + ${p.x}px), calc(-50% + ${p.y}px)) rotate(${p.rot}deg)`,
+                  animationDelay: `${p.delay}ms`, animationFillMode: "both",
+                }} />
+              ))}
+              <div className="pop-in" style={{
+                position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+                width: 84, height: 84, borderRadius: "50%",
+                background: `linear-gradient(145deg, ${TEAL} 0%, ${TEAL} 100%)`,
+                boxShadow: `0 0 0 8px ${hexA(TEAL, 0.16)}, 0 10px 26px ${hexA(TEAL, 0.4)}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Check size={40} color="#FFFFFF" strokeWidth={3} />
               </div>
-
-              <div style={{ fontSize: 25, fontWeight: 800, fontFamily: disp, color: INK, marginTop: 6 }}>
-                Task <span style={{ color: TEAL }}>Completed!</span>
-              </div>
-              <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.5, marginTop: 8, padding: "0 4px" }}>
-                Great job! You're making progress towards your goals! 🚀
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 12, background: hexA(TEAL, 0.1), border: `1px solid ${hexA(TEAL, 0.22)}`, borderRadius: 16, padding: "12px 14px", margin: "18px 0 12px" }}>
-                <div style={{ width: 42, height: 42, borderRadius: "50%", background: hexA("#FF9500", 0.15), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Flame size={20} color="#FF9500" />
-                </div>
-                <div style={{ width: 1, height: 30, background: LINE, flexShrink: 0 }} />
-                <div style={{ flex: 1, textAlign: "left", minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, color: INK_FAINT }}>Current Streak</div>
-                  <div style={{ fontSize: 19, fontWeight: 800, color: INK, fontFamily: disp }}>{streakVal} {streakVal === 1 ? "Day" : "Days"}</div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, flexShrink: 0 }}>
-                  <ArrowUp size={13} color={TEAL} style={{ transform: "rotate(45deg)" }} />
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: TEAL, whiteSpace: "nowrap" }}>Keep it up!</div>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 10, background: PANEL_2, borderRadius: 14, padding: "11px 14px", marginBottom: 20, textAlign: "left" }}>
-                <span style={{ fontSize: 20, color: TEAL, fontFamily: disp, fontWeight: 800, lineHeight: 1, flexShrink: 0 }}>&ldquo;</span>
-                <span style={{ fontSize: 13.5, color: INK_DIM, fontWeight: 600 }}>{dailyCompletionPopup.quote}</span>
-              </div>
-
-              <button onClick={closePopup} style={{ width: "100%", minHeight: 52, borderRadius: 26, border: "none", background: `linear-gradient(135deg, ${TEAL} 0%, ${TEAL} 100%)`, color: "#FFFFFF", fontSize: 16.5, fontWeight: 750, fontFamily: disp, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: `0 8px 20px ${hexA(TEAL, 0.4)}` }}>
-                Continue <ArrowRight size={18} />
-              </button>
             </div>
           </div>
         );
