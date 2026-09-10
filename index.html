@@ -937,11 +937,11 @@ const DEFAULT_EXPENSE_GROUPS = {
   EMI: ["EMI"],
   Recharge: ["Mobile recharge", "DTH / internet recharge"],
   Water: ["Water"],
-  Travel: ["Train", "Bus", "Cab / Auto", "Flight", "Bike Maintenance"],
+  Travel: ["Train", "Bus", "Cab / Auto", "Flight"],
   Fuel: ["Petrol", "Diesel"],
   Grocery: ["Vegetables", "Fruits", "Grocery items", "Household items"],
-  "Outside Food": ["Restaurant", "Food delivery", "Cafe / Tea & Snacks", "Office / Work lunch"],
-  Clothes: ["Men's wear", "Women's wear", "Footwear", "Accessories"],
+  "Outside Food": ["Dinner", "Lunch", "Breakfast", "Tea & Snacks", "Snacks"],
+  Outfit: ["Clothes", "Footwear", "Accessories"],
   Shopping: ["Electronics", "Home & Kitchen", "Gifts", "Miscellaneous"],
   "Health Care": ["Grooming", "Medical", "Pharmacy"],
   Insurance: ["Vehicle", "Health", "Life", "Home"],
@@ -949,9 +949,9 @@ const DEFAULT_EXPENSE_GROUPS = {
 };
 // Groups whose payments are driven from the saved Repayment Due data instead of manual entry;
 // these are hidden from the "Today's Expense" category picker and shown in their own Repayment section.
-// EMI, Rent, and Water are intentionally left out of this list (even though Rent/Water also appear in
-// the Repayments Due section) so they stay selectable for a quick one-off manual entry too.
-const REPAYMENT_LINKED_EXPENSE_GROUPS = ["Electricity Bill", "Recharge"];
+// Water is intentionally left out of this list (even though it also appears in the Repayments Due
+// section) so it stays selectable for a quick one-off manual entry too.
+const REPAYMENT_LINKED_EXPENSE_GROUPS = ["Electricity Bill", "Recharge", "EMI", "Rent", "Insurance"];
 const REPAYMENT_CATEGORY_TO_EXPENSE_GROUP = { "EMI": "EMI", "Loan": "EMI", "Gold Loan": "EMI", "Electricity": "Electricity Bill", "Mobile Recharge": "Recharge", "Rent": "Rent", "Water": "Water", "Insurance Renewal": "Insurance", "Bike Maintenance": "Travel", "Other": "Other" };
 
 function isItemValid(item) {
@@ -1301,20 +1301,21 @@ const TODAY_CARD_ACCENT = {
 // Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
 const DAILY_EXPENSE_GROUPS = Object.fromEntries(Object.entries(DEFAULT_EXPENSE_GROUPS).filter(([g]) => !REPAYMENT_LINKED_EXPENSE_GROUPS.includes(g)));
-const EXPENSE_GROUP_ICON = { Rent: Home, "Electricity Bill": Zap, EMI: CreditCard, Recharge: Smartphone, Water: Droplet, Travel: Plane, Fuel: Fuel, Grocery: ShoppingBag, "Outside Food": UtensilsCrossed, Clothes: Shirt, Shopping: Store, "Health Care": HeartPulse, Insurance: Shield, Other: Receipt };
+const EXPENSE_GROUP_ICON = { Rent: Home, "Electricity Bill": Zap, EMI: CreditCard, Recharge: Smartphone, Water: Droplet, Travel: Plane, Fuel: Fuel, Grocery: ShoppingBag, "Outside Food": UtensilsCrossed, Outfit: Shirt, Shopping: Store, "Health Care": HeartPulse, Insurance: Shield, Other: Receipt };
 // Each expense category gets its own always-on accent color (not just a highlight-when-selected
 // tint), so the picker reads as a row of distinct colored tiles the way it does in the reference design.
-const EXPENSE_GROUP_COLOR = { Rent: "#8E44AD", "Electricity Bill": "#F5A623", EMI: "#5856D6", Recharge: "#00B8D9", Water: "#0EA5E9", Travel: "#AF52DE", Fuel: "#FF9500", Grocery: "#34C759", "Outside Food": "#0071E3", Clothes: "#EC4899", Shopping: "#32ADE6", "Health Care": "#FF3B30", Insurance: "#607D8B", Other: "#8E8E93" };
+const EXPENSE_GROUP_COLOR = { Rent: "#8E44AD", "Electricity Bill": "#F5A623", EMI: "#5856D6", Recharge: "#00B8D9", Water: "#0EA5E9", Travel: "#AF52DE", Fuel: "#FF9500", Grocery: "#34C759", "Outside Food": "#0071E3", Outfit: "#EC4899", Shopping: "#32ADE6", "Health Care": "#FF3B30", Insurance: "#607D8B", Other: "#8E8E93" };
 // Icon per expense subcategory, keyed by its exact label from DEFAULT_EXPENSE_GROUPS — used to give
 // the subcategory chips (and the Progress tab's category drill-down) a distinct icon where it helps.
 const SUBCATEGORY_ICON = {
-  Train, Bus, "Cab / Auto": Car, Flight: Plane, "Bike Maintenance": Wrench,
-  Restaurant: UtensilsCrossed, "Food delivery": Store, "Cafe / Tea & Snacks": Coffee, "Office / Work lunch": Briefcase,
-  "Men's wear": Shirt, "Women's wear": Shirt, Footwear: Footprints, Accessories: Star,
+  Train, Bus, "Cab / Auto": Car, Flight: Plane,
+  Dinner: ChefHat, Lunch: UtensilsCrossed, Breakfast: Sunrise, "Tea & Snacks": Coffee, Snacks: Cookie,
+  Clothes: Shirt, Footwear: Footprints, Accessories: Star,
   Electronics: Laptop, "Home & Kitchen": Home, Gifts: Gift, Miscellaneous: ShoppingBag,
   Grooming: Brush, Medical: HeartPulse, Pharmacy: HeartPulse,
   Vehicle: Car, Health: HeartPulse, Life: HandHeart, Home: Home,
   Entertainment: Film, Personal: Smile, Donations: HandHeart,
+  "Bike Maintenance": Wrench,
 };
 // Icon/accent per life-area category (My Day / Career / Health / Routine), shared by the
 // Progress page's single-period and custom-comparison views.
