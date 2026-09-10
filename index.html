@@ -422,7 +422,7 @@ import {
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
   Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, History, Home as HomeIcon,
   CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper, Trophy,
-  Fuel, Store, MessageSquare, Sunrise, Cookie, PiggyBank, Percent,
+  Fuel, Store, MessageSquare, Sunrise, Cookie, PiggyBank, Percent, ListChecks,
   Star, XCircle, Brain, ClipboardCheck, GraduationCap, ArrowLeftRight,
   Zap, Smartphone, Shirt, Wrench, Gift, Shield, X,
 } from "lucide-react";
@@ -4272,7 +4272,7 @@ function LifeTracker() {
             const headerIconMap = {
               dashboard: { Icon: HomeIcon, fg: BRASS, bg: hexA(BRASS, 0.14) },
               daily: { Icon: CalendarDays, fg: BRASS, bg: hexA(BRASS, 0.14) },
-              categories: { Icon: LayoutGrid, fg: TEAL, bg: hexA(TEAL, 0.15) },
+              categories: { Icon: ClipboardCheck, fg: TEAL, bg: hexA(TEAL, 0.15) },
               analysis: { Icon: TrendingUp, fg: TEAL, bg: hexA(TEAL, 0.15) },
               datalink: { Icon: Settings2, fg: "#8B5CF6", bg: "rgba(139,92,246,0.14)" },
             };
@@ -5723,7 +5723,6 @@ function LifeTracker() {
                     <SectionLabel>Travel</SectionLabel>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       {travelHistoryPlans.length > 0 && <button className={showTravelHistory ? "history-toggle-active" : ""} onClick={() => { setShowTravelHistory((v) => !v); setHistoryExpanded(false); setHistoryVisibleCount(HISTORY_PAGE_SIZE); }} style={{ display: "flex", alignItems: "center", gap: 4, background: showTravelHistory ? "rgba(38,160,106,0.10)" : "transparent", border: `1px solid ${showTravelHistory ? TEAL : LINE}`, color: showTravelHistory ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={14} /> History ({travelHistoryPlans.length})</button>}
-                      <button onClick={() => { setShowTravelHistory(false); showAddTravel ? cancelTravelForm() : setShowAddTravel(true); }} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add trip</button>
                     </div>
                   </div>
                   <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Train, bus, car, bike, flight, or other trips. They'll appear on the Daily tab as soon as you add them, and highlight once your chosen reminder lead time kicks in.</div>
@@ -5804,7 +5803,6 @@ function LifeTracker() {
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <SectionLabel>Daily routine</SectionLabel>
-                    <button onClick={openNewItemForm} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add routine</button>
                   </div>
                   <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Only items with their required fields filled in show up on the Daily tab.</div>
                   {itemForm && !itemForm.id && itemFormCard}
@@ -5851,7 +5849,7 @@ function LifeTracker() {
                     <SectionLabel>Shopping lists</SectionLabel>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       {shoppingHistoryLists.length > 0 && <button className={historyExpanded ? "history-toggle-active" : ""} onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide shopping history" : "View shopping history"} style={{ display: "flex", alignItems: "center", gap: 4, background: historyExpanded ? "rgba(38,160,106,0.10)" : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={15} /> History ({shoppingHistoryLists.length})</button>}
-                      <button onClick={openNewShoppingForm} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> New list</button>
+
                     </div>
                   </div>
                   {shoppingForm && !shoppingForm.id && shoppingFormCard}
@@ -5942,7 +5940,7 @@ function LifeTracker() {
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <SectionLabel>My Day</SectionLabel>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>{sortedMyDayEvents.some((e) => e.completed) && <button onClick={() => setShowMyDayHistory((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: showMyDayHistory ? TEAL : "transparent", border: `1px solid ${showMyDayHistory ? TEAL : BRASS_DIM}`, color: showMyDayHistory ? "#FFFFFF" : BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", transition: "all .25s ease" }}><History size={14} /> History</button>}<button onClick={() => (showAddMyDay ? cancelMyDayForm() : setShowAddMyDay(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add plan</button></div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>{sortedMyDayEvents.some((e) => e.completed) && <button onClick={() => setShowMyDayHistory((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: showMyDayHistory ? TEAL : "transparent", border: `1px solid ${showMyDayHistory ? TEAL : BRASS_DIM}`, color: showMyDayHistory ? "#FFFFFF" : BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", transition: "all .25s ease" }}><History size={14} /> History</button>}</div>
               </div>
               <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Meetings and any other special activity for a day. Set a reminder and edit the plan any time.</div>
               {showAddMyDay && !editingMyDayId && myDayFormCard}
@@ -6096,7 +6094,6 @@ function LifeTracker() {
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <SectionLabel>Reminder due</SectionLabel>
-                    <button onClick={() => (showAddRepayment ? cancelRepaymentForm() : setShowAddRepayment(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add</button>
                   </div>
                   {showAddRepayment && !(editingRepaymentId && repayments.some((r) => r.id === editingRepaymentId && !r.paid)) && repaymentFormCard}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -6215,7 +6212,6 @@ function LifeTracker() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <SectionLabel>Goals</SectionLabel>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <button onClick={() => (showAddGoal ? cancelGoalForm() : setShowAddGoal(true))} style={{ display: "flex", alignItems: "center", gap: 3, background: "transparent", border: `1px solid ${BRASS_DIM}`, color: BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer" }}><Plus size={14} /> Add goal</button>
                   {((catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).length > 0) || (catTab === "financegoals" && (financeHistoryGoals.length + financeHistoryRepayments.length) > 0) ? (
                     <button onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide history" : "View history"} style={{ display: "flex", alignItems: "center", gap: 4, background: historyExpanded ? PANEL_2 : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={15} /> <span>History</span></button>
                   ) : null}
@@ -7537,9 +7533,51 @@ function doPost(e) {
         </div>
       )}
 
+      {page === "categories" && catTab && (() => {
+        // Single Planner FAB: whichever category tab is open, this maps to that tab's
+        // existing "add" action (same handlers the old inline header buttons used —
+        // only the presentation moved). Categories with no create action (e.g. "finance",
+        // which is a read-only view of today's expenses) simply render no FAB.
+        const fabAction =
+          catTab === "trip" ? { title: "Add trip", onClick: () => { setShowTravelHistory(false); showAddTravel ? cancelTravelForm() : setShowAddTravel(true); } } :
+          catTab === "activity" ? { title: "Add routine", onClick: openNewItemForm } :
+          catTab === "shopping" ? { title: "New list", onClick: openNewShoppingForm } :
+          catTab === "myday" ? { title: "Add plan", onClick: () => (showAddMyDay ? cancelMyDayForm() : setShowAddMyDay(true)) } :
+          (catTab === "career" || catTab === "health") ? { title: "Add goal", onClick: () => (showAddGoal ? cancelGoalForm() : setShowAddGoal(true)) } :
+          (catTab === "financegoals" && financeGoalView === "goals") ? { title: "Add goal", onClick: () => (showAddGoal ? cancelGoalForm() : setShowAddGoal(true)) } :
+          (catTab === "financegoals" && financeGoalView === "repayments") ? { title: "Add reminder", onClick: () => (showAddRepayment ? cancelRepaymentForm() : setShowAddRepayment(true)) } :
+          null;
+        if (!fabAction) return null;
+        return (
+          <button
+            onClick={fabAction.onClick}
+            title={fabAction.title}
+            aria-label={fabAction.title}
+            style={{
+              position: "fixed",
+              right: 18,
+              bottom: "calc(86px + env(safe-area-inset-bottom))",
+              zIndex: 9500,
+              width: 52,
+              height: 52,
+              borderRadius: "50%",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: `linear-gradient(135deg, ${BRASS} 0%, #1E4FCB 100%)`,
+              boxShadow: `0 8px 20px ${hexA(BRASS, 0.42)}, 0 2px 6px rgba(0,0,0,0.2)`,
+            }}
+          >
+            <Plus size={24} color="#FFFFFF" strokeWidth={2.4} />
+          </button>
+        );
+      })()}
+
       <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 10000, background: "transparent", paddingBottom: "calc(10px + env(safe-area-inset-bottom))", display: "flex", justifyContent: "center", pointerEvents: "none" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 2, width: "calc(100% - 24px)", maxWidth: 456, background: "var(--nav-bg)", borderRadius: 26, boxShadow: "0 10px 30px rgba(15,23,42,0.14), 0 2px 8px rgba(15,23,42,0.06)", border: `1px solid ${LINE}`, padding: "6px 6px", pointerEvents: "auto" }}>
-          {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: Plus }, { id: "analysis", label: "Progress", icon: TrendingUp }, { id: "datalink", label: "More", icon: Settings2 }].map((p) => {
+          {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: ClipboardCheck }, { id: "analysis", label: "Progress", icon: TrendingUp }, { id: "datalink", label: "More", icon: Settings2 }].map((p) => {
             const Icon = p.icon; const active = page === p.id;
             return (
               <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: active ? 3 : 2, padding: "6px 0", background: "transparent", border: "none", cursor: "pointer", color: active ? "#FFFFFF" : INK_FAINT, transition: "color .18s ease" }}>
