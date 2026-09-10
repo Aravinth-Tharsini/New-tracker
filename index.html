@@ -3924,6 +3924,17 @@ function LifeTracker() {
           from { opacity: 0; transform: translateY(-8px); max-height: 0; }
           to { opacity: 1; transform: translateY(0); max-height: 3000px; }
         }
+        /* Planner tab content (Finance/Shopping/Trip/etc.) has no bounded height — user-added
+           items (e.g. a Shopping list with several items) can easily grow past the 3000px cap
+           that .today-expand-enter holds onto forever via animation-fill-mode:both. That combo
+           of overflow:hidden + a frozen max-height silently clipped tall content and blocked
+           scrolling past that point. This variant keeps the same fade/slide-in feel with no
+           height cap and no overflow clipping. */
+        .planner-tab-enter { animation: plannerTabEnter .38s cubic-bezier(.22,.8,.25,1) both; }
+        @keyframes plannerTabEnter {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         .today-focus-card {
           position: relative;
           min-height: 150px !important;
@@ -5355,7 +5366,7 @@ function LifeTracker() {
                   </button>
                 );
               })()}
-            <div className="today-expand-enter">
+            <div className="planner-tab-enter">
 
           {catTab === "finance" && (() => {
             const cumulativeOnline = budgetUpToMonth(financeMonth, "onlineBalance") - expensesUpToMonthByMethod(financeMonth, "online");
