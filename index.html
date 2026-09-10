@@ -394,7 +394,7 @@ import {
   CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper, Trophy,
   Fuel, Store, MessageSquare, Sunrise, Cookie, PiggyBank, Percent,
   Star, XCircle, Brain, ClipboardCheck, GraduationCap, ArrowLeftRight,
-  Zap, Smartphone, Shirt, Wrench, Gift, Shield,
+  Zap, Smartphone, Shirt, Wrench, Gift, Shield, X,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -1007,6 +1007,28 @@ const CONFETTI_PIECES = [
   { tx: -58, ty: 12, rot: -20, color: "#F97316", shape: "rect", size: 8, delay: 200 },
 ];
 const CONFETTI_STAR_CLIP = "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)";
+// Scattered confetti dashes/stars framing the full-screen "Task Completed!" hero badge — these
+// pop in and stay put (unlike CONFETTI_PIECES above, which bursts outward and fades for the
+// small inline toast), echoing a firework-sticker celebration around the checkmark.
+const TASK_DONE_CONFETTI = [
+  { x: -86, y: -18, rot: -35, color: "#34C759", shape: "rect", w: 6, h: 18, delay: 0 },
+  { x: -58, y: -66, rot: -15, color: "#FBBF24", shape: "rect", w: 5, h: 15, delay: 60 },
+  { x: -14, y: -92, rot: 8, color: "#34C759", shape: "rect", w: 5, h: 14, delay: 110 },
+  { x: 34, y: -88, rot: -18, color: "#FBBF24", shape: "star", w: 13, h: 13, delay: 40 },
+  { x: 76, y: -52, rot: 25, color: "#0A84FF", shape: "circle", w: 8, h: 8, delay: 150 },
+  { x: 90, y: 2, rot: 40, color: "#34C759", shape: "rect", w: 5, h: 15, delay: 90 },
+  { x: -92, y: 34, rot: 20, color: "#FBBF24", shape: "rect", w: 5, h: 15, delay: 180 },
+  { x: 68, y: 52, rot: -25, color: "#0A84FF", shape: "circle", w: 7, h: 7, delay: 130 },
+  { x: -50, y: 68, rot: 30, color: "#FBBF24", shape: "circle", w: 7, h: 7, delay: 200 },
+];
+const TASK_DONE_QUOTES = [
+  "Small steps make big progress!",
+  "Consistency beats intensity.",
+  "You showed up — that's what counts.",
+  "One task closer to your goals.",
+  "Progress, not perfection.",
+  "Every day done is a day earned.",
+];
 const CATEGORY_DEFS = [
   { id: "myday", label: "My Day", icon: Users },
   { id: "finance", label: "Finance", icon: Wallet },
@@ -1829,6 +1851,13 @@ function LifeTracker() {
     celebrationTimerRef.current = setTimeout(() => setCelebration(null), 1400);
   };
   useEffect(() => () => { if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current); }, []);
+  // Full-screen "Task Completed!" modal shown specifically when a Daily Activity on the Today tab
+  // is finished (instant, duration-stop, or logged-time items). Distinct from the small inline
+  // `celebration` toast above, which still covers other completions (goals, bills, trips, etc.).
+  const [dailyCompletionPopup, setDailyCompletionPopup] = useState(null);
+  const showDailyCompletion = (item) => {
+    setDailyCompletionPopup({ key: Date.now(), itemId: item ? item.id : null, quote: TASK_DONE_QUOTES[Math.floor(Math.random() * TASK_DONE_QUOTES.length)] });
+  };
   const fileInputRef = useRef(null);
   const headerDateInputRef = useRef(null);
   const syncTimerRef = useRef(null);
@@ -2139,7 +2168,7 @@ function LifeTracker() {
     if (item && /wake\s*-?\s*up/i.test(item.name)) {
       setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, wakeUpTime: nowIso } }; });
     }
-    celebrate(item ? `${item.name} done!` : "Task complete!");
+    showDailyCompletion(item);
     goNext(id);
   };
   const editInstantTime = (id, hhmm) => {
@@ -2151,24 +2180,26 @@ function LifeTracker() {
   };
   const startDuration = (id) => updateField(id, { status: "in_progress", startTime: new Date().toISOString(), endTime: undefined, durationMin: undefined });
   const stopDuration = (id) => {
+    const item = validItems.find((i) => i.id === id);
     setDailyLogs((prev) => {
       const log = prev[today] || defaultLog(); const rec = log[id] || {}; const endNow = new Date();
       const durationMin = rec.startTime ? Math.round((endNow - new Date(rec.startTime)) / 60000) : null;
       return { ...prev, [today]: { ...log, [id]: { ...rec, status: "done", endTime: endNow.toISOString(), durationMin } } };
     });
-    celebrate("Task complete!");
+    showDailyCompletion(item);
     goNext(id);
   };
   const logTimeSpent = (id, minutes) => {
     const min = Number(minutes) || 0;
     if (min <= 0) return;
+    const item = validItems.find((i) => i.id === id);
     const endNow = new Date();
     const startTime = new Date(endNow.getTime() - min * 60000).toISOString();
     setDailyLogs((prev) => {
       const log = prev[today] || defaultLog();
       return { ...prev, [today]: { ...log, [id]: { status: "done", startTime, endTime: endNow.toISOString(), durationMin: min } } };
     });
-    celebrate("Task complete!");
+    showDailyCompletion(item);
     goNext(id);
   };
   const logInterval = (item) => {
@@ -7202,6 +7233,72 @@ function doPost(e) {
           <div style={{ fontSize: 14, fontWeight: 700, color: INK, fontFamily: disp, whiteSpace: "nowrap" }}>{celebration.message}</div>
         </div>
       )}
+
+      {dailyCompletionPopup && (() => {
+        const streakVal = streaks[dailyCompletionPopup.itemId] || 0;
+        const closePopup = () => setDailyCompletionPopup(null);
+        return (
+          <div key={dailyCompletionPopup.key} className="modal-backdrop-enter" onClick={closePopup} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 10010, display: "flex", alignItems: "center", justifyContent: "center", padding: 22 }}>
+            <div className="modal-pop-enter" onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "100%", maxWidth: 360, background: PANEL, borderRadius: 28, boxShadow: CARD_SHADOW, padding: "34px 24px 24px", textAlign: "center", overflow: "hidden" }}>
+              <button onClick={closePopup} aria-label="Close" style={{ position: "absolute", top: 14, right: 14, width: 32, height: 32, borderRadius: 16, background: hexA(INK, 0.06), border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: INK_DIM }}>
+                <X size={16} />
+              </button>
+
+              <div style={{ position: "relative", width: 180, height: 100, margin: "0 auto" }}>
+                {TASK_DONE_CONFETTI.map((p, i) => (
+                  <span key={i} className="pop-in" style={{
+                    position: "absolute", top: "50%", left: "50%", width: p.w, height: p.h,
+                    background: p.color, borderRadius: p.shape === "circle" ? "50%" : p.shape === "rect" ? 2 : 0,
+                    clipPath: p.shape === "star" ? CONFETTI_STAR_CLIP : undefined,
+                    transform: `translate(calc(-50% + ${p.x}px), calc(-50% + ${p.y}px)) rotate(${p.rot}deg)`,
+                    animationDelay: `${p.delay}ms`, animationFillMode: "both",
+                  }} />
+                ))}
+                <div className="pop-in" style={{
+                  position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+                  width: 84, height: 84, borderRadius: "50%",
+                  background: `linear-gradient(145deg, ${TEAL} 0%, ${TEAL} 100%)`,
+                  boxShadow: `0 0 0 8px ${hexA(TEAL, 0.16)}, 0 10px 26px ${hexA(TEAL, 0.4)}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <Check size={40} color="#FFFFFF" strokeWidth={3} />
+                </div>
+              </div>
+
+              <div style={{ fontSize: 25, fontWeight: 800, fontFamily: disp, color: INK, marginTop: 6 }}>
+                Task <span style={{ color: TEAL }}>Completed!</span>
+              </div>
+              <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.5, marginTop: 8, padding: "0 4px" }}>
+                Great job! You're making progress towards your goals! 🚀
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 12, background: hexA(TEAL, 0.1), border: `1px solid ${hexA(TEAL, 0.22)}`, borderRadius: 16, padding: "12px 14px", margin: "18px 0 12px" }}>
+                <div style={{ width: 42, height: 42, borderRadius: "50%", background: hexA("#FF9500", 0.15), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Flame size={20} color="#FF9500" />
+                </div>
+                <div style={{ width: 1, height: 30, background: LINE, flexShrink: 0 }} />
+                <div style={{ flex: 1, textAlign: "left", minWidth: 0 }}>
+                  <div style={{ fontSize: 11.5, color: INK_FAINT }}>Current Streak</div>
+                  <div style={{ fontSize: 19, fontWeight: 800, color: INK, fontFamily: disp }}>{streakVal} {streakVal === 1 ? "Day" : "Days"}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, flexShrink: 0 }}>
+                  <ArrowUp size={13} color={TEAL} style={{ transform: "rotate(45deg)" }} />
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: TEAL, whiteSpace: "nowrap" }}>Keep it up!</div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 10, background: PANEL_2, borderRadius: 14, padding: "11px 14px", marginBottom: 20, textAlign: "left" }}>
+                <span style={{ fontSize: 20, color: TEAL, fontFamily: disp, fontWeight: 800, lineHeight: 1, flexShrink: 0 }}>&ldquo;</span>
+                <span style={{ fontSize: 13.5, color: INK_DIM, fontWeight: 600 }}>{dailyCompletionPopup.quote}</span>
+              </div>
+
+              <button onClick={closePopup} style={{ width: "100%", minHeight: 52, borderRadius: 26, border: "none", background: `linear-gradient(135deg, ${TEAL} 0%, ${TEAL} 100%)`, color: "#FFFFFF", fontSize: 16.5, fontWeight: 750, fontFamily: disp, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: `0 8px 20px ${hexA(TEAL, 0.4)}` }}>
+                Continue <ArrowRight size={18} />
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {undoAction && <div className="toast-slide-enter" style={{ position: "fixed", left: "50%", bottom: 74, zIndex: 20, width: "calc(100% - 32px)", maxWidth: 448, background: INK, color: "#fff", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: CARD_SHADOW }}><span style={{ flex: 1, fontSize: 14 }}>{undoAction.message}</span>{undoAction.undo && <button onClick={() => { undoAction.undo(); setUndoAction(null); }} style={{ background: "transparent", border: "none", color: BRASS_DIM, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Undo2 size={14} /> Undo</button>}</div>}
 
