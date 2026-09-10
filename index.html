@@ -719,6 +719,17 @@ function scheduledMinutes(item) {
   const { h, m } = parseHHMMSafe(item.scheduledTime);
   return h * 60 + m;
 }
+// Routine-list ordering: items with no scheduledTime should stay exactly where they already sit in
+// the list (right after whatever activity precedes them), rather than being pushed to the bottom.
+// Only the slots that DO hold a scheduledTime item get reordered, chronologically among themselves.
+function orderRoutineItems(items) {
+  const ordered = items.slice();
+  const scheduledSlots = [];
+  items.forEach((it, i) => { if (it.scheduledTime) scheduledSlots.push(i); });
+  const scheduledSorted = scheduledSlots.map((i) => items[i]).sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
+  scheduledSlots.forEach((slot, k) => { ordered[slot] = scheduledSorted[k]; });
+  return ordered;
+}
 // Compares a scheduled "HH:MM" time against a live Date and returns an early/on-time/late verdict.
 // Within 5 minutes either side counts as "On time".
 function timingStatus(scheduledTime, nowDate) {
@@ -2209,7 +2220,9 @@ function LifeTracker() {
   useEffect(() => {
     if (!loaded) return;
     if (!expandedDailyCategory || expandedDailyCategory === "trip") return;
-    const itemsForCat = validItems.filter((i) => i.category === expandedDailyCategory).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
+    const itemsForCat = expandedDailyCategory === "activity"
+      ? orderRoutineItems(validItems.filter((i) => i.category === expandedDailyCategory))
+      : validItems.filter((i) => i.category === expandedDailyCategory).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
     const isPending = (i) => i.type === "interval" ? !isIntervalComplete(i, todayLog) : field(i.id).status !== "done";
     const pendingItems = itemsForCat.filter(isPending);
     if (activeTab && pendingItems.some((i) => i.id === activeTab)) return;
@@ -2235,7 +2248,9 @@ function LifeTracker() {
     setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, [id]: { ...(log[id] || {}), ...patch } } }; });
   };
   const nextValidAfter = (id) => {
-    const itemsForCat = validItems.filter((i) => i.category === expandedDailyCategory).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
+    const itemsForCat = expandedDailyCategory === "activity"
+      ? orderRoutineItems(validItems.filter((i) => i.category === expandedDailyCategory))
+      : validItems.filter((i) => i.category === expandedDailyCategory).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
     const isPending = (i) => i.type === "interval" ? !isIntervalComplete(i, todayLog) : field(i.id).status !== "done";
     const idx = itemsForCat.findIndex((i) => i.id === id);
     const after = itemsForCat.slice(idx + 1).filter(isPending);
@@ -4632,7 +4647,9 @@ function LifeTracker() {
         // so each card reads from the same numbers instead of drifting.
         const categoryStats = availableDailyCategories.map((cat) => {
           const expanded = expandedDailyCategory === cat.id;
-          const itemsForCat = validItems.filter((i) => i.category === cat.id).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
+          const itemsForCat = cat.id === "activity"
+            ? orderRoutineItems(validItems.filter((i) => i.category === cat.id))
+            : validItems.filter((i) => i.category === cat.id).slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
           // Only remaining (not-yet-done) routines are shown in today's list; completed instant/duration
           // items drop off once marked done, and interval items drop off once their repeat count for
           // the day has been logged in full.
@@ -4655,6 +4672,276 @@ function LifeTracker() {
           const accent = TODAY_CARD_ACCENT[cat.id] || BRASS_HEX;
           return { cat, expanded, CatIcon: cat.icon, itemsForCat, pendingItemsForCat, visiblePendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent };
         });
+        // Renders one routine/goal item as a card. `compact` (used for the Routine tab) puts the
+        // icon + name on the left and the single primary action (Done / Start / Stop / Log) as a
+        // same-sized pill button on the right, in one aligned row \u2014 instead of the old fully
+        // centered, stacked layout still used by Career Growth / Health Care.
+        const renderTrackItemCard = (item, accent, compact) => {
+          const rec = field(item.id);
+          const iconWrap = (size, boxSize) => (
+            <div style={{
+              width: boxSize, height: boxSize, borderRadius: "50%", background: hexA(accent, darkMode ? 0.20 : 0.11),
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              border: `2px solid ${hexA(accent, 0.25)}`,
+            }}>
+              <RoutineActivityIcon icon={item.icon} size={size} title={item.name} />
+            </div>
+          );
+          const streakBadge = streaks[item.id] > 0 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: compact ? "flex-start" : "center", gap: 3, marginTop: 10, fontSize: 13.5, color: BRASS, fontFamily: mono }}>
+              <Flame size={13} /> {streaks[item.id]} day streak
+            </div>
+          );
+
+          if (item.type === "instant") {
+            return (
+              <Card key={item.id} style={{ textAlign: compact ? "left" : "center", padding: compact ? "16px" : "28px 18px 26px", borderRadius: compact ? 20 : 24, boxShadow: "0 6px 22px rgba(20,30,45,.06)", borderTop: `3px solid ${accent}` }}>
+                {rec.status === "done" ? (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: compact ? 12 : 0, flexDirection: compact ? "row" : "column" }}>
+                      {compact && iconWrap(20, 44)}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: compact ? 15 : 15, fontWeight: compact ? 700 : 400, color: compact ? INK : INK_DIM, marginBottom: 5 }}>{item.name}{compact ? " \u2014 done" : " recorded"}</div>
+                        {editingInstantTime[item.id] ? (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: compact ? "flex-start" : "center", gap: 5 }}>
+                            <Time12Input value={instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(rec.time)} onChange={(v) => setInstantTimeInputs((p) => ({ ...p, [item.id]: v }))} style={{ fontFamily: mono }} />
+                            <button onClick={() => editInstantTime(item.id, instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(rec.time))} style={{ background: TEAL, border: "none", borderRadius: 7, padding: "6px 8px", color: "#FFFFFF", cursor: "pointer" }}><Check size={15} /></button>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: compact ? "flex-start" : "center", gap: 6 }}>
+                            <div style={{ fontFamily: mono, fontSize: 16, color: TEAL, fontWeight: 700 }}>{fmtTime(rec.time)}</div>
+                            <button onClick={() => { setInstantTimeInputs((p) => ({ ...p, [item.id]: hhmm(rec.time) })); setEditingInstantTime((p) => ({ ...p, [item.id]: true })); }} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={14} /></button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {item.scheduledTime && !editingInstantTime[item.id] && (() => {
+                      const status = timingStatus(item.scheduledTime, new Date(rec.time));
+                      return status && (
+                        <div style={{ fontSize: 13, fontWeight: 700, color: status.color, marginTop: 6 }}>{status.label} &middot; planned {fmtTimeString12(item.scheduledTime)}</div>
+                      );
+                    })()}
+                  </>
+                ) : compact ? (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                      {iconWrap(24, 52)}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 17, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                        <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 2 }}>{item.scheduledTime ? `Planned ${fmtTimeString12(item.scheduledTime)}` : "Tap Done when it happens"}</div>
+                      </div>
+                      <ActionButton onClick={() => pressInstant(item.id, hhmm(now))} label="Done" icon={Check} tone={TEAL} />
+                    </div>
+                    {item.scheduledTime && (() => {
+                      const status = timingStatus(item.scheduledTime, now);
+                      return status && (
+                        <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 700, color: status.color }}>{status.label}</div>
+                      );
+                    })()}
+                  </>
+                ) : (
+                  <>
+                    {iconWrap(38, 76)}
+                    <div style={{ fontSize: 22, fontWeight: 700, color: INK, marginTop: 16, marginBottom: 6 }}>{item.name}</div>
+                    <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 22 }}>Tap {`"Done"`} the moment it happens</div>
+                    {item.scheduledTime && (() => {
+                      const status = timingStatus(item.scheduledTime, now);
+                      return (
+                        <div style={{
+                          display: "flex", alignItems: "stretch", justifyContent: "center",
+                          background: PANEL_2, borderRadius: 16, padding: "15px 8px", marginBottom: 20,
+                          flexDirection: "column", gap: 10,
+                        }}>
+                          <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center" }}>
+                            <div style={{ flex: 1, textAlign: "center" }}>
+                              <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 5, fontWeight: 700 }}>Planned</div>
+                              <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: INK }}>{fmtTimeString12(item.scheduledTime)}</div>
+                            </div>
+                            <div style={{ width: 1, background: LINE, margin: "2px 4px" }} />
+                            <div style={{ flex: 1, textAlign: "center" }}>
+                              <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 5, fontWeight: 700 }}>Live now</div>
+                              <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: BRASS }}>{fmtClock12(now)}</div>
+                            </div>
+                          </div>
+                          {status && <div style={{ fontSize: 13, fontWeight: 700, color: status.color }}>{status.label}</div>}
+                        </div>
+                      );
+                    })()}
+                    <CenteredButton>
+                      <ActionButton onClick={() => pressInstant(item.id, hhmm(now))} label="Done" icon={Check} tone={TEAL} big />
+                    </CenteredButton>
+                  </>
+                )}
+                {streakBadge}
+              </Card>
+            );
+          }
+
+          if (item.type === "duration") {
+            const targetMs = requiredDurationMs(item);
+            return (
+              <Card key={item.id} style={{ textAlign: compact ? "left" : "center", padding: compact ? "16px" : "19px 12px", borderRadius: compact ? 20 : 16, borderTop: `3px solid ${accent}` }}>
+                {rec.status === "done" ? (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: compact ? 12 : 0, flexDirection: compact ? "row" : "column" }}>
+                      {compact && iconWrap(20, 44)}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: compact ? 700 : 400, color: compact ? INK : INK_DIM, marginBottom: 5 }}>{item.name}{compact ? "" : " completed"}</div>
+                        <div style={{ fontFamily: mono, fontSize: compact ? 15 : 18, color: TEAL, fontWeight: 600, marginBottom: compact ? 0 : 8 }}>{fmtDuration(rec.durationMin)}</div>
+                      </div>
+                    </div>
+                    {rec.startTime && rec.endTime && (
+                      <div style={{ display: "flex", justifyContent: compact ? "flex-start" : "center", gap: 14, fontSize: 13, color: INK_DIM, marginTop: compact ? 8 : 0 }}>
+                        <div><span style={{ color: INK_FAINT }}>Started</span> <span style={{ fontFamily: mono, fontWeight: 600, color: INK }}>{fmtTime(rec.startTime)}</span></div>
+                        <div><span style={{ color: INK_FAINT }}>Ended</span> <span style={{ fontFamily: mono, fontWeight: 600, color: INK }}>{fmtTime(rec.endTime)}</span></div>
+                      </div>
+                    )}
+                    {item.scheduledTime && rec.startTime && (() => {
+                      const status = timingStatus(item.scheduledTime, new Date(rec.startTime));
+                      return status && (
+                        <div style={{ fontSize: 13, fontWeight: 700, color: status.color, marginTop: 6 }}>{status.label} starting &middot; planned {fmtTimeString12(item.scheduledTime)}</div>
+                      );
+                    })()}
+                  </>
+                ) : rec.status === "in_progress" ? (
+                  compact ? (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                        {iconWrap(24, 52)}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 17, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                          <div style={{ fontFamily: mono, fontSize: 15, color: BRASS, fontWeight: 700, marginTop: 2 }}>
+                            {fmtElapsed(now - new Date(rec.startTime))}{targetMs ? <span style={{ color: INK_FAINT, fontWeight: 600 }}> / {fmtElapsed(targetMs)}</span> : null}
+                          </div>
+                        </div>
+                        <ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} />
+                      </div>
+                      {targetMs && (
+                        <div style={{ marginTop: 12 }}>
+                          <ProgressBar pct={Math.round(((now - new Date(rec.startTime)) / targetMs) * 100)} color={accent} />
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
+                      <div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: targetMs ? 4 : 10 }}>
+                        {fmtElapsed(now - new Date(rec.startTime))}{targetMs ? <span style={{ fontSize: 16, color: INK_FAINT }}> / {fmtElapsed(targetMs)}</span> : null}
+                      </div>
+                      {targetMs && (
+                        <div style={{ marginBottom: 12 }}>
+                          <ProgressBar pct={Math.round(((now - new Date(rec.startTime)) / targetMs) * 100)} color={accent} />
+                        </div>
+                      )}
+                      <CenteredButton><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></CenteredButton>
+                    </>
+                  )
+                ) : compact ? (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                      {iconWrap(24, 52)}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 17, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                        <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 2 }}>{item.scheduledTime ? `Planned ${fmtTimeString12(item.scheduledTime)}` : `Start when ${item.name.toLowerCase()} begins`}{targetMs ? ` \u00b7 target ${item.requiredDurationValue} ${item.requiredDurationUnit}` : ""}</div>
+                      </div>
+                      <ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} />
+                    </div>
+                    {item.scheduledTime && (() => {
+                      const status = timingStatus(item.scheduledTime, now);
+                      return status && (
+                        <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 700, color: status.color }}>{status.label}</div>
+                      );
+                    })()}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${LINE}` }}>
+                      <span style={{ fontSize: 12.5, color: INK_FAINT, flexShrink: 0 }}>or log minutes spent</span>
+                      <TextField type="number" value={timeSpentInputs[item.id] || ""} onChange={(e) => setTimeSpentInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 56, fontFamily: mono, textAlign: "center" }} />
+                      <button onClick={() => logTimeSpent(item.id, timeSpentInputs[item.id])} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 7, padding: "5px 9px", color: TEAL, cursor: "pointer", fontSize: 13, flexShrink: 0 }}>Log</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: targetMs ? 3 : 10 }}>Start when {item.name.toLowerCase()} begins</div>
+                    {targetMs && <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 10 }}>Target &middot; {item.requiredDurationValue} {item.requiredDurationUnit}</div>}
+                    {item.scheduledTime && (() => {
+                      const status = timingStatus(item.scheduledTime, now);
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, background: PANEL_2, borderRadius: 14, padding: "10px 8px", marginBottom: 12 }}>
+                          <div style={{ fontSize: 13, color: INK_DIM }}>Planned for <span style={{ fontFamily: mono, fontWeight: 700, color: INK }}>{fmtTimeString12(item.scheduledTime)}</span></div>
+                          {status && <div style={{ fontSize: 13, fontWeight: 700, color: status.color }}>{status.label}</div>}
+                        </div>
+                      );
+                    })()}
+                    <CenteredButton>
+                      <ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
+                    </CenteredButton>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 10 }}>
+                      <span style={{ fontSize: 13, color: INK_FAINT }}>or log time spent (min)</span>
+                      <TextField type="number" value={timeSpentInputs[item.id] || ""} onChange={(e) => setTimeSpentInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 60, fontFamily: mono, textAlign: "center" }} />
+                      <button onClick={() => logTimeSpent(item.id, timeSpentInputs[item.id])} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 7, padding: "5px 8px", color: TEAL, cursor: "pointer", fontSize: 14 }}>Log</button>
+                    </div>
+                  </>
+                )}
+                {streakBadge}
+              </Card>
+            );
+          }
+
+          if (item.type === "interval") {
+            const logs = getIntervalLogs(todayLog, item.id);
+            const total = logs.reduce((s, w) => s + w.amount, 0);
+            const lastTime = logs.length ? logs[logs.length - 1].time : null;
+            const periodMs = intervalPeriodMs(item);
+            const nextDueMs = lastTime ? new Date(lastTime).getTime() + periodMs : now.getTime();
+            const due = now.getTime() >= nextDueMs;
+            const repeatLimit = intervalRepeatLimit(item);
+            const complete = logs.length >= repeatLimit;
+            const periodLabel = item.periodUnit ? `${item.intervalValue} ${item.periodUnit}` : `${item.intervalHours}h`;
+            const statusLine = complete ? "All done for today" : due ? "An interval is due" : `Next at ${fmtTime(new Date(nextDueMs).toISOString())}`;
+            return (
+              <div key={item.id}>
+                <Card style={{ textAlign: compact ? "left" : "center", padding: compact ? "16px" : "19px 12px", borderRadius: compact ? 20 : 16, marginBottom: 9, borderTop: `3px solid ${accent}` }}>
+                  {compact ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                      {iconWrap(24, 52)}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 17, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                        <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 2 }}>
+                          {isFinite(repeatLimit) ? `${Math.min(logs.length, repeatLimit)} of ${repeatLimit} today \u00b7 every ${periodLabel} \u00b7 ` : ""}{statusLine}
+                        </div>
+                      </div>
+                      {!complete && <ActionButton onClick={() => logInterval(item)} label={`Log ${item.amount}${item.unit}`} icon={Check} tone={TEAL} />}
+                    </div>
+                  ) : (
+                    <>
+                      <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
+                      {isFinite(repeatLimit) && (
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 4 }}>{Math.min(logs.length, repeatLimit)} of {repeatLimit} today &middot; every {periodLabel}</div>
+                      )}
+                      <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 3 }}>{statusLine}</div>
+                      {!complete && (
+                        <>
+                          <div style={{ fontFamily: mono, fontSize: 18, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{item.amount} {item.unit}</div>
+                          <CenteredButton widthPct="70%" maxWidth={320}>
+                            <ActionButton onClick={() => logInterval(item)} label={`Log ${item.amount}${item.unit}`} icon={Check} tone={TEAL} big />
+                          </CenteredButton>
+                        </>
+                      )}
+                    </>
+                  )}
+                </Card>
+                <Card>
+                  <SectionLabel>Today &middot; {total} {item.unit}</SectionLabel>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                    {logs.length === 0 && <span style={{ color: INK_FAINT, fontSize: 14 }}>Nothing logged yet.</span>}
+                    {logs.map((w, i) => <span key={i} style={{ fontFamily: mono, fontSize: 13, background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 5, padding: "3px 6px", color: INK_DIM }}>{fmtTime(w.time)}</span>)}
+                  </div>
+                </Card>
+              </div>
+            );
+          }
+
+          return null;
+        };
         return (
         <div key="daily-page" className="daily-page-content" style={{ padding: "6px 0 14px", flex: 1, minHeight: 0, width: "100%" }}>
           {availableDailyCategories.length === 0 ? (
@@ -5202,217 +5489,58 @@ function LifeTracker() {
                 <div style={{ flex: 1, height: 6, background: hexA(accent, darkMode ? 0.22 : 0.14), borderRadius: 999, overflow: "hidden" }}>
                   <div style={{ width: `${trackableCount ? Math.round((doneCount / trackableCount) * 100) : 0}%`, height: "100%", background: accent, borderRadius: 999, transition: "width .3s ease" }} />
                 </div>
-                {streaks[activeTab] > 0 && (
+                {cat.id !== "activity" && streaks[activeTab] > 0 && (
                   <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 12.5, fontWeight: 750, color: BRASS, fontFamily: mono, flexShrink: 0 }}><Flame size={12} /> {streaks[activeTab]}</span>
                 )}
               </div>
-              {/* Compact pill strip: icon + name only, with a colored ring for status, so the eye
-                  isn't parsing five pieces of text per chip — full detail lives in the focus card below. */}
-              <div className="no-scrollbar" style={{ display: "flex", gap: 8, paddingBottom: 14, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                {visiblePendingItemsForCat.map((item) => {
-                  const active = activeTab === item.id;
-                  const done = (item.type === "instant" || item.type === "duration") && field(item.id).status === "done";
-                  const due = item.type === "interval" && isIntervalDue(item, todayLog, now.getTime());
-                  const ringColor = done ? TEAL : due ? CORAL : active ? accent : "transparent";
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveTab(item.id)}
-                      style={{
-                        display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
-                        background: "transparent", border: "none", cursor: "pointer",
-                        flexShrink: 0, minWidth: 62, padding: "2px 0",
-                      }}
-                      className="daily-input-tab"
-                    >
-                      <div style={{ width: 54, height: 54, borderRadius: "50%", background: active ? hexA(accent, darkMode ? 0.26 : 0.14) : PANEL, display: "flex", alignItems: "center", justifyContent: "center", border: `2.5px solid ${ringColor}`, boxShadow: active ? `0 4px 14px ${hexA(accent, 0.25)}` : "0 1px 3px rgba(20,30,45,.06)", transition: "border-color .18s ease, background .18s ease, box-shadow .18s ease" }}>
-                        <RoutineActivityIcon icon={item.icon} size={21} title={item.name} />
-                      </div>
-                      <div style={{ fontSize: 11.5, fontWeight: active ? 750 : 600, color: active ? accent : INK_DIM, maxWidth: 66, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
-                    </button>
-                  );
-                })}
-              </div>
+              {cat.id === "activity" ? (
+                // Routine tab: every visible item is its own row (icon + name left, primary action
+                // button right) so the Done/Start/Log control is always in the same clear spot,
+                // instead of needing to tap a pill to reveal it.
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {visiblePendingItemsForCat.length === 0 ? (
+                    <Card style={{ textAlign: "center", padding: "22px 16px", borderRadius: 20 }}>
+                      <div style={{ fontSize: 13.5, color: INK_FAINT }}>Nothing due right now &mdash; scheduled items appear 30 minutes before their time.</div>
+                    </Card>
+                  ) : (
+                    visiblePendingItemsForCat.map((item) => renderTrackItemCard(item, accent, true))
+                  )}
+                </div>
+              ) : (
+                <>
+                  {/* Compact pill strip: icon + name only, with a colored ring for status, so the eye
+                      isn't parsing five pieces of text per chip — full detail lives in the focus card below. */}
+                  <div className="no-scrollbar" style={{ display: "flex", gap: 8, paddingBottom: 14, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                    {visiblePendingItemsForCat.map((item) => {
+                      const active = activeTab === item.id;
+                      const done = (item.type === "instant" || item.type === "duration") && field(item.id).status === "done";
+                      const due = item.type === "interval" && isIntervalDue(item, todayLog, now.getTime());
+                      const ringColor = done ? TEAL : due ? CORAL : active ? accent : "transparent";
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveTab(item.id)}
+                          style={{
+                            display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
+                            background: "transparent", border: "none", cursor: "pointer",
+                            flexShrink: 0, minWidth: 62, padding: "2px 0",
+                          }}
+                          className="daily-input-tab"
+                        >
+                          <div style={{ width: 54, height: 54, borderRadius: "50%", background: active ? hexA(accent, darkMode ? 0.26 : 0.14) : PANEL, display: "flex", alignItems: "center", justifyContent: "center", border: `2.5px solid ${ringColor}`, boxShadow: active ? `0 4px 14px ${hexA(accent, 0.25)}` : "0 1px 3px rgba(20,30,45,.06)", transition: "border-color .18s ease, background .18s ease, box-shadow .18s ease" }}>
+                            <RoutineActivityIcon icon={item.icon} size={21} title={item.name} />
+                          </div>
+                          <div style={{ fontSize: 11.5, fontWeight: active ? 750 : 600, color: active ? accent : INK_DIM, maxWidth: 66, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-              <div>
-                {pendingItemsForCat.filter((i) => i.id === activeTab).map((item) => {
-                  const rec = field(item.id);
-
-                  if (item.type === "instant") {
-                    return (
-                      <Card key={item.id} style={{ textAlign: "center", padding: "28px 18px 26px", borderRadius: 24, boxShadow: "0 8px 28px rgba(20,30,45,.06)", borderTop: `3px solid ${accent}` }}>                        {rec.status === "done" ? (
-                          <>
-                            <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 5 }}>{item.name} recorded</div>
-                            {editingInstantTime[item.id] ? (
-                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
-                                <Time12Input value={instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(rec.time)} onChange={(v) => setInstantTimeInputs((p) => ({ ...p, [item.id]: v }))} style={{ fontFamily: mono }} />
-                                <button onClick={() => editInstantTime(item.id, instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(rec.time))} style={{ background: TEAL, border: "none", borderRadius: 7, padding: "6px 8px", color: "#FFFFFF", cursor: "pointer" }}><Check size={15} /></button>
-                              </div>
-                            ) : (
-                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                                <div style={{ fontFamily: mono, fontSize: 18, color: TEAL, fontWeight: 700 }}>{fmtTime(rec.time)}</div>
-                                <button onClick={() => { setInstantTimeInputs((p) => ({ ...p, [item.id]: hhmm(rec.time) })); setEditingInstantTime((p) => ({ ...p, [item.id]: true })); }} style={{ background: "transparent", border: "none", color: INK_FAINT, cursor: "pointer" }}><Pencil size={14} /></button>
-                              </div>
-                            )}
-                            {item.scheduledTime && !editingInstantTime[item.id] && (() => {
-                              const status = timingStatus(item.scheduledTime, new Date(rec.time));
-                              return status && (
-                                <div style={{ fontSize: 13, fontWeight: 700, color: status.color, marginTop: 6 }}>{status.label} &middot; planned {fmtTimeString12(item.scheduledTime)}</div>
-                              );
-                            })()}
-                          </>
-                        ) : (
-                          <>
-                            <div style={{
-                              width: 76, height: 76, borderRadius: "50%", background: hexA(accent, darkMode ? 0.20 : 0.11),
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              margin: "0 auto 16px", border: `2px solid ${hexA(accent, 0.25)}`,
-                            }}>
-                              <RoutineActivityIcon icon={item.icon} size={38} title={item.name} />
-                            </div>
-                            <div style={{ fontSize: 22, fontWeight: 700, color: INK, marginBottom: 6 }}>{item.name}</div>
-                            <div style={{ fontSize: 15, color: INK_FAINT, marginBottom: 22 }}>Tap {`"Done"`} the moment it happens</div>
-                            {item.scheduledTime && (() => {
-                              const status = timingStatus(item.scheduledTime, now);
-                              return (
-                                <div style={{
-                                  display: "flex", alignItems: "stretch", justifyContent: "center",
-                                  background: PANEL_2, borderRadius: 16, padding: "15px 8px", marginBottom: 20,
-                                  flexDirection: "column", gap: 10,
-                                }}>
-                                  <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center" }}>
-                                    <div style={{ flex: 1, textAlign: "center" }}>
-                                      <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 5, fontWeight: 700 }}>Planned</div>
-                                      <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: INK }}>{fmtTimeString12(item.scheduledTime)}</div>
-                                    </div>
-                                    <div style={{ width: 1, background: LINE, margin: "2px 4px" }} />
-                                    <div style={{ flex: 1, textAlign: "center" }}>
-                                      <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: INK_FAINT, marginBottom: 5, fontWeight: 700 }}>Live now</div>
-                                      <div style={{ fontFamily: mono, fontSize: 22, fontWeight: 700, color: BRASS }}>{fmtClock12(now)}</div>
-                                    </div>
-                                  </div>
-                                  {status && <div style={{ fontSize: 13, fontWeight: 700, color: status.color }}>{status.label}</div>}
-                                </div>
-                              );
-                            })()}
-                            <CenteredButton>
-                              <ActionButton onClick={() => pressInstant(item.id, hhmm(now))} label="Done" icon={Check} tone={TEAL} big />
-                            </CenteredButton>
-                          </>
-                        )}
-                        {streaks[item.id] > 0 && (
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 3, marginTop: 10, fontSize: 14, color: BRASS, fontFamily: mono }}>
-                            <Flame size={14} /> {streaks[item.id]} day streak
-                          </div>
-                        )}
-                      </Card>
-                    );
-                  }
-                  if (item.type === "duration") {
-                    const targetMs = requiredDurationMs(item);
-                    return (
-                      <Card key={item.id} style={{ textAlign: "center", padding: "19px 12px", borderTop: `3px solid ${accent}` }}>
-                        {rec.status === "done" ? (
-                          <>
-                            <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 5 }}>{item.name} completed</div>
-                            <div style={{ fontFamily: mono, fontSize: 18, color: TEAL, fontWeight: 600, marginBottom: 8 }}>{fmtDuration(rec.durationMin)}</div>
-                            {rec.startTime && rec.endTime && (
-                              <div style={{ display: "flex", justifyContent: "center", gap: 14, fontSize: 13, color: INK_DIM }}>
-                                <div><span style={{ color: INK_FAINT }}>Started</span> <span style={{ fontFamily: mono, fontWeight: 600, color: INK }}>{fmtTime(rec.startTime)}</span></div>
-                                <div><span style={{ color: INK_FAINT }}>Ended</span> <span style={{ fontFamily: mono, fontWeight: 600, color: INK }}>{fmtTime(rec.endTime)}</span></div>
-                              </div>
-                            )}
-                            {item.scheduledTime && rec.startTime && (() => {
-                              const status = timingStatus(item.scheduledTime, new Date(rec.startTime));
-                              return status && (
-                                <div style={{ fontSize: 13, fontWeight: 700, color: status.color, marginTop: 6 }}>{status.label} starting &middot; planned {fmtTimeString12(item.scheduledTime)}</div>
-                              );
-                            })()}
-                          </>
-                        ) : rec.status === "in_progress" ? (
-                          <>
-                            <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
-                            <div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: targetMs ? 4 : 10 }}>
-                              {fmtElapsed(now - new Date(rec.startTime))}{targetMs ? <span style={{ fontSize: 16, color: INK_FAINT }}> / {fmtElapsed(targetMs)}</span> : null}
-                            </div>
-                            {targetMs && (
-                              <div style={{ marginBottom: 12 }}>
-                                <ProgressBar pct={Math.round(((now - new Date(rec.startTime)) / targetMs) * 100)} color={accent} />
-                              </div>
-                            )}
-                            <CenteredButton><ActionButton onClick={() => stopDuration(item.id)} label="Stop" icon={Square} tone={CORAL} big /></CenteredButton>
-                          </>
-                        ) : (
-                          <>
-                            <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: targetMs ? 3 : 10 }}>Start when {item.name.toLowerCase()} begins</div>
-                            {targetMs && <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 10 }}>Target &middot; {item.requiredDurationValue} {item.requiredDurationUnit}</div>}
-                            {item.scheduledTime && (() => {
-                              const status = timingStatus(item.scheduledTime, now);
-                              return (
-                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, background: PANEL_2, borderRadius: 14, padding: "10px 8px", marginBottom: 12 }}>
-                                  <div style={{ fontSize: 13, color: INK_DIM }}>Planned for <span style={{ fontFamily: mono, fontWeight: 700, color: INK }}>{fmtTimeString12(item.scheduledTime)}</span></div>
-                                  {status && <div style={{ fontSize: 13, fontWeight: 700, color: status.color }}>{status.label}</div>}
-                                </div>
-                              );
-                            })()}
-                            <CenteredButton>
-                              <ActionButton onClick={() => startDuration(item.id)} label="Start" icon={Play} tone={BRASS} big />
-                            </CenteredButton>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 10 }}>
-                              <span style={{ fontSize: 13, color: INK_FAINT }}>or log time spent (min)</span>
-                              <TextField type="number" value={timeSpentInputs[item.id] || ""} onChange={(e) => setTimeSpentInputs((p) => ({ ...p, [item.id]: e.target.value }))} style={{ width: 60, fontFamily: mono, textAlign: "center" }} />
-                              <button onClick={() => logTimeSpent(item.id, timeSpentInputs[item.id])} style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 7, padding: "5px 8px", color: TEAL, cursor: "pointer", fontSize: 14 }}>Log</button>
-                            </div>
-                          </>
-                        )}
-                        {streaks[item.id] > 0 && (
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 3, marginTop: 10, fontSize: 14, color: BRASS, fontFamily: mono }}>
-                            <Flame size={14} /> {streaks[item.id]} day streak
-                          </div>
-                        )}
-                      </Card>
-                    );
-                  }
-                  if (item.type === "interval") {
-                    const logs = getIntervalLogs(todayLog, item.id);
-                    const total = logs.reduce((s, w) => s + w.amount, 0);
-                    const lastTime = logs.length ? logs[logs.length - 1].time : null;
-                    const periodMs = intervalPeriodMs(item);
-                    const nextDueMs = lastTime ? new Date(lastTime).getTime() + periodMs : now.getTime();
-                    const due = now.getTime() >= nextDueMs;
-                    const repeatLimit = intervalRepeatLimit(item);
-                    const complete = logs.length >= repeatLimit;
-                    const periodLabel = item.periodUnit ? `${item.intervalValue} ${item.periodUnit}` : `${item.intervalHours}h`;
-                    return (
-                      <div key={item.id}>
-                        <Card style={{ textAlign: "center", padding: "19px 12px", marginBottom: 9, borderTop: `3px solid ${accent}` }}>
-                          <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
-                          {isFinite(repeatLimit) && (
-                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 4 }}>{Math.min(logs.length, repeatLimit)} of {repeatLimit} today &middot; every {periodLabel}</div>
-                          )}
-                          <div style={{ fontSize: 15, color: INK_DIM, marginBottom: 3 }}>{complete ? "All done for today" : due ? "An interval is due" : `Next at ${fmtTime(new Date(nextDueMs).toISOString())}`}</div>
-                          {!complete && (
-                            <>
-                              <div style={{ fontFamily: mono, fontSize: 18, color: BRASS, fontWeight: 600, marginBottom: 10 }}>{item.amount} {item.unit}</div>
-                              <CenteredButton widthPct="70%" maxWidth={320}>
-                                <ActionButton onClick={() => logInterval(item)} label={`Log ${item.amount}${item.unit}`} icon={Check} tone={TEAL} big />
-                              </CenteredButton>
-                            </>
-                          )}
-                        </Card>
-                        <Card>
-                          <SectionLabel>Today &middot; {total} {item.unit}</SectionLabel>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                            {logs.length === 0 && <span style={{ color: INK_FAINT, fontSize: 14 }}>Nothing logged yet.</span>}
-                            {logs.map((w, i) => <span key={i} style={{ fontFamily: mono, fontSize: 13, background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 5, padding: "3px 6px", color: INK_DIM }}>{fmtTime(w.time)}</span>)}
-                          </div>
-                        </Card>
-                      </div>
-                    );
-                  }
-                  return null;
-                })}
-              </div>
+                  <div>
+                    {pendingItemsForCat.filter((i) => i.id === activeTab).map((item) => renderTrackItemCard(item, accent, false))}
+                  </div>
+                </>
+              )}
                       </div>
                     )}
                   </div>
