@@ -424,7 +424,7 @@ import {
   CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper, Trophy,
   Fuel, Store, MessageSquare, Sunrise, Cookie, PiggyBank, Percent, ListChecks,
   Star, XCircle, Brain, ClipboardCheck, GraduationCap, ArrowLeftRight,
-  Zap, Smartphone, Shirt, Wrench, Gift, Shield, X, Search,
+  Zap, Smartphone, Shirt, Wrench, Gift, Shield, X,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -1173,18 +1173,18 @@ function myDayEventOccursOn(ev, dateStr) {
   const remindFrom = addDays(ev.eventDate, -lead);
   return dateStr >= remindFrom && dateStr <= ev.eventDate;
 }
-function shoppingPriceUnitLabel(unit) {
-  return unit === "kg" ? "Price per kg" : "Price per each";
-}
-function shoppingPriceSearchUrl(it) {
-  const name = (it.name || "item").trim();
-  const q = it.unit === "kg" ? `${name} price per kg today` : `${name} price today`;
-  return `https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=shop`;
+function shoppingPriceUnitLabel(it) {
+  if (it.unit !== "kg") return "Price per each";
+  return it.priceMode === "direct" ? "Price for this weight" : "Price per kg";
 }
 function shoppingItemFinalAmount(it) {
   const price = Number(it.price) || 0;
   const qty = Number(it.qty) || 0;
   const disc = Math.min(100, Math.max(0, Number(it.discountPct) || 0));
+  // For kg items in "direct" mode the price the user typed already covers the
+  // whole entered weight (e.g. they looked up "₹15 for 250g" themselves), so it
+  // isn't multiplied by qty again. Every other case is a per-unit price × qty.
+  if (it.unit === "kg" && it.priceMode === "direct") return round(price * (1 - disc / 100));
   return round(price * qty * (1 - disc / 100));
 }
 function shoppingListTotal(list) {
@@ -2410,7 +2410,7 @@ function LifeTracker() {
     showUndo("Expense deleted", () => setDailyLogs((prev) => { const log = prev[today] || defaultLog(); return { ...prev, [today]: { ...log, expenses: [...log.expenses, removed] } }; }));
   };
   // ---- Smart Shopping List ----
-  const blankShoppingItem = () => ({ id: "si" + Date.now() + Math.random().toString(36).slice(2, 7), name: "", category: savedShoppingCategories[0] || "", unit: "each", price: "", discountPct: "", qty: "1" });
+  const blankShoppingItem = () => ({ id: "si" + Date.now() + Math.random().toString(36).slice(2, 7), name: "", category: savedShoppingCategories[0] || "", unit: "each", price: "", priceMode: "perKg", discountPct: "", qty: "1" });
   const blankShoppingForm = () => ({ id: null, shopName: "", location: "", shoppingDate: "", reminderDate: "", reminderTime: "", items: [blankShoppingItem()] });
   const [shoppingForm, setShoppingForm] = useState(null);
   const shoppingFormRef = useRef(null);
@@ -3837,14 +3837,20 @@ function LifeTracker() {
                                 </div>
                               </div>
 
+                              {it.unit === "kg" && (
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  <button type="button" onClick={() => updateShoppingItem(it.id, { priceMode: "perKg" })} style={{ flex: 1, padding: "6px 8px", borderRadius: 8, border: `1.5px solid ${it.priceMode !== "direct" ? BRASS : LINE}`, background: it.priceMode !== "direct" ? hexA(BRASS, 0.1) : "transparent", color: it.priceMode !== "direct" ? BRASS : INK_FAINT, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: disp }}>
+                                    Price per kg
+                                  </button>
+                                  <button type="button" onClick={() => updateShoppingItem(it.id, { priceMode: "direct" })} style={{ flex: 1, padding: "6px 8px", borderRadius: 8, border: `1.5px solid ${it.priceMode === "direct" ? BRASS : LINE}`, background: it.priceMode === "direct" ? hexA(BRASS, 0.1) : "transparent", color: it.priceMode === "direct" ? BRASS : INK_FAINT, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: disp }}>
+                                    I know the price for this weight
+                                  </button>
+                                </div>
+                              )}
+
                               <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8 }}>
                                 <div>
-                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
-                                    <span style={{ fontSize: 13, color: INK_FAINT }}>{shoppingPriceUnitLabel(it.unit)}</span>
-                                    <a href={shoppingPriceSearchUrl(it)} target="_blank" rel="noopener noreferrer" title="Check current price online" onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11.5, color: BRASS, textDecoration: "none", fontWeight: 600 }}>
-                                      <Search size={12} /> Check price
-                                    </a>
-                                  </div>
+                                  <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>{shoppingPriceUnitLabel(it)}</div>
                                   <TextField type="number" inputMode="decimal" placeholder="0" value={it.price} onChange={(e) => updateShoppingItem(it.id, { price: e.target.value })} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
                                 </div>
                                 <div>
@@ -3853,7 +3859,9 @@ function LifeTracker() {
                                 </div>
                               </div>
                               <div style={{ fontSize: 11.5, color: INK_FAINT }}>
-                                {it.qty || 0} {it.unit === "kg" ? "kg" : "×"} at {inr(Number(it.price) || 0)}{it.unit === "kg" ? "/kg" : " each"} = {inr(shoppingItemFinalAmount(it))}
+                                {it.unit === "kg" && it.priceMode === "direct"
+                                  ? `${it.qty || 0} kg for ${inr(Number(it.price) || 0)} = ${inr(shoppingItemFinalAmount(it))}`
+                                  : `${it.qty || 0} ${it.unit === "kg" ? "kg" : "×"} at ${inr(Number(it.price) || 0)}${it.unit === "kg" ? "/kg" : " each"} = ${inr(shoppingItemFinalAmount(it))}`}
                               </div>
 
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, color: INK_DIM, borderTop: `1px solid ${LINE}`, paddingTop: 10, marginTop: 2 }}>
