@@ -4296,36 +4296,30 @@ function LifeTracker() {
         <div style={{
           position: "fixed", inset: 0, zIndex: 20000,
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          background: "linear-gradient(135deg, #8B5CF6 0%, #6D28D9 55%, #4338CA 100%)",
+          background: "linear-gradient(135deg, #2B9CFF 0%, #0058B8 100%)",
           opacity: splashHiding ? 0 : 1,
           transform: splashHiding ? "scale(1.05)" : "scale(1)",
           transition: "opacity .55s ease, transform .55s ease",
           pointerEvents: splashHiding ? "none" : "auto",
         }}>
           <style>{`
-            @keyframes splashArcSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            @keyframes splashRingSpin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
             @keyframes splashCheckPop { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
             @keyframes splashLabelFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-            .splash-arc-group { transform-origin: 100px 100px; animation: splashArcSpin 1.6s linear infinite; }
-            .splash-check-group { transform-origin: 100px 100px; animation: splashCheckPop .6s cubic-bezier(.22,.8,.25,1) both; }
-            .splash-label { animation: splashLabelFade .6s ease .25s both; }
+            .splash-ring { transform-origin: 100px 100px; animation: splashRingSpin 1.4s cubic-bezier(.45,0,.15,1) infinite; }
+            .splash-check-group { transform-origin: 100px 100px; animation: splashCheckPop .6s cubic-bezier(.22,.8,.25,1) .3s both; }
+            .splash-label { animation: splashLabelFade .6s ease .5s both; }
             @media (prefers-reduced-motion: reduce) {
-              .splash-arc-group { animation-duration: 3.2s; }
+              .splash-ring { animation-duration: 2.8s; }
             }
           `}</style>
-          <svg width="120" height="120" viewBox="0 0 200 200" style={{ overflow: "visible" }}>
-            <g className="splash-arc-group">
-              <circle cx="100" cy="100" r="88" fill="none" stroke="#4ADE80" strokeWidth="13" strokeLinecap="round" strokeDasharray="107.5 445.4" transform="rotate(-90 100 100)" />
-              <circle cx="100" cy="100" r="88" fill="none" stroke="#10B981" strokeWidth="13" strokeLinecap="round" strokeDasharray="107.5 445.4" transform="rotate(0 100 100)" />
-              <circle cx="100" cy="100" r="88" fill="none" stroke="#3B82F6" strokeWidth="13" strokeLinecap="round" strokeDasharray="107.5 445.4" transform="rotate(90 100 100)" />
-              <circle cx="100" cy="100" r="88" fill="none" stroke="#F59E0B" strokeWidth="13" strokeLinecap="round" strokeDasharray="107.5 445.4" transform="rotate(180 100 100)" />
-            </g>
+          <svg width="104" height="104" viewBox="0 0 200 200" style={{ overflow: "visible" }}>
+            <circle className="splash-ring" cx="100" cy="100" r="58" fill="none" stroke="#FFFFFF" strokeOpacity="0.9" strokeWidth="20" strokeLinecap="round" strokeDasharray="284.6 80" />
             <g className="splash-check-group">
-              <circle cx="100" cy="100" r="54" fill="none" stroke="#FFFFFF" strokeWidth="13" strokeLinecap="round" strokeDasharray="283 57" transform="rotate(125 100 100)" opacity="0.95" />
-              <path d="M76,101 L92,117 L126,80" fill="none" stroke="#FFFFFF" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M70,101 L90,121 L132,77" fill="none" stroke="#FFFFFF" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round" />
             </g>
           </svg>
-          <div className="splash-label" style={{ marginTop: 18, color: "#FFFFFF", fontFamily: disp, fontSize: 15, fontWeight: 600, letterSpacing: "0.02em", opacity: 0.92 }}>
+          <div className="splash-label" style={{ marginTop: 20, color: "#FFFFFF", fontFamily: disp, fontSize: 16, fontWeight: 650, letterSpacing: "0.01em", opacity: 0.95 }}>
             Life Tracker
           </div>
         </div>
