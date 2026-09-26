@@ -9,9 +9,9 @@
   <!-- Cache-busting ?v=2 query on every icon/manifest reference below: Android/Chrome cache
        an installed PWA's icon (and its generated splash) very aggressively by URL, so simply
        replacing the file's contents at the same filename is not enough to make it refetch. -->
-  <link rel="manifest" href="manifest.json?v=2" />
-  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=2" />
-  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2" />
+  <link rel="manifest" href="manifest.json?v=3" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=3" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3" />
   <meta name="theme-color" content="#F5F5F7" />
   <meta name="color-scheme" content="light dark" />
 
@@ -2995,6 +2995,27 @@ function LifeTracker() {
   const dismissTravelPlan = (id) => setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, dismissed: true, completed: false, status: "Cancelled", dismissedAt: new Date().toISOString() } : t)));
   const completeTravelPlan = (id) => { celebrate("Trip completed!"); setTravelPlans((prev) => prev.map((t) => (t.id === id ? { ...t, completed: true, dismissed: false, status: "Completed", completedAt: new Date().toISOString() } : t))); };
   const toggleTravelNoteDone = (planId, noteId) => setTravelPlans((prev) => prev.map((t) => (t.id !== planId ? t : { ...t, notes: (t.notes || []).map((n) => (n.id !== noteId ? n : { ...n, done: !n.done })) })));
+
+  // Auto-archive a trip into Travel History 3 days after its scheduled date/time if the user
+  // never manually tapped Done or Dismiss. Manual actions still apply immediately as before —
+  // this is only a safety net so a forgotten trip doesn't sit under "Today"/"Upcoming" forever.
+  // Runs once per calendar day (keyed on `today`), which is plenty of precision for a 3-day rule.
+  useEffect(() => {
+    setTravelPlans((prev) => {
+      let changed = false;
+      const next = prev.map((t) => {
+        if (t.completed || t.dismissed || !t.travelDate) return t;
+        const scheduled = new Date(`${t.travelDate}T${t.travelTime || "23:59"}:00`);
+        if (isNaN(scheduled.getTime())) return t;
+        if (Date.now() - scheduled.getTime() >= 3 * 24 * 60 * 60 * 1000) {
+          changed = true;
+          return { ...t, completed: true, status: "Completed", completedAt: new Date().toISOString(), autoArchived: true };
+        }
+        return t;
+      });
+      return changed ? next : prev;
+    });
+  }, [today]);
 
   // ---- My Day: meetings and other special activities, with an editable reminder ----
   const [showAddMyDay, setShowAddMyDay] = useState(false);
@@ -6772,8 +6793,8 @@ function LifeTracker() {
                     {catTab === "trip" && travelHistoryPlans.slice(0, historyVisibleCount).map((t) => (
                       <div key={`trip-history-${t.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
                         <TravelModeIcon mode={t.mode} size={18} color={(t.status === "Cancelled" || t.dismissed) ? CORAL : TEAL} />
-                        <div className="history-main" style={{ flex: 1, minWidth: 0 }}><div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{`${t.mode || "Trip"} · ${t.fromLocation || ""} → ${t.toLocation || ""}`}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>{(t.status === "Cancelled" || t.dismissed) ? `Cancelled: ${fmtTime(t.dismissedAt)}${t.dismissedAt ? ` · ${formatDMY(t.dismissedAt)}` : ""}` : `Completed: ${fmtTime(t.completedAt)}${t.completedAt ? ` · ${formatDMY(t.completedAt)}` : ""}`}</div></div>
-                        <div className="history-actions"><span style={{ fontSize: 12, color: (t.status === "Cancelled" || t.dismissed) ? CORAL : TEAL, fontWeight: 700 }}>{(t.status === "Cancelled" || t.dismissed) ? "Cancelled" : "Completed"}</span><IconAction className="history-delete-btn" onClick={() => deleteHistoryTrip(t.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
+                        <div className="history-main" style={{ flex: 1, minWidth: 0 }}><div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{`${t.mode || "Trip"} · ${t.fromLocation || ""} → ${t.toLocation || ""}`}</div><div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>{(t.status === "Cancelled" || t.dismissed) ? `Cancelled: ${fmtTime(t.dismissedAt)}${t.dismissedAt ? ` · ${formatDMY(t.dismissedAt)}` : ""}` : t.autoArchived ? `Auto-archived 3 days after ${t.travelDate ? formatDMY(t.travelDate) : "scheduled date"}` : `Completed: ${fmtTime(t.completedAt)}${t.completedAt ? ` · ${formatDMY(t.completedAt)}` : ""}`}</div></div>
+                        <div className="history-actions"><span style={{ fontSize: 12, color: (t.status === "Cancelled" || t.dismissed) ? CORAL : t.autoArchived ? INK_FAINT : TEAL, fontWeight: 700 }}>{(t.status === "Cancelled" || t.dismissed) ? "Cancelled" : t.autoArchived ? "Auto-archived" : "Completed"}</span><IconAction className="history-delete-btn" onClick={() => deleteHistoryTrip(t.id)} title="Delete history"><Trash2 size={16} /></IconAction></div>
                       </div>
                     ))}
                     {catTab === "trip" && <LoadMoreHistory total={travelHistoryPlans.length} />}
