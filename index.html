@@ -1156,6 +1156,7 @@ const MYDAY_TYPE_OPTIONS = [
   { value: "Meeting", label: "Meeting" },
   { value: "Activity", label: "Special activity" },
   { value: "Reminder", label: "Other reminder" },
+  { value: "Note", label: "Note" },
 ];
 // A My Day plan either happens once on eventDate, or \u2014 if repeatDays is set \u2014 repeats weekly on
 // those weekdays starting from eventDate onward.
@@ -1917,6 +1918,7 @@ function LifeTracker() {
   const [repayments, setRepayments] = useState(() => readPersistedSync("repayments", []));
   const [travelPlans, setTravelPlans] = useState(() => readPersistedSync("travelPlans", []));
   const [myDayEvents, setMyDayEvents] = useState(() => readPersistedSync("myDayEvents", []));
+  const [inboxItems, setInboxItems] = useState(() => readPersistedSync("inboxItems", []));
   const [financeMonthly, setFinanceMonthly] = useState(() => readPersistedSync("financeMonthly", {}));
   const [shoppingLists, setShoppingLists] = useState(() => readPersistedSync("shoppingLists", []));
   const [savedShopNames, setSavedShopNames] = useState(() => readPersistedSync("savedShopNames", []));
@@ -1950,6 +1952,8 @@ function LifeTracker() {
   const [importMessage, setImportMessage] = useState("");
   const [autoExportEnabled, setAutoExportEnabled] = useState(() => readPersistedSync("autoExportEnabled", true));
   const [lastAutoExportAt, setLastAutoExportAt] = useState(() => readPersistedSync("lastAutoExportAt", ""));
+  const [lastEveningNudgeDate, setLastEveningNudgeDate] = useState(() => readPersistedSync("lastEveningNudgeDate", ""));
+  const [showQuickCapture, setShowQuickCapture] = useState(false);
   const [pendingImportData, setPendingImportData] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
   const undoTimerRef = useRef(null);
@@ -2037,6 +2041,7 @@ function LifeTracker() {
   useEffect(() => { if (loaded) window.storage.set("repayments", JSON.stringify(repayments), false).catch(() => {}); }, [repayments, loaded]);
   useEffect(() => { if (loaded) window.storage.set("travelPlans", JSON.stringify(travelPlans), false).catch(() => {}); }, [travelPlans, loaded]);
   useEffect(() => { if (loaded) window.storage.set("myDayEvents", JSON.stringify(myDayEvents), false).catch(() => {}); }, [myDayEvents, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("inboxItems", JSON.stringify(inboxItems), false).catch(() => {}); }, [inboxItems, loaded]);
   useEffect(() => { if (loaded) window.storage.set("financeMonthly", JSON.stringify(financeMonthly), false).catch(() => {}); }, [financeMonthly, loaded]);
   useEffect(() => { if (loaded) window.storage.set("shoppingLists", JSON.stringify(shoppingLists), false).catch(() => {}); }, [shoppingLists, loaded]);
   useEffect(() => { if (loaded) window.storage.set("savedShopNames", JSON.stringify(savedShopNames), false).catch(() => {}); }, [savedShopNames, loaded]);
@@ -2064,10 +2069,11 @@ function LifeTracker() {
   useEffect(() => { if (loaded) window.storage.set("lastSyncedAt", JSON.stringify(lastSyncedAt), false).catch(() => {}); }, [lastSyncedAt, loaded]);
   useEffect(() => { if (loaded) window.storage.set("autoExportEnabled", JSON.stringify(autoExportEnabled), false).catch(() => {}); }, [autoExportEnabled, loaded]);
   useEffect(() => { if (loaded) window.storage.set("lastAutoExportAt", JSON.stringify(lastAutoExportAt), false).catch(() => {}); }, [lastAutoExportAt, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("lastEveningNudgeDate", JSON.stringify(lastEveningNudgeDate), false).catch(() => {}); }, [lastEveningNudgeDate, loaded]);
 
   // ---- Data Link: export / import (offline backup) ----
   const exportData = () => {
-    const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, exportedAt: new Date().toISOString() };
+    const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2087,7 +2093,7 @@ function LifeTracker() {
     }, 2500);
     return () => clearTimeout(autoExportTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, loaded, autoExportEnabled, dataMode, lastAutoExportAt, today]);
+  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, loaded, autoExportEnabled, dataMode, lastAutoExportAt, today]);
   const applyImportedData = (data) => {
     if (!data || typeof data !== "object") return false;
     if (data.dailyItems) setDailyItems(data.dailyItems);
@@ -2096,6 +2102,7 @@ function LifeTracker() {
     if (data.repayments) setRepayments(data.repayments);
     if (data.travelPlans) setTravelPlans(data.travelPlans);
     if (data.myDayEvents) setMyDayEvents(data.myDayEvents);
+    if (data.inboxItems) setInboxItems(data.inboxItems);
     if (data.financeMonthly) setFinanceMonthly(data.financeMonthly);
     if (data.shoppingLists) setShoppingLists(data.shoppingLists);
     if (data.savedShopNames) setSavedShopNames(data.savedShopNames);
@@ -2124,7 +2131,7 @@ function LifeTracker() {
   const cancelImport = () => setPendingImportData(null);
 
   // ---- Data Link: online sync (Google Sheet via Apps Script Web App URL) ----
-  const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, syncedAt: new Date().toISOString() });
+  const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, syncedAt: new Date().toISOString() });
   // Google Apps Script can hang instead of erroring (e.g. a stale/misconfigured deployment),
   // which would otherwise leave the "Syncing…" spinner running forever with no way out for the
   // user. Aborting after 15s guarantees pushToSheet/pullFromSheet always settle into success or
@@ -2182,7 +2189,7 @@ function LifeTracker() {
     syncTimerRef.current = setTimeout(() => { pushToSheet(); }, 2500);
     return () => clearTimeout(syncTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled]);
+  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -2376,6 +2383,9 @@ function LifeTracker() {
   const [reschedulingId, setReschedulingId] = useState(null);
   const [rescheduleDraft, setRescheduleDraft] = useState("09:00");
   const [editingPriorities, setEditingPriorities] = useState(false);
+  const [inboxDraft, setInboxDraft] = useState("");
+  const [inboxExpanded, setInboxExpanded] = useState(false);
+  const [inboxMovingId, setInboxMovingId] = useState(null);
   const getFlow = (itemId) => expenseFlow[itemId] || {};
   const setFlow = (itemId, patch) => setExpenseFlow((prev) => ({ ...prev, [itemId]: { ...(prev[itemId] || {}), ...patch } }));
   const addCustomOption = (item, group, name) => {
@@ -3061,6 +3071,29 @@ function LifeTracker() {
     cancelMyDayForm();
   };
   const deleteMyDayEvent = (id) => setMyDayEvents((prev) => prev.filter((e) => e.id !== id));
+
+  // ---- Inbox / Later ----
+  // A lightweight place to jot something down without deciding when it happens yet. Moving an
+  // item out of the Inbox converts it into a real My Day plan (type "Activity") on the chosen
+  // date, reusing the existing My Day data structure/reminders rather than inventing a second
+  // "task" system — it then just shows up on that day like anything else you'd added there.
+  const addInboxItem = (text) => {
+    const t = (text || "").trim();
+    if (!t) return;
+    setInboxItems((prev) => [...prev, { id: "ib" + Date.now() + Math.random().toString(36).slice(2, 6), text: t, createdAt: new Date().toISOString() }]);
+  };
+  const deleteInboxItem = (id) => setInboxItems((prev) => prev.filter((i) => i.id !== id));
+  const moveInboxItemTo = (id, whenDate) => {
+    const it = inboxItems.find((i) => i.id === id);
+    if (!it) return;
+    setMyDayEvents((prev) => [...prev, {
+      id: "md" + Date.now(), completed: false, type: "Activity", title: it.text, eventDate: whenDate, eventTime: "",
+      location: "", notes: "", repeatDays: [], reminderOffsets: ["none"], reminderEnabled: true, reminderMinutes: 15,
+    }]);
+    deleteInboxItem(id);
+    showToast(`Moved to ${whenDate === today ? "Today" : "your plan"}`);
+  };
+
   const toggleMyDayCompleted = (id) => {
     const e0 = myDayEvents.find((e) => e.id === id);
     if (e0 && !e0.completed) celebrate(e0.title ? `${e0.title} done!` : "Task complete!");
@@ -3194,6 +3227,49 @@ function LifeTracker() {
   const intervalItems = validItems.filter((i) => i.type === "interval");
 
   const streaks = useMemo(() => Object.fromEntries(instantDurationItems.map((i) => [i.id, computeStreak(dailyLogs, i.id)])), [dailyLogs, instantDurationItems]);
+
+  // ---- Streak loss-aversion: activities with a real streak (2+ days) that are still not done
+  // today. computeStreak already counts today if done, so an at-risk item's streak number here
+  // is what's about to be lost if it stays undone past midnight, not what today would become.
+  const atRiskStreakItems = useMemo(
+    () => instantDurationItems.filter((i) => (streaks[i.id] || 0) >= 2 && field(i.id).status !== "done" && (field(i.id).dayAction !== "skipped")),
+    [instantDurationItems, streaks, dailyLogs, today]
+  );
+
+  // ---- Evening nudge: one notification per day, only after 8pm, only if there's something
+  // that would actually be lost or left undone. Best-effort via the Notification API while the
+  // app/tab is loaded — this is not a real push notification (that needs a backend + the
+  // service worker to wake the app when fully closed, which this file alone can't do).
+  useEffect(() => {
+    if (!remindersEnabled) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (lastEveningNudgeDate === today) return;
+    if (now.getHours() < 20) return;
+    const pendingCount = validItems.filter((i) => i.type !== "interval" && field(i.id).status !== "done").length;
+    if (pendingCount === 0 && atRiskStreakItems.length === 0) return;
+    setLastEveningNudgeDate(today);
+    try {
+      const body = atRiskStreakItems.length > 0
+        ? `${atRiskStreakItems[0].name}'s ${streaks[atRiskStreakItems[0].id]}-day streak ends tonight${pendingCount > 1 ? ` \u00b7 ${pendingCount} things left today` : ""}.`
+        : `${pendingCount} thing${pendingCount === 1 ? "" : "s"} left today \u2014 quick catch-up?`;
+      new Notification("Before the day ends\u2026", { body });
+    } catch (e) {}
+  }, [now, remindersEnabled, lastEveningNudgeDate, today, validItems, atRiskStreakItems, streaks, dailyLogs]);
+
+  // ---- Quick Capture: opens the exact same add-forms each category already has, just reachable
+  // from one floating button instead of navigating into Planner first. No new data system.
+  const openQuickCapture = (kind) => {
+    setShowQuickCapture(false);
+    setPage("categories");
+    if (kind === "task") { setCatTab("activity"); openNewItemForm(); return; }
+    if (kind === "goal") { setCatTab("financegoals"); setFinanceGoalView("goals"); setShowAddGoal(true); return; }
+    if (kind === "expense") { setPage("daily"); setExpandedDailyCategory("expense"); return; }
+    // Reminder / Note / Event all reuse the My Day form, just pre-set to a different type.
+    const typeByKind = { reminder: "Reminder", note: "Note", event: "Meeting" };
+    setCatTab("myday");
+    setMyDayForm({ ...blankMyDayForm(), type: typeByKind[kind] || "Note" });
+    setShowAddMyDay(true);
+  };
 
   useEffect(() => {
     if (!remindersEnabled) return;
@@ -4585,6 +4661,44 @@ function LifeTracker() {
               </div>
             </div>
           </div>
+
+          {pendingActivityTarget && (() => {
+            const NowIcon = ICON_MAP[pendingActivityTarget.icon] || Target;
+            const nowTime = effectiveScheduledTime(pendingActivityTarget);
+            const isOverdueNow = nowTime && String(nowTime) < nowHHMM;
+            return (
+              <Card style={{ marginBottom: 12, padding: "14px 16px", border: `1.5px solid ${isOverdueNow ? CORAL : BRASS}` }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", color: isOverdueNow ? CORAL : BRASS, marginBottom: 8 }}>{isOverdueNow ? "MISSED" : "NOW"}</div>
+                <button
+                  onClick={() => { setExpandedDailyCategory(pendingActivityTarget.category); setActiveTab(pendingActivityTarget.id); setPage("daily"); }}
+                  style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer" }}
+                >
+                  <div style={{ flexShrink: 0, width: 42, height: 42, borderRadius: 12, background: hexA(isOverdueNow ? CORAL_HEX : BRASS_HEX, 0.13), display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <NowIcon size={20} color={isOverdueNow ? CORAL : BRASS} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 750, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pendingActivityTarget.name}</div>
+                    <div style={{ fontSize: 12.5, color: INK_DIM, marginTop: 2 }}>{CATEGORY_DEFS.find((c) => c.id === pendingActivityTarget.category)?.label || ""}{nowTime ? ` · ${fmtTimeString12(nowTime)}` : ""}</div>
+                  </div>
+                  <div style={{ flexShrink: 0, background: isOverdueNow ? CORAL : BRASS, color: "#fff", borderRadius: 999, padding: "8px 16px", fontSize: 13.5, fontWeight: 700 }}>
+                    {isOverdueNow ? "Do now" : "Start"}
+                  </div>
+                </button>
+                {afterNowTarget && (
+                  <button
+                    onClick={() => { setExpandedDailyCategory(afterNowTarget.category); setActiveTab(afterNowTarget.id); setPage("daily"); }}
+                    style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "transparent", border: "none", borderTop: `1px solid ${LINE}`, marginTop: 12, paddingTop: 10, textAlign: "left", cursor: "pointer" }}
+                  >
+                    <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.06em", color: INK_FAINT }}>NEXT</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: INK_DIM, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{afterNowTarget.name}</span>
+                    {effectiveScheduledTime(afterNowTarget) && <span style={{ fontSize: 12, color: INK_FAINT, fontFamily: mono }}>{fmtTimeString12(effectiveScheduledTime(afterNowTarget))}</span>}
+                    <ChevronRight size={14} color={INK_FAINT} />
+                  </button>
+                )}
+              </Card>
+            );
+          })()}
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 7, marginBottom: 12 }}>
             {statCards.map((s) => {
               const SIcon = s.icon;
@@ -4612,6 +4726,36 @@ function LifeTracker() {
               </div>
             </Card>
           )}
+
+          {(() => {
+            // Streaks "at risk": an active streak (computed the same way as the Habits tab) for an
+            // item scheduled today that hasn't been completed yet. Shown from early evening onward
+            // so it reads as a heads-up, not an all-day nag. computeStreak already treats today as
+            // "not yet broken" until the day actually ends, so this only ever surfaces real streaks.
+            if (now.getHours() < 17) return null;
+            const atRisk = validItems.filter((i) => {
+              if (i.type !== "instant" && i.type !== "duration") return false;
+              if (field(i.id).status === "done" || field(i.id).status === "skipped") return false;
+              return (streaks[i.id] || 0) >= 2;
+            });
+            if (atRisk.length === 0) return null;
+            return (
+              <Card style={{ marginBottom: 16, padding: "12px 14px", borderLeft: `3px solid #F59E0B` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: atRisk.length ? 6 : 0 }}>
+                  <Flame size={16} color="#F59E0B" />
+                  <div style={{ fontSize: 13.5, fontWeight: 750, color: INK }}>
+                    {atRisk.length === 1 ? "A streak ends tonight if not done" : `${atRisk.length} streaks end tonight if not done`}
+                  </div>
+                </div>
+                {atRisk.map((i) => (
+                  <button key={i.id} onClick={() => { setExpandedDailyCategory(i.category); setActiveTab(i.id); setPage("daily"); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "transparent", border: "none", padding: "5px 0", textAlign: "left", cursor: "pointer" }}>
+                    <span style={{ fontSize: 13, color: INK_DIM, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.name}</span>
+                    <span style={{ fontSize: 12, color: "#F59E0B", fontWeight: 700, fontFamily: mono, flexShrink: 0, marginLeft: 8 }}>{streaks[i.id]}🔥</span>
+                  </button>
+                ))}
+              </Card>
+            );
+          })()}
 
           {overdueToday.length > 0 && (
             <>
@@ -4651,6 +4795,30 @@ function LifeTracker() {
                 })}
               </Card>
             </>
+          )}
+
+          {atRiskStreakItems.length > 0 && now.getHours() >= 17 && (
+            <Card style={{ marginBottom: 16, padding: "14px 16px", border: `1.5px solid ${hexA(CORAL_HEX, 0.4)}`, background: hexA(CORAL_HEX, 0.06) }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <Flame size={18} color={CORAL} style={{ flexShrink: 0, marginTop: 1 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 750, color: INK, marginBottom: 2 }}>
+                    {atRiskStreakItems.length === 1
+                      ? `${atRiskStreakItems[0].name}'s ${streaks[atRiskStreakItems[0].id]}-day streak ends tonight`
+                      : `${atRiskStreakItems.length} streaks end tonight if not done`}
+                  </div>
+                  <div style={{ fontSize: 12, color: INK_DIM }}>
+                    {atRiskStreakItems.slice(0, 3).map((i) => i.name).join(", ")}{atRiskStreakItems.length > 3 ? `, +${atRiskStreakItems.length - 3} more` : ""}
+                  </div>
+                </div>
+                <button
+                  onClick={() => { const i = atRiskStreakItems[0]; setExpandedDailyCategory(i.category); setActiveTab(i.id); setPage("daily"); }}
+                  style={{ flexShrink: 0, background: CORAL, border: "none", borderRadius: 10, padding: "8px 12px", color: "#FFFFFF", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}
+                >
+                  Save it
+                </button>
+              </div>
+            </Card>
           )}
 
           {(() => {
@@ -4712,6 +4880,58 @@ function LifeTracker() {
                         <div style={{ color: INK_FAINT, fontSize: 13.5, padding: "6px 0" }}>No activities available to prioritize today.</div>
                       )}
                     </>
+                  )}
+                </Card>
+              </>
+            );
+          })()}
+
+          {(() => {
+            const visibleInboxItems = inboxExpanded ? inboxItems : inboxItems.slice(0, 3);
+            return (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                  <SectionLabel style={{ marginBottom: 0 }}>Inbox {inboxItems.length > 0 ? `(${inboxItems.length})` : ""}</SectionLabel>
+                </div>
+                <Card style={{ marginBottom: 16, padding: "10px 14px" }}>
+                  <div style={{ display: "flex", gap: 8, marginBottom: inboxItems.length ? 10 : 0 }}>
+                    <TextField
+                      placeholder="Jot something down for later…"
+                      value={inboxDraft}
+                      onChange={(e) => setInboxDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && inboxDraft.trim()) { addInboxItem(inboxDraft); setInboxDraft(""); } }}
+                      style={{ flex: 1, boxSizing: "border-box" }}
+                    />
+                    <button
+                      onClick={() => { if (inboxDraft.trim()) { addInboxItem(inboxDraft); setInboxDraft(""); } }}
+                      style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 10, background: BRASS, border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                    >
+                      <Plus size={18} />
+                    </button>
+                  </div>
+                  {visibleInboxItems.map((it, idx) => (
+                    <div key={it.id} style={{ borderTop: idx > 0 ? `1px solid ${LINE}` : "none", paddingTop: idx > 0 ? 8 : 0, marginTop: idx > 0 ? 8 : 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: INK, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.text}</span>
+                        <button onClick={() => setInboxMovingId(inboxMovingId === it.id ? null : it.id)} style={{ fontSize: 12, fontWeight: 700, color: BRASS, background: "transparent", border: "none", cursor: "pointer", padding: "4px 2px" }}>Move</button>
+                        <IconAction onClick={() => deleteInboxItem(it.id)} title="Delete"><Trash2 size={14} /></IconAction>
+                      </div>
+                      {inboxMovingId === it.id && (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                          <button onClick={() => { moveInboxItemTo(it.id, today); setInboxMovingId(null); }} style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${LINE}`, background: "transparent", color: INK_DIM, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Today</button>
+                          <button onClick={() => { moveInboxItemTo(it.id, addDays(today, 1)); setInboxMovingId(null); }} style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${LINE}`, background: "transparent", color: INK_DIM, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Tomorrow</button>
+                          <button onClick={() => { moveInboxItemTo(it.id, addDays(today, 7)); setInboxMovingId(null); }} style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${LINE}`, background: "transparent", color: INK_DIM, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>This week</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {inboxItems.length === 0 && (
+                    <div style={{ textAlign: "center", color: INK_FAINT, fontSize: 12.5, padding: "4px 0 2px" }}>Nothing parked here — add something you don't want to schedule right now.</div>
+                  )}
+                  {inboxItems.length > 3 && (
+                    <button onClick={() => setInboxExpanded((v) => !v)} style={{ marginTop: 8, background: "transparent", border: "none", color: INK_FAINT, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+                      {inboxExpanded ? "Show less" : `Show ${inboxItems.length - 3} more`}
+                    </button>
                   )}
                 </Card>
               </>
@@ -7845,6 +8065,52 @@ function doPost(e) {
             </div>
           </div>
         </div>
+      )}
+
+      {!(page === "categories" && catTab) && (
+        <>
+          {showQuickCapture && (
+            <div onClick={() => setShowQuickCapture(false)} style={{ position: "fixed", inset: 0, zIndex: 9499, background: "rgba(0,0,0,0.25)" }} />
+          )}
+          {showQuickCapture && (
+            <div style={{ position: "fixed", right: 18, bottom: "calc(146px + env(safe-area-inset-bottom))", zIndex: 9500, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+              {[
+                { key: "task", label: "Task", icon: ClipboardCheck },
+                { key: "expense", label: "Expense", icon: Wallet },
+                { key: "reminder", label: "Reminder", icon: Bell },
+                { key: "note", label: "Note", icon: Pencil },
+                { key: "goal", label: "Goal", icon: Target },
+                { key: "event", label: "Event", icon: CalendarDays },
+              ].map((opt) => {
+                const OptIcon = opt.icon;
+                return (
+                  <button key={opt.key} onClick={() => openQuickCapture(opt.key)} style={{ display: "flex", alignItems: "center", gap: 8, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 999, padding: "8px 14px 8px 10px", boxShadow: CARD_SHADOW, cursor: "pointer" }}>
+                    <span style={{ width: 26, height: 26, borderRadius: "50%", background: hexA(BRASS_HEX, 0.12), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <OptIcon size={13} color={BRASS} />
+                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 650, color: INK, whiteSpace: "nowrap" }}>{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <button
+            onClick={() => setShowQuickCapture((v) => !v)}
+            title="Quick capture"
+            aria-label="Quick capture"
+            style={{
+              position: "fixed", right: 18, bottom: "calc(86px + env(safe-area-inset-bottom))", zIndex: 9500,
+              width: 52, height: 52, borderRadius: "50%", border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: `linear-gradient(135deg, ${BRASS} 0%, #1E4FCB 100%)`,
+              boxShadow: `0 8px 20px ${hexA(BRASS, 0.42)}, 0 2px 6px rgba(0,0,0,0.2)`,
+              transform: showQuickCapture ? "rotate(45deg)" : "none",
+              transition: "transform .2s ease",
+            }}
+          >
+            <Plus size={24} color="#FFFFFF" strokeWidth={2.4} />
+          </button>
+        </>
       )}
 
       {page === "categories" && catTab && (() => {
