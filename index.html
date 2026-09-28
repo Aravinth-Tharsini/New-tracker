@@ -4692,38 +4692,6 @@ function LifeTracker() {
             </div>
           </div>
 
-          {(() => {
-            // One focus card: what you missed, or if nothing is missed, the next activity coming up.
-            const missed = overdueToday[0];
-            const heroAct = missed || nextActivities[0];
-            if (!heroAct) return null;
-            const isMissed = !!missed;
-            const tone = isMissed ? CORAL : BRASS;
-            const HeroIcon = ICON_MAP[heroAct.icon] || Clock;
-            const catLabel = (CATEGORY_DEFS.find((c) => c.id === heroAct.category) || {}).label || "Routine";
-            const timeStr = fmtTimeString12(effectiveScheduledTime(heroAct) || heroAct.scheduledTime);
-            return (
-              <Card style={{ marginBottom: 12, padding: "14px 16px", border: `1.5px solid ${isMissed ? CORAL : LINE}` }}>
-                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.08em", color: tone, marginBottom: 8 }}>{isMissed ? "MISSED" : "NEXT"}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ flexShrink: 0, width: 46, height: 46, borderRadius: 12, background: hexA(tone, 0.13), display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <HeroIcon size={22} color={tone} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 16, fontWeight: 750, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{heroAct.name}</div>
-                    <div style={{ fontSize: 12.5, color: INK_DIM, marginTop: 2 }}>{catLabel}{timeStr ? ` \u00b7 ${timeStr}` : ""}</div>
-                  </div>
-                  <button
-                    onClick={() => { setExpandedDailyCategory(heroAct.category); setActiveTab(heroAct.id); setPage("daily"); }}
-                    style={{ flexShrink: 0, background: tone, border: "none", borderRadius: 999, padding: "10px 18px", color: "#FFFFFF", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: disp }}
-                  >
-                    {isMissed ? "Do now" : "Start"}
-                  </button>
-                </div>
-              </Card>
-            );
-          })()}
-
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 7, marginBottom: 12 }}>
             {statCards.map((s) => {
               const SIcon = s.icon;
@@ -4739,6 +4707,18 @@ function LifeTracker() {
               );
             })}
           </div>
+
+          {totalActivities > 0 && (
+            <Card style={{ marginBottom: 14, padding: "14px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <RingProgress pct={progressPercent} size={68} color={TEAL} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 750, color: INK }}>Today's Progress</div>
+                  <div style={{ marginTop: 4, fontSize: 12.5, color: INK_DIM }}>{completedActivities} of {totalActivities} activities completed</div>
+                </div>
+              </div>
+            </Card>
+          )}
 
           {(() => {
             // Streaks "at risk": an active streak (computed the same way as the Habits tab) for an
@@ -4770,14 +4750,54 @@ function LifeTracker() {
             );
           })()}
 
-          {nextActivities.length > (overdueToday.length > 0 ? 0 : 1) && (
+          {overdueToday.length > 0 && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                <SectionLabel style={{ marginBottom: 0, color: CORAL }}>Missed Today ({overdueToday.length})</SectionLabel>
+              </div>
+              <Card style={{ marginBottom: 16, padding: "4px 14px", borderLeft: `3px solid ${CORAL}` }}>
+                {overdueToday.map((act, idx) => {
+                  const ActIcon = ICON_MAP[act.icon] || Clock;
+                  const isRescheduling = reschedulingId === act.id;
+                  return (
+                    <div key={act.id} style={{ padding: "12px 0", borderTop: idx > 0 ? `1px solid ${LINE}` : "none" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 10, background: hexA(CORAL, 0.13), display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <ActIcon size={18} color={CORAL} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14.5, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.name}</div>
+                          <div style={{ fontSize: 12, color: CORAL, marginTop: 2 }}>Missed · was due {fmtTimeString12(effectiveScheduledTime(act))}</div>
+                        </div>
+                      </div>
+                      {isRescheduling ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                          <Time12Input value={rescheduleDraft} onChange={setRescheduleDraft} style={{ fontFamily: mono }} />
+                          <button onClick={() => { rescheduleItemToday(act.id, rescheduleDraft); setReschedulingId(null); }} style={{ flexShrink: 0, background: TEAL, border: "none", borderRadius: 8, padding: "8px 12px", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save</button>
+                          <button onClick={() => setReschedulingId(null)} style={{ flexShrink: 0, background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "8px 10px", color: INK_DIM, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginTop: 10 }}>
+                          <button onClick={() => { setExpandedDailyCategory(act.category); setActiveTab(act.id); setPage("daily"); }} style={{ padding: "8px 4px", borderRadius: 8, border: `1.5px solid ${TEAL}`, background: hexA(TEAL, 0.1), color: TEAL, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: disp }}>Do Now</button>
+                          <button onClick={() => { setRescheduleDraft(effectiveScheduledTime(act) || "09:00"); setReschedulingId(act.id); }} style={{ padding: "8px 4px", borderRadius: 8, border: `1.5px solid ${BRASS}`, background: hexA(BRASS, 0.1), color: BRASS, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: disp }}>Reschedule</button>
+                          <button onClick={() => skipItemToday(act.id)} style={{ padding: "8px 4px", borderRadius: 8, border: `1.5px solid ${LINE}`, background: "transparent", color: INK_DIM, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: disp }}>Skip Today</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </Card>
+            </>
+          )}
+
+          {nextActivities.length > 0 && (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
                 <SectionLabel style={{ marginBottom: 0 }}>Next Up</SectionLabel>
                 <button onClick={() => setPage("daily")} style={{ background: "transparent", border: "none", padding: 0, fontSize: 13, fontWeight: 700, color: BRASS, cursor: "pointer" }}>View all</button>
               </div>
               <Card style={{ marginBottom: 16, padding: "4px 14px" }}>
-                {nextActivities.slice(overdueToday.length > 0 ? 0 : 1).map((act, idx) => {
+                {nextActivities.map((act, idx) => {
                   const catTone = (act.category === "career" || act.category === "trip") ? { fg: "#5A20B8", bg: "rgba(90,32,184,0.12)" }
                     : (act.category === "activity" || act.category === "health") ? { fg: "#159957", bg: "rgba(21,153,87,0.12)" }
                     : { fg: BRASS, bg: "rgba(0,113,227,0.10)" };
