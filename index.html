@@ -1319,6 +1319,8 @@ const TODAY_CARD_ACCENT = {
 // Groups offered on the Daily tab's single Expense entry (travel, fuel, grocery, food/tea/snacks, purchases, etc.)
 // EMI / Electricity / Recharge are excluded since those flow through Repayment due instead.
 const DAILY_EXPENSE_GROUPS = Object.fromEntries(Object.entries(DEFAULT_EXPENSE_GROUPS).filter(([g]) => !REPAYMENT_LINKED_EXPENSE_GROUPS.includes(g)));
+// Quick one-off bill entries under Today \u2192 Expense \u2192 Other.
+DAILY_EXPENSE_GROUPS.Other = [...DAILY_EXPENSE_GROUPS.Other, "Recharge", "Electricity", "Rent"];
 const EXPENSE_GROUP_ICON = { Rent: Home, "Electricity Bill": Zap, EMI: CreditCard, Recharge: Smartphone, Water: Droplet, Travel: Plane, Fuel: Fuel, Grocery: ShoppingBag, "Outside Food": UtensilsCrossed, Outfit: Shirt, Shopping: Store, "Health Care": HeartPulse, Insurance: Shield, Other: Receipt };
 // Each expense category gets its own always-on accent color (not just a highlight-when-selected
 // tint), so the picker reads as a row of distinct colored tiles the way it does in the reference design.
@@ -1334,6 +1336,7 @@ const SUBCATEGORY_ICON = {
   Vehicle: Car, Health: HeartPulse, Life: HandHeart, Home: Home,
   Entertainment: Film, Personal: Smile, Donations: HandHeart,
   "Bike Maintenance": Wrench,
+  Recharge: Smartphone, Electricity: Zap, Rent: Home,
 };
 // Icon/accent per life-area category (My Day / Career / Health / Routine), shared by the
 // Progress page's single-period and custom-comparison views.
