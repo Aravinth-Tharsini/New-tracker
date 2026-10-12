@@ -3174,6 +3174,21 @@ function LifeTracker() {
     if (wasEditingId) scrollBackToItemCard(wasEditingId);
   };
 
+  // Bottom-nav switch: leaving a section closes whatever was open inside it (Planner category,
+  // opened My Day plan / edit form, shopping/goal forms, expanded Today card) so coming back
+  // always lands on that section's main page instead of the previously opened activity.
+  const switchSection = (target) => {
+    if (target === page) return;
+    setCatTab(null);
+    setExpandedDailyCategory(null);
+    setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm());
+    setShoppingForm(null); setPreviewShoppingId(null); setExpandedDailyShoppingId(null);
+    setShowAddGoal(false); setEditingGoalId(null); setSelectedGoalId(null); setGoalForm(blankGoalForm());
+    setItemForm(null); setAddingGroup(false); setAddingSubTo(null);
+    setSelectedStreakId(null);
+    setPage(target);
+  };
+
   // ---- Back button: real, chronological navigation history (not a guessed priority order) ----
   // The previous approach checked a fixed list of states ("is a modal open? is a category
   // expanded? ...") in priority order every time Back was pressed. That breaks whenever more
@@ -8024,7 +8039,7 @@ function doPost(e) {
           {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: ClipboardCheck }, { id: "analysis", label: "Progress", icon: TrendingUp }, { id: "datalink", label: "More", icon: Settings2 }].map((p) => {
             const Icon = p.icon; const active = page === p.id;
             return (
-              <button key={p.id} onClick={() => setPage(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: active ? 3 : 2, padding: "6px 0", background: "transparent", border: "none", cursor: "pointer", color: active ? "#FFFFFF" : INK_FAINT, transition: "color .18s ease" }}>
+              <button key={p.id} onClick={() => switchSection(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: active ? 3 : 2, padding: "6px 0", background: "transparent", border: "none", cursor: "pointer", color: active ? "#FFFFFF" : INK_FAINT, transition: "color .18s ease" }}>
                 <span style={{
                   width: 40, height: 30, borderRadius: 15, display: "flex", alignItems: "center", justifyContent: "center",
                   background: active ? `linear-gradient(135deg, ${BRASS} 0%, #1E4FCB 100%)` : "transparent",
