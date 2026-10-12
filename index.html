@@ -6920,12 +6920,15 @@ function LifeTracker() {
       )}
 
       {page === "analysis" && (() => {
-        const selectedKey = insightPeriod === "day" ? insightDate : insightPeriod === "month" ? insightMonth : insightYear;
+        // Week = Monday..Sunday containing the picked date.
+        const weekStartD = (() => { const d = new Date(insightDate + "T00:00:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; })();
+        const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStartD); d.setDate(d.getDate() + i); return dateKey(d); });
+        const selectedKey = insightPeriod === "day" ? insightDate : insightPeriod === "week" ? weekDays[0] : insightPeriod === "month" ? insightMonth : insightYear;
         const expenseEntries = Object.entries(dailyLogs).flatMap(([d, log]) => (log.expenses || []).map((e) => ({ ...e, date: d })));
-        const matchesPeriod = (d) => insightPeriod === "day" ? d === insightDate : insightPeriod === "month" ? d.slice(0,7) === insightMonth : d.slice(0,4) === insightYear;
+        const matchesPeriod = (d) => insightPeriod === "day" ? d === insightDate : insightPeriod === "week" ? weekDays.includes(d) : insightPeriod === "month" ? d.slice(0,7) === insightMonth : d.slice(0,4) === insightYear;
         const periodExpenses = expenseEntries.filter((e) => matchesPeriod(e.date));
         const periodExpense = periodExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-        const periodIncome = insightPeriod === "day" ? 0 : insightPeriod === "month" ? (Number(financeMonthly[insightMonth]?.income) || 0) : Object.entries(financeMonthly).filter(([mk]) => mk.slice(0,4) === insightYear).reduce((sum, [,v]) => sum + (Number(v?.income) || 0), 0);
+        const periodIncome = (insightPeriod === "day" || insightPeriod === "week") ? 0 : insightPeriod === "month" ? (Number(financeMonthly[insightMonth]?.income) || 0) : Object.entries(financeMonthly).filter(([mk]) => mk.slice(0,4) === insightYear).reduce((sum, [,v]) => sum + (Number(v?.income) || 0), 0);
         const periodSavings = periodIncome - periodExpense;
         const periodDays = Object.entries(dailyLogs).filter(([d]) => matchesPeriod(d));
         const doneCount = periodDays.reduce((sum, [,log]) => sum + Object.values(log || {}).filter((r) => r && r.status === "done").length, 0);
@@ -6964,7 +6967,7 @@ function LifeTracker() {
         const shoppingTotal = periodShopping.reduce((sum, l) => sum + shoppingListTotal(l), 0);
         const fmtTravel = (t) => `${t.fromLocation || ""}${t.fromLocation && t.toLocation ? " → " : ""}${t.toLocation || t.title || "Trip"}`;
         const fmtShopping = (l) => `${l.shopName || "Shopping"}${l.location ? ` (${l.location})` : ""}`;
-        const fmtPeriod = insightPeriod === "day" ? new Date(insightDate).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : insightPeriod === "month" ? monthLabel(insightMonth) : insightYear;
+        const fmtPeriod = insightPeriod === "week" ? `${new Date(weekDays[0] + "T00:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short"})} – ${new Date(weekDays[6] + "T00:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short"})}` : insightPeriod === "day" ? new Date(insightDate).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : insightPeriod === "month" ? monthLabel(insightMonth) : insightYear;
 
         // ---- Redesigned Progress tab: extra stats/charts on top of the existing period math above ----
         const savingsRate = periodIncome > 0 ? Math.round((periodSavings / periodIncome) * 100) : null;
@@ -7187,7 +7190,7 @@ function LifeTracker() {
           <Card className="progress-period-card" style={isCustom ? {flexDirection:"column",alignItems:"stretch",gap:10} : {}}>
             {!isCustom ? <>
               <CalendarDays size={17} color={BRASS} style={{flexShrink:0}} />
-              {insightPeriod === "day" && <TextField type="date" value={insightDate} onChange={(e)=>setInsightDate(e.target.value)}
+              {(insightPeriod === "day" || insightPeriod === "week") && <TextField type="date" value={insightDate} onChange={(e)=>setInsightDate(e.target.value)}
                 style={{background:"transparent",padding:0,fontWeight:750}} />}
               {insightPeriod === "month" && <TextField type="month" value={insightMonth} onChange={(e)=>setInsightMonth(e.target.value)}
                 style={{background:"transparent",padding:0,fontWeight:750}} />}
@@ -7220,7 +7223,7 @@ function LifeTracker() {
 
           <Card className="progress-tabs-card">
             <SegmentedControl variant="primary" value={insightPeriod} onChange={setInsightPeriod}
-              options={[{id:"day",label:"Day"},{id:"month",label:"Month"},{id:"year",label:"Year"},{id:"custom",label:"Custom"}]} />
+              options={[{id:"day",label:"Day"},{id:"week",label:"Week"},{id:"month",label:"Month"},{id:"year",label:"Year"},{id:"custom",label:"Custom"}]} />
           </Card>
 
           <Card className="progress-tabs-card">
@@ -7245,7 +7248,7 @@ function LifeTracker() {
                 <RingProgress pct={completionPct} size={92} color={BRASS} />
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:15,fontWeight:800,color:INK}}>
-                    {insightPeriod === "day" ? "Day" : insightPeriod === "month" ? "Month" : "Year"} Progress
+                    {insightPeriod === "day" ? "Day" : insightPeriod === "week" ? "Week" : insightPeriod === "month" ? "Month" : "Year"} Progress
                   </div>
                   <div style={{fontSize:12,color:INK_DIM,marginTop:2}}>{doneCount} of {totalTracked} activities completed</div>
                   <div style={{display:"flex",alignItems:"center",gap:5,marginTop:8,fontSize:12,color:INK_DIM}}>
@@ -7259,6 +7262,44 @@ function LifeTracker() {
                 {completionPct >= 80 ? "Great work! Keep going 🚀" : completionPct >= 50 ? "Good progress, keep it up 💪" : "Let's get moving today ⚡"}
               </div>
             </Card>
+
+            {/* Completion trend: one simple bar chart that adapts to the selected period. */}
+            {(() => {
+              const trackedItems = dailyItems.filter((i) => i.type !== "expense").length;
+              const pctFor = (match) => {
+                const days = Object.entries(dailyLogs).filter(([d]) => match(d));
+                if (!trackedItems || !days.length) return 0;
+                const done = days.reduce((sum, [, log]) => sum + Object.values(log || {}).filter((r) => r && r.status === "done").length, 0);
+                return Math.min(100, Math.round(done / (trackedItems * days.length) * 100));
+              };
+              let bars = [];
+              if (insightPeriod === "week") bars = weekDays.map((d, i) => ({ label: ["M","T","W","T","F","S","S"][i], pct: pctFor((x) => x === d), on: d === dateKey() }));
+              else if (insightPeriod === "month") { const [yy, mm] = insightMonth.split("-").map(Number); const n = new Date(yy, mm, 0).getDate(); bars = Array.from({ length: n }, (_, i) => { const d = `${insightMonth}-${pad2(i + 1)}`; return { label: (i + 1) % 5 === 0 || i === 0 ? String(i + 1) : "", pct: pctFor((x) => x === d), on: d === dateKey() }; }); }
+              else if (insightPeriod === "year") bars = Array.from({ length: 12 }, (_, i) => { const mk = `${insightYear}-${pad2(i + 1)}`; return { label: "JFMAMJJASOND"[i], pct: pctFor((x) => x.slice(0, 7) === mk), on: mk === monthKey() }; });
+              if (!bars.length) return null;
+              const avg = Math.round(bars.reduce((a, b) => a + b.pct, 0) / bars.length);
+              const best = bars.reduce((a, b) => (b.pct > a.pct ? b : a), bars[0]);
+              return (
+                <Card style={{ marginBottom: 12, padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: INK }}>Completion trend</div>
+                    <div style={{ fontSize: 12, color: INK_DIM }}>Average {avg}%</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: bars.length > 12 ? 2 : 6, height: 110 }}>
+                    {bars.map((b, i) => (
+                      <div key={i} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%" }}>
+                        {bars.length <= 12 && <div style={{ fontSize: 10, color: INK_FAINT, marginBottom: 3 }}>{b.pct}%</div>}
+                        <div style={{ width: "100%", height: `${Math.max(b.pct, 3)}%`, borderRadius: 6, background: b.on ? BRASS : hexA(BRASS, b.pct ? 0.45 : 0.15), transition: "height .5s cubic-bezier(.22,.8,.25,1)" }} />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: bars.length > 12 ? 2 : 6, marginTop: 5 }}>
+                    {bars.map((b, i) => <div key={i} style={{ flex: 1, minWidth: 0, textAlign: "center", fontSize: 10, color: b.on ? BRASS : INK_FAINT, fontWeight: b.on ? 800 : 500 }}>{b.label}</div>)}
+                  </div>
+                  {best.pct > 0 && <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 700, color: TEAL }}>Best: {best.label ? best.label : "a day"} at {best.pct}%</div>}
+                </Card>
+              );
+            })()}
 
             <div className="progress-section-head"><div className="progress-section-title">At a Glance</div></div>
             <div className="progress-stat-grid">
