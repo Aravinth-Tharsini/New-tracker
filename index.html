@@ -2625,7 +2625,7 @@ function LifeTracker() {
   const budgetUpToMonth = (mk, field) => Object.entries(financeMonthly).filter(([fmk]) => fmk <= mk).reduce((s, [, v]) => s + (parseFloat(v?.[field]) || 0), 0);
   const expensesUpToMonthByMethod = (mk, method) => Object.entries(dailyLogs).filter(([d]) => d.slice(0, 7) <= mk).reduce((s, [, log]) => s + (log.expenses || []).filter((e) => (e.paymentMethod || "online") === method).reduce((s2, e) => s2 + e.amount, 0), 0);
   const [financeMonth, setFinanceMonth] = useState(curMonth);
-  const [financeViewTab, setFinanceViewTab] = useState("budget"); // "budget" (manual monthly input) | "balance" (read-only running total)
+  const [financeViewTab, setFinanceViewTab] = useState("balance"); // "budget" (manual monthly input) | "balance" (read-only running total)
   const setFinanceField = (mk, f, v) => setFinanceMonthly((prev) => ({ ...prev, [mk]: { ...prev[mk], [f]: v } }));
   // Online/Account Balance + Physical/Cash Balance are the two numbers the user actually enters for
   // "How Much I Have"; `income` (used everywhere else — goal funding, insights, trend charts) is kept
@@ -5954,8 +5954,8 @@ function LifeTracker() {
               <Card style={{ marginBottom: 12 }}>
                 <SectionLabel>How Much I Have</SectionLabel>
                 <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                  <ChipButton label="Monthly Budget" active={financeViewTab === "budget"} onClick={() => setFinanceViewTab("budget")} />
                   <ChipButton label="Current Balance" active={financeViewTab === "balance"} onClick={() => setFinanceViewTab("balance")} />
+                  <ChipButton label="Monthly Budget" active={financeViewTab === "budget"} onClick={() => setFinanceViewTab("budget")} />
                 </div>
                 {financeViewTab === "budget" && (
                   <div style={{ display: "flex", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
