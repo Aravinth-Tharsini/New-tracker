@@ -771,6 +771,141 @@ function travelDurationMinutes(travelTime, arrivalTime) {
   if (diff <= 0) diff += 24 * 60;
   return diff;
 }
+// ---- Calendar export (free, no login): Google Calendar link + .ics file for any calendar app ----
+function icsLocalMs(date, time) { const ms = new Date(`${date}T${time || "09:00"}:00`).getTime(); return Number.isNaN(ms) ? null : ms; }
+function icsStamp(ms) { const d = new Date(ms); return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}T${pad2(d.getHours())}${pad2(d.getMinutes())}00`; }
+function icsDateOnly(date) { return date.replace(/-/g, ""); }
+function icsEsc(t) { return String(t ?? "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n"); }
+function icsFold(line) { const out = []; let rest = line; while (rest.length > 72) { out.push(rest.slice(0, 72)); rest = " " + rest.slice(72); } out.push(rest); return out.join("\r\n"); }
+// ev: { uid, title, details, location, startMs, endMs, allDayDate, rrule, alarmsMin: [minutes before start], allDayAlarmHour }
+function buildIcs(events) {
+  const now = new Date(); const dtstamp = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(now.getUTCDate())}T${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}00Z`;
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Daily Life App//EN", "CALSCALE:GREGORIAN"];
+  events.forEach((ev) => {
+    lines.push("BEGIN:VEVENT", `UID:${ev.uid}@dailylifeapp`, `DTSTAMP:${dtstamp}`);
+    if (ev.allDayDate) lines.push(`DTSTART;VALUE=DATE:${icsDateOnly(ev.allDayDate)}`);
+    else { lines.push(`DTSTART:${icsStamp(ev.startMs)}`, `DTEND:${icsStamp(ev.endMs)}`); }
+    lines.push(`SUMMARY:${icsEsc(ev.title)}`);
+    if (ev.details) lines.push(`DESCRIPTION:${icsEsc(ev.details)}`);
+    if (ev.location) lines.push(`LOCATION:${icsEsc(ev.location)}`);
+    if (ev.rrule) lines.push(`RRULE:${ev.rrule}`);
+    if (ev.allDayDate && ev.allDayAlarmHour != null) lines.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsEsc(ev.title)}`, `TRIGGER:PT${ev.allDayAlarmHour}H`, "END:VALARM");
+    else (ev.alarmsMin || []).forEach((m) => lines.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsEsc(ev.title)}`, `TRIGGER:-PT${Math.max(0, m)}M`, "END:VALARM"));
+    lines.push("END:VEVENT");
+  });
+  lines.push("END:VCALENDAR");
+  return lines.map(icsFold).join("\r\n");
+}
+function googleCalendarUrl(ev) {
+  const dates = ev.allDayDate ? `${icsDateOnly(ev.allDayDate)}/${icsDateOnly(ev.allDayDate)}` : `${icsStamp(ev.startMs)}/${icsStamp(ev.endMs)}`;
+  const q = new URLSearchParams({ action: "TEMPLATE", text: ev.title, dates });
+  if (ev.details) q.set("details", ev.details);
+  if (ev.location) q.set("location", ev.location);
+  if (ev.rrule) q.set("recur", "RRULE:" + ev.rrule);
+  return "https://calendar.google.com/calendar/render?" + q.toString();
+}
+function tripCalendarEvent(t) {
+  if (!t || !t.travelDate) return null;
+  const startMs = icsLocalMs(t.travelDate, t.travelTime || "09:00");
+  if (startMs == null) return null;
+  let endMs = t.arrivalTime ? icsLocalMs(t.arrivalDate || t.travelDate, t.arrivalTime) : null;
+  if (endMs != null && endMs <= startMs && !t.arrivalDate) endMs += 24 * 3600000; // old single trips: arrival earlier on the clock = next day
+  if (endMs == null || endMs <= startMs) endMs = startMs + 3600000;
+  const multi = Array.isArray(t.legs) && t.legs.length > 1;
+  const stamp = (d, tm) => [d ? formatDMY(d) : "", tm ? fmtTimeString12(tm) : ""].filter(Boolean).join(" ");
+  const lines = [];
+  if (multi) { t.legs.forEach((l, i) => lines.push(`Leg ${i + 1} (${l.mode}): ${l.fromLocation} to ${l.toLocation}, ${stamp(l.departDate, l.departTime)} - ${stamp(l.arriveDate || l.departDate, l.arriveTime)}${l.amount ? ", " + inr(l.amount) : ""}`)); }
+  if (t.amount) lines.push(`Total cost: ${inr(t.amount)}${t.paymentStatus ? " (" + t.paymentStatus + ")" : ""}`);
+  if (t.bookingDetails) lines.push(`Booking: ${t.bookingDetails}`);
+  const stops = multi ? [t.legs[0].fromLocation, ...t.legs.map((l) => l.toLocation)].filter(Boolean).join(" \u2192 ") : `${t.fromLocation} \u2192 ${t.toLocation}`;
+  const offs = (t.reminderOffsets || (t.reminderOffset ? [t.reminderOffset] : [])).map((o) => { const opt = REMINDER_OPTIONS.find((x) => x.value === o); return opt ? opt.days * 1440 : null; }).filter((m) => m != null);
+  const alarms = [...new Set([60, ...offs])];
+  return { uid: "trip" + t.id, title: `${multi ? "Trip" : t.mode}: ${stops}`, details: lines.join("\n"), location: t.fromLocation, startMs, endMs, alarmsMin: alarms };
+}
+const ICS_DAY = { Mon: "MO", Tue: "TU", Wed: "WE", Thu: "TH", Fri: "FR", Sat: "SA", Sun: "SU" };
+function dailyCalendarEvents(items, startDate) {
+  return items.map((item) => {
+    const byday = (item.days || []).map((d) => ICS_DAY[d]).filter(Boolean);
+    const rrule = byday.length && byday.length < 7 ? `FREQ=WEEKLY;BYDAY=${byday.join(",")}` : "FREQ=DAILY";
+    const base = { uid: "daily" + item.id, title: item.name, details: "Daily activity from my Daily Life app", rrule };
+    if (item.scheduledTime) { const startMs = icsLocalMs(startDate, item.scheduledTime); return startMs == null ? null : { ...base, startMs, endMs: startMs + 15 * 60000, alarmsMin: [10, 0] }; }
+    return { ...base, allDayDate: startDate, allDayAlarmHour: 9 };
+  }).filter(Boolean);
+}
+// ---- Multi-leg journeys: every leg has its own departure/arrival DATE + time, so overnight
+// and multi-day journeys are measured on real timestamps, not just clock times. ----
+function journeyStamp(date, time) { if (!date || !time) return null; const ms = new Date(`${date}T${time}:00`).getTime(); return Number.isNaN(ms) ? null : ms; }
+function fmtLongDur(min) { if (min == null) return "-"; const d = Math.floor(min / 1440), h = Math.floor((min % 1440) / 60), m = Math.round(min % 60); return `${d ? d + "d " : ""}${d || h ? h + "h " : ""}${m}m`; }
+function journeySummary(legs) {
+  if (!Array.isArray(legs) || !legs.length) return null;
+  const warnings = [];
+  const rows = legs.map((l, i) => {
+    const dep = journeyStamp(l.departDate, l.departTime);
+    const arr = journeyStamp(l.arriveDate || l.departDate, l.arriveTime);
+    let dur = null;
+    if (dep != null && arr != null) { if (arr >= dep) dur = Math.round((arr - dep) / 60000); else warnings.push(`Leg ${i + 1}: arrival is before departure. Check the dates.`); }
+    return { leg: l, dep, arr, dur, wait: null };
+  });
+  rows.forEach((r, i) => {
+    if (i === 0) return;
+    const prev = rows[i - 1];
+    if (prev.arr == null || r.dep == null) return;
+    const w = Math.round((r.dep - prev.arr) / 60000);
+    if (w < 0) warnings.push(`Leg ${i + 1} departs before leg ${i} arrives. Check the dates.`);
+    else { r.wait = w; if (w < 20) warnings.push(`Leg ${i} to ${i + 1}: only ${w} min to connect.`); }
+  });
+  const travelMin = rows.reduce((a, r) => a + (r.dur || 0), 0);
+  const waitMin = rows.reduce((a, r) => a + (r.wait || 0), 0);
+  const first = rows[0].dep, last = rows[rows.length - 1].arr;
+  const totalMin = first != null && last != null && last >= first ? Math.round((last - first) / 60000) : (travelMin + waitMin) || null;
+  const cost = legs.reduce((a, l) => a + (parseFloat(l.amount) || 0), 0);
+  const stops = [legs[0].fromLocation, ...legs.map((l) => l.toLocation)].filter(Boolean);
+  return { rows, warnings, travelMin, waitMin, totalMin, cost, stops };
+}
+function JourneySummary({ legs }) {
+  const j = journeySummary(legs);
+  if (!j || legs.length < 2) return null;
+  const stamp = (d, t) => [d ? formatDMY(d) : "", t ? fmtTimeString12(t) : ""].filter(Boolean).join(" ");
+  const stat = (label, value, color) => (
+    <div style={{ flex: "1 1 45%", background: hexA(BRASS_HEX, 0.08), borderRadius: 12, padding: "8px 10px" }}>
+      <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
+      <div style={{ fontFamily: mono, fontSize: 16, fontWeight: 800, color: color || INK, marginTop: 2 }}>{value}</div>
+    </div>
+  );
+  return (
+    <div style={{ border: `1.5px solid ${hexA(BRASS_HEX, 0.28)}`, borderRadius: 16, padding: 12, marginTop: 10, background: hexA(BRASS_HEX, 0.04) }}>
+      <div style={{ fontSize: 11, color: BRASS, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Journey summary</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: INK, lineHeight: 1.4, marginBottom: 8, wordBreak: "break-word" }}>{j.stops.join(" \u2192 ")}</div>
+      {j.rows.map((r, i) => (
+        <div key={i}>
+          {i > 0 && (
+            <div style={{ margin: "4px 0 4px 8px", paddingLeft: 10, borderLeft: `2px dashed ${BRASS_DIM}`, fontSize: 12, fontWeight: 700, color: r.wait != null && r.wait < 20 ? CORAL : INK_DIM }}>
+              {r.wait != null ? `Wait ${fmtLongDur(r.wait)}` : "Wait: set times"}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <TravelModeIcon mode={r.leg.mode} size={16} color={BRASS} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>{r.leg.fromLocation} → {r.leg.toLocation}</div>
+              <div style={{ fontFamily: mono, fontSize: 12, color: INK_DIM, marginTop: 1 }}>{stamp(r.leg.departDate, r.leg.departTime)} → {stamp(r.leg.arriveDate || r.leg.departDate, r.leg.arriveTime)}</div>
+            </div>
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div style={{ fontFamily: mono, fontSize: 12, fontWeight: 700, color: TEAL }}>{r.dur != null ? fmtLongDur(r.dur) : "-"}</div>
+              {parseFloat(r.leg.amount) > 0 && <div style={{ fontFamily: mono, fontSize: 12, color: INK_DIM }}>{inr(parseFloat(r.leg.amount))}</div>}
+            </div>
+          </div>
+        </div>
+      ))}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+        {stat("Total journey", fmtLongDur(j.totalMin), BRASS)}
+        {stat("Total cost", inr(j.cost), BRASS)}
+        {stat("Travel time", fmtLongDur(j.travelMin))}
+        {stat("Waiting time", fmtLongDur(j.waitMin))}
+      </div>
+      {j.warnings.map((w, i) => <div key={i} style={{ fontSize: 12.5, fontWeight: 700, color: CORAL, marginTop: 6 }}>{w}</div>)}
+    </div>
+  );
+}
 function fmtElapsed(ms) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(totalSec / 3600), m = Math.floor((totalSec % 3600) / 60), s = totalSec % 60;
@@ -2977,7 +3112,7 @@ function LifeTracker() {
   const [travelTimeInputMode, setTravelTimeInputMode] = useState("24h");
   const travelFormRef = useRef(null);
   const travelCardRefs = useRef({});
-  const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", arrivalTime: "", amount: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [] });
+  const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", arrivalTime: "", arrivalDate: "", legs: [], amount: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [] });
   const [travelForm, setTravelForm] = useState(blankTravelForm());
   const [newTravelNoteText, setNewTravelNoteText] = useState("");
   const toggleTravelReminder = (offset) => setTravelForm((f) => ({ ...f, reminderOffsets: f.reminderOffsets.includes(offset) ? f.reminderOffsets.filter((o) => o !== offset) : [...f.reminderOffsets, offset] }));
@@ -2988,10 +3123,26 @@ function LifeTracker() {
     setNewTravelNoteText("");
   };
   const removeNoteFromTravelForm = (noteId) => setTravelForm((f) => ({ ...f, notes: (f.notes || []).filter((n) => n.id !== noteId) }));
+  // Leg 1 lives in the main form fields; connecting legs (2+) live in travelForm.legs.
+  const buildTravelLegs = (f = travelForm) => [
+    { mode: f.mode, fromLocation: f.fromLocation.trim(), toLocation: f.toLocation.trim(), departDate: f.travelDate, departTime: f.travelTime, arriveDate: f.arrivalDate || f.travelDate, arriveTime: f.arrivalTime, amount: parseFloat(f.amount) || 0 },
+    ...(f.legs || []).filter((l) => l.toLocation.trim()).map((l) => ({ mode: l.mode, fromLocation: l.fromLocation.trim(), toLocation: l.toLocation.trim(), departDate: l.departDate, departTime: l.departTime, arriveDate: l.arriveDate || l.departDate, arriveTime: l.arriveTime, amount: parseFloat(l.amount) || 0 })),
+  ];
+  const addTravelLeg = () => setTravelForm((f) => {
+    const all = buildTravelLegs(f); const prev = all[all.length - 1]; const day = prev.arriveDate || prev.departDate || "";
+    return { ...f, legs: [...(f.legs || []), { id: "lg" + Date.now(), mode: "Bus", fromLocation: prev.toLocation, toLocation: "", departDate: day, departTime: "", arriveDate: day, arriveTime: "", amount: "" }] };
+  });
+  const updateTravelLeg = (id, patch) => setTravelForm((f) => ({ ...f, legs: f.legs.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
+  const removeTravelLeg = (id) => setTravelForm((f) => ({ ...f, legs: f.legs.filter((l) => l.id !== id) }));
   const openEditTravel = (t) => {
+    const multi = Array.isArray(t.legs) && t.legs.length > 1;
+    const l1 = multi ? t.legs[0] : null;
     setTravelForm({
-      mode: t.mode || "Train", fromLocation: t.fromLocation || "", toLocation: t.toLocation || "",
-      travelDate: t.travelDate || "", travelTime: t.travelTime || "", arrivalTime: t.arrivalTime || "", amount: t.amount != null ? String(t.amount) : "",
+      mode: (multi ? l1.mode : t.mode) || "Train", fromLocation: (multi ? l1.fromLocation : t.fromLocation) || "", toLocation: (multi ? l1.toLocation : t.toLocation) || "",
+      travelDate: (multi ? l1.departDate : t.travelDate) || "", travelTime: (multi ? l1.departTime : t.travelTime) || "",
+      arrivalTime: (multi ? l1.arriveTime : t.arrivalTime) || "", arrivalDate: (multi ? l1.arriveDate : t.arrivalDate) || "",
+      legs: multi ? t.legs.slice(1).map((l, i) => ({ id: "lg" + Date.now() + i, mode: l.mode || "Bus", fromLocation: l.fromLocation || "", toLocation: l.toLocation || "", departDate: l.departDate || "", departTime: l.departTime || "", arriveDate: l.arriveDate || "", arriveTime: l.arriveTime || "", amount: l.amount ? String(l.amount) : "" })) : [],
+      amount: multi ? (l1.amount ? String(l1.amount) : "") : (t.amount != null ? String(t.amount) : ""),
       bookingDetails: t.bookingDetails || "", reminderOffsets: t.reminderOffsets || (t.reminderOffset ? [t.reminderOffset] : ["1d"]),
       paymentStatus: t.paymentStatus || "Not Paid", notes: (t.notes || []).map((n) => ({ ...n })),
     });
@@ -3026,6 +3177,15 @@ function LifeTracker() {
       bookingDetails: travelForm.bookingDetails.trim(), reminderOffsets: travelForm.reminderOffsets, paymentStatus: travelForm.paymentStatus,
       notes: travelForm.notes || [],
     };
+    // Multi-leg: keep the top-level fields as an overall summary (first stop, last stop, final arrival,
+    // combined cost) so reminders, Home, history and expense logging keep working unchanged.
+    const allLegs = buildTravelLegs();
+    base.arrivalDate = travelForm.arrivalDate || "";
+    if (allLegs.length > 1) {
+      const last = allLegs[allLegs.length - 1];
+      base.legs = allLegs; base.toLocation = last.toLocation; base.arrivalTime = last.arriveTime; base.arrivalDate = last.arriveDate || "";
+      base.amount = allLegs.reduce((a, l) => a + l.amount, 0);
+    } else base.legs = null;
     if (editingTravelId) {
       setTravelPlans((prev) => prev.map((t) => (t.id !== editingTravelId ? t : { ...t, ...base })));
     } else {
@@ -3510,7 +3670,40 @@ function LifeTracker() {
                             <Time12Input value={travelForm.arrivalTime} onChange={(v) => setTravelForm({ ...travelForm, arrivalTime: v })} style={{ fontFamily: mono }} />
                           )}
                         </div>
-                        <TextField type="number" placeholder="Amount" value={travelForm.amount} onChange={(e) => setTravelForm({ ...travelForm, amount: e.target.value })} style={{ fontFamily: mono }} />
+                        <div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Arrival date (only if different from travel date)</div>
+                          <TextField type="date" value={travelForm.arrivalDate} onChange={(e) => setTravelForm({ ...travelForm, arrivalDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                        </div>
+                        <TextField type="number" placeholder={travelForm.legs.length ? "Leg 1 amount" : "Amount"} value={travelForm.amount} onChange={(e) => setTravelForm({ ...travelForm, amount: e.target.value })} style={{ fontFamily: mono }} />
+                        {travelForm.legs.map((l, i) => {
+                          const timeIn = (v, on) => (travelTimeInputMode === "24h" ? <Time24Input value={v} onChange={on} style={{ fontFamily: mono }} /> : <Time12Input value={v} onChange={on} style={{ fontFamily: mono }} />);
+                          return (
+                            <div key={l.id} style={{ border: `1.5px solid ${hexA(BRASS_HEX, 0.28)}`, borderRadius: 14, padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div style={{ fontSize: 13, fontWeight: 800, color: BRASS }}>Leg {i + 2}</div>
+                                <button onClick={() => removeTravelLeg(l.id)} style={{ background: "none", border: "none", color: CORAL, padding: 4, cursor: "pointer" }} aria-label="Remove leg"><Trash2 size={15} /></button>
+                              </div>
+                              <Select value={l.mode} onChange={(e) => updateTravelLeg(l.id, { mode: e.target.value })}>
+                                {["Train", "Bus", "Car", "Bike", "Flight", "Other"].map((m) => <option key={m} value={m}>{m}</option>)}
+                              </Select>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <TextField placeholder="From" value={l.fromLocation} onChange={(e) => updateTravelLeg(l.id, { fromLocation: e.target.value })} style={{ flex: 1 }} />
+                                <TextField placeholder="To" value={l.toLocation} onChange={(e) => updateTravelLeg(l.id, { toLocation: e.target.value })} style={{ flex: 1 }} />
+                              </div>
+                              <div style={{ fontSize: 12, color: INK_FAINT }}>Departure date &amp; time</div>
+                              <TextField type="date" value={l.departDate} onChange={(e) => updateTravelLeg(l.id, { departDate: e.target.value, arriveDate: l.arriveDate && l.arriveDate >= e.target.value ? l.arriveDate : e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              {timeIn(l.departTime, (v) => updateTravelLeg(l.id, { departTime: v }))}
+                              <div style={{ fontSize: 12, color: INK_FAINT }}>Arrival date &amp; time</div>
+                              <TextField type="date" value={l.arriveDate} onChange={(e) => updateTravelLeg(l.id, { arriveDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                              {timeIn(l.arriveTime, (v) => updateTravelLeg(l.id, { arriveTime: v }))}
+                              <TextField type="number" placeholder="Leg amount" value={l.amount} onChange={(e) => updateTravelLeg(l.id, { amount: e.target.value })} style={{ fontFamily: mono }} />
+                            </div>
+                          );
+                        })}
+                        <button onClick={addTravelLeg} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: hexA(BRASS_HEX, 0.1), border: `1.5px dashed ${BRASS}`, color: BRASS, borderRadius: 12, padding: "10px 12px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                          <Plus size={16} /> Add connecting leg (bus, train...)
+                        </button>
+                        <JourneySummary legs={buildTravelLegs()} />
                         <div>
                           <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Payment status</div>
                           <Select value={travelForm.paymentStatus} onChange={(e) => setTravelForm({ ...travelForm, paymentStatus: e.target.value })} style={{ width: "100%" }}>
@@ -5422,7 +5615,7 @@ function LifeTracker() {
                                       <div style={{ width: 8, height: 8, borderRadius: "50%", border: `2px solid ${BRASS}`, background: PANEL_2, flexShrink: 0 }} />
                                       <div style={{ width: 1.5, flex: 1, minHeight: 10, background: `repeating-linear-gradient(to bottom, ${BRASS_DIM} 0, ${BRASS_DIM} 3px, transparent 3px, transparent 6px)`, margin: "3px 0" }} />
                                       {(() => {
-                                        const durMin = travelDurationMinutes(t.travelTime, t.arrivalTime);
+                                        const durMin = (t.legs && t.legs.length > 1) ? null : travelDurationMinutes(t.travelTime, t.arrivalTime);
                                         return durMin != null ? (
                                           <div style={{ fontFamily: mono, fontSize: 10, color: "#FFFFFF", fontWeight: 700, background: BRASS, borderRadius: 980, padding: "2px 6px", marginBottom: 4, whiteSpace: "nowrap" }}>{fmtDuration(durMin)}</div>
                                         ) : null;
@@ -5442,6 +5635,7 @@ function LifeTracker() {
                                       {t.arrivalTime && <div style={{ fontFamily: mono, fontSize: 13, color: TEAL, fontWeight: 700, marginTop: 3 }}>{fmtTimeString12(t.arrivalTime)}</div>}
                                     </div>
                                   </div>
+                                  {t.legs && t.legs.length > 1 && <JourneySummary legs={t.legs} />}
                                   {t.amount > 0 && (
                                     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8 }}>
                                       <Wallet size={14} color={INK_FAINT} style={{ flexShrink: 0, marginTop: 2 }} />
@@ -6100,6 +6294,8 @@ function LifeTracker() {
                           )}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                          <IconAction onClick={() => { const ev = tripCalendarEvent(t); if (ev) window.open(googleCalendarUrl(ev), "_blank"); }} title="Add to Google Calendar"><CalendarDays size={15} /></IconAction>
+                          <IconAction onClick={() => { const ev = tripCalendarEvent(t); if (ev) downloadFile(`trip-${(t.toLocation || "trip").replace(/[^a-z0-9]+/gi, "-")}.ics`, buildIcs([ev]), "text/calendar"); }} title="Download calendar file (.ics)"><Download size={15} /></IconAction>
                           <IconAction onClick={() => openEditTravel(t)} title="Edit trip"><Pencil size={15} /></IconAction>
                           <IconAction onClick={() => deleteTravelPlan(t.id)} title="Delete trip"><Trash2 size={15} /></IconAction>
                         </div>
@@ -6115,6 +6311,9 @@ function LifeTracker() {
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <SectionLabel>Daily routine</SectionLabel>
+                    <button onClick={() => { const evs = dailyCalendarEvents(dailyItems.filter(isItemValid), today); if (evs.length) downloadFile("daily-activities.ics", buildIcs(evs), "text/calendar"); }} style={{ display: "flex", alignItems: "center", gap: 5, background: hexA(BRASS_HEX, 0.1), border: "none", color: BRASS, borderRadius: 980, padding: "6px 11px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
+                      <CalendarDays size={14} /> Add to calendar
+                    </button>
                   </div>
                   <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Only items with their required fields filled in show up on the Daily tab.</div>
                   {itemForm && !itemForm.id && itemFormCard}
