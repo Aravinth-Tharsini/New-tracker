@@ -35,6 +35,27 @@ jobs:
       - name: Add Android project
         run: npx cap add android
 
+      - name: Use my app icon
+        run: |
+          im() { if command -v magick >/dev/null 2>&1; then magick "$@"; else convert "$@"; fi; }
+          RES=android/app/src/main/res
+          rm -rf $RES/mipmap-anydpi-v26
+          for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            d=${pair%%:*}; px=${pair##*:}
+            for n in ic_launcher ic_launcher_round ic_launcher_foreground; do
+              im icon-512.png -resize ${px}x${px} $RES/mipmap-$d/$n.png
+            done
+          done
+
+      - name: Use my permanent signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            mkdir -p ~/.android
+            echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+          fi
+
       - name: Allow notifications and exact alarms
         run: |
           sed -i 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n    <application#' android/app/src/main/AndroidManifest.xml
