@@ -3444,6 +3444,59 @@ function LifeTracker() {
     [instantDurationItems, streaks, dailyLogs, today]
   );
 
+  // ---- Native (APK) notifications: when the app runs inside the Capacitor Android wrapper, schedule real
+  // on-device alarms for trips, daily activities and My Day plans. They fire even when the app is closed.
+  // In a normal browser (no Capacitor) this does nothing, so the web app is unchanged.
+  useEffect(() => {
+    const cap = window.Capacitor;
+    const LN = cap && cap.Plugins && cap.Plugins.LocalNotifications;
+    if (!LN || !(cap.isNativePlatform && cap.isNativePlatform())) return;
+    const timer = setTimeout(async () => {
+      try {
+        let perm = await LN.checkPermissions();
+        if (perm.display !== "granted") perm = await LN.requestPermissions();
+        if (perm.display !== "granted") return;
+        try {
+          const ex = LN.checkExactNotificationSetting ? await LN.checkExactNotificationSetting() : null;
+          if (ex && ex.exact_alarm !== "granted" && !localStorage.getItem("exactAlarmAsked")) { localStorage.setItem("exactAlarmAsked", "1"); await LN.changeExactNotificationSetting(); }
+        } catch (e) {}
+        const pending = await LN.getPending();
+        if (pending.notifications && pending.notifications.length) await LN.cancel({ notifications: pending.notifications });
+        const list = []; const nowMs = Date.now(); let nid = 1;
+        const add = (title, body, at) => { if (at && at.getTime() > nowMs + 5000) list.push({ id: nid++, title, body, schedule: { at, allowWhileIdle: true } }); };
+        const NATIVE_WD = { Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6, Sat: 7, Sun: 1 };
+        // Trips: the chosen "days before" reminders at 9:00 AM, plus 1 hour before departure.
+        travelPlans.filter((t) => !t.completed && !t.dismissed && t.travelDate).forEach((t) => {
+          const dep = new Date(`${t.travelDate}T${t.travelTime || "09:00"}:00`);
+          if (isNaN(dep.getTime())) return;
+          const label = `${t.fromLocation} \u2192 ${t.toLocation}`;
+          (t.reminderOffsets || (t.reminderOffset ? [t.reminderOffset] : [])).forEach((o) => {
+            const opt = REMINDER_OPTIONS.find((x) => x.value === o); if (!opt || opt.days === 0) return;
+            const d = new Date(`${t.travelDate}T09:00:00`); d.setDate(d.getDate() - opt.days);
+            add(`Upcoming trip: ${label}`, `${t.mode} on ${formatDMY(t.travelDate)}${t.travelTime ? " at " + fmtTimeString12(t.travelTime) : ""}`, d);
+          });
+          add(`Trip in 1 hour: ${label}`, `${t.mode}${t.travelTime ? " at " + fmtTimeString12(t.travelTime) : ""}`, new Date(dep.getTime() - 3600000));
+        });
+        // Daily activities with a set time: repeat every day, or on the chosen weekdays.
+        dailyItems.filter(isItemValid).filter((i) => i.scheduledTime).forEach((i) => {
+          const [hh, mm] = i.scheduledTime.split(":").map(Number); if (Number.isNaN(hh) || Number.isNaN(mm)) return;
+          const days = (i.days || []).filter((d) => NATIVE_WD[d]);
+          if (days.length && days.length < 7) days.forEach((d) => list.push({ id: nid++, title: i.name, body: "Time for your daily activity", schedule: { on: { weekday: NATIVE_WD[d], hour: hh, minute: mm }, repeats: true, allowWhileIdle: true } }));
+          else list.push({ id: nid++, title: i.name, body: "Time for your daily activity", schedule: { on: { hour: hh, minute: mm }, repeats: true, allowWhileIdle: true } });
+        });
+        // My Day plans: one-off plans fire reminderMinutes before; repeating plans fire at their time on each repeat day.
+        myDayEvents.filter((e) => !e.completed && !e.dismissed && e.eventDate && e.eventTime && e.reminderEnabled !== false).forEach((e) => {
+          const [hh, mm] = e.eventTime.split(":").map(Number); if (Number.isNaN(hh) || Number.isNaN(mm)) return;
+          const rd = (e.repeatDays || []).filter((d) => NATIVE_WD[d]);
+          if (rd.length) rd.forEach((d) => list.push({ id: nid++, title: e.title || "Plan", body: e.location || "My Day plan", schedule: { on: { weekday: NATIVE_WD[d], hour: hh, minute: mm }, repeats: true, allowWhileIdle: true } }));
+          else add(e.title || "Plan", `${fmtTimeString12(e.eventTime)}${e.location ? " \u00b7 " + e.location : ""}`, new Date(new Date(`${e.eventDate}T${e.eventTime}:00`).getTime() - (parseInt(e.reminderMinutes, 10) || 0) * 60000));
+        });
+        if (list.length) await LN.schedule({ notifications: list.slice(0, 400) });
+      } catch (err) {}
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [travelPlans, dailyItems, myDayEvents, today]);
+
   // ---- Evening nudge: one notification per day, only after 8pm, only if there's something
   // that would actually be lost or left undone. Best-effort via the Notification API while the
   // app/tab is loaded — this is not a real push notification (that needs a backend + the

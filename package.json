@@ -1,0 +1,12 @@
+{
+  "name": "life-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@babel/standalone": "7.24.7",
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/local-notifications": "^6.1.0"
+  }
+}
