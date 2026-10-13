@@ -3777,7 +3777,7 @@ function LifeTracker() {
                           </div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Trip plan &amp; notes (Shopping, Take wallet, Pack clothes\u2026)</div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Trip plan &amp; notes (Shopping, Take wallet, Pack clothes…)</div>
                           <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>
                             <TextField placeholder="Add a task or note" value={newTravelNoteText} onChange={(e) => setNewTravelNoteText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addNoteToTravelForm(); } }} style={{ flex: 1 }} />
                             <IconBtn onClick={addNoteToTravelForm} title="Add note"><Plus size={15} /></IconBtn>
@@ -8064,6 +8064,12 @@ function LifeTracker() {
             </button>
           </div>
 
+          {window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() ? (
+          <Card style={{ marginBottom: 9 }}>
+            <SectionLabel>Reminders</SectionLabel>
+            <div style={{ fontSize: 14, color: INK_FAINT }}>Reminders are sent by this app directly on your phone, so you do not need to enable push. If they do not appear, allow notifications and alarms for this app in Android settings.</div>
+          </Card>
+          ) : (
           <Card style={{ marginBottom: 9 }}>
             <SectionLabel>Push notifications</SectionLabel>
             <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 10 }}>
@@ -8086,8 +8092,9 @@ function LifeTracker() {
                 </button>
               </>
             )}
-            {pushSetupStatus === "error" && <div style={{ fontSize: 13, color: CORAL, marginTop: 8 }}>Couldn't set up push \u2014 check that notifications are allowed for this site in your browser settings.</div>}
+            {pushSetupStatus === "error" && <div style={{ fontSize: 13, color: CORAL, marginTop: 8 }}>Couldn't set up push — check that notifications are allowed for this site in your browser settings.</div>}
           </Card>
+          )}
 
           {dataMode === "offline" && (
             <Card style={{ marginBottom: 9 }}>
