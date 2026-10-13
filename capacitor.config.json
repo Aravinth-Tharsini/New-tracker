@@ -1,4 +1,9 @@
-"server": {
-  "url": "https://new-tracker-theta.vercel.app",
-  "cleartext": false
+{
+  "appId": "YOUR_OLD_APP_ID",
+  "appName": "YOUR_OLD_APP_NAME",
+  "webDir": "www",
+  "server": {
+    "url": "https://new-tracker-theta.vercel.app",
+    "cleartext": false
+  }
 }
