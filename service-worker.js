@@ -7,7 +7,7 @@
 // icons, manifest.json, or index.html itself. Changing this string is what makes the
 // activate handler below actually throw away old cached bytes and pull fresh ones.
 // If you forget to bump this, updated files can keep serving stale from cache indefinitely.
-const CACHE_NAME = "life-tracker-cache-v2";
+const CACHE_NAME = "life-tracker-cache-v3";
 
 // Core files that make up the app shell — cached immediately on install.
 const APP_SHELL = [
@@ -55,6 +55,10 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
+
+  // Update check from update.js: let it go straight to the network and
+  // do not store it in the cache.
+  if (req.url.includes("index.html?t=")) return;
 
   // Page navigations: try the network first so you get the latest version
   // when online, but fall back to the cached app so it still opens offline.
