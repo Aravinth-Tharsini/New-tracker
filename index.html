@@ -881,12 +881,73 @@ function journeySummary(legs) {
   const first = rows[0].dep, last = rows[rows.length - 1].arr;
   const totalMin = first != null && last != null && last >= first ? Math.round((last - first) / 60000) : (travelMin + waitMin) || null;
   const cost = legs.reduce((a, l) => a + (parseFloat(l.amount) || 0), 0);
+  const distanceKm = legs.reduce((a, l) => a + (parseFloat(l.distanceKm) || 0), 0);
   const stops = [legs[0].fromLocation, ...legs.map((l) => l.toLocation)].filter(Boolean);
-  return { rows, warnings, travelMin, waitMin, totalMin, cost, stops };
+  return { rows, warnings, travelMin, waitMin, totalMin, cost, distanceKm, stops };
 }
-function JourneySummary({ legs }) {
+function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
+function normLoc(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
+function sameLocation(a, b) {
+  const x = normLoc(a), y = normLoc(b);
+  if (!x || !y) return false;
+  if (x === y || x.includes(y) || y.includes(x)) return true;
+  const xt = x.split(" ")[0], yt = y.split(" ")[0];
+  return xt.length >= 4 && xt === yt; // same city/place name, e.g. "Chennai Central" and "Chennai Egmore"
+}
+// Turns one saved trip into leg objects (a trip is either a single journey or a multi-leg one).
+function planToLegs(t) {
+  if (Array.isArray(t.legs) && t.legs.length > 1) return t.legs.map((l) => ({ ...l }));
+  return [{ mode: t.mode, fromLocation: t.fromLocation, toLocation: t.toLocation, departDate: t.travelDate, departTime: t.travelTime, arriveDate: t.arrivalDate || t.travelDate, arriveTime: t.arrivalTime, amount: Number(t.amount) || 0, distanceKm: Number(t.distanceKm) || 0 }];
+}
+// Automatically links separately-entered journeys into connected chains: a journey joins a chain when
+// it leaves the same day the previous one arrived, from (roughly) the place it arrived at, within 12 hours.
+function connectJourneys(plans) {
+  const legs = [];
+  (plans || []).forEach((t) => { if (!t.dismissed) planToLegs(t).forEach((l) => { if (l.departDate) legs.push(l); }); });
+  const depStamp = (l) => { const v = journeyStamp(l.departDate, l.departTime); return v != null ? v : new Date(l.departDate + "T00:00:00").getTime(); };
+  legs.sort((a, b) => depStamp(a) - depStamp(b));
+  const chains = [];
+  legs.forEach((l) => {
+    const dep = journeyStamp(l.departDate, l.departTime);
+    let best = null;
+    chains.forEach((c) => {
+      const last = c[c.length - 1];
+      const arrDate = last.arriveDate || last.departDate;
+      const arr = journeyStamp(arrDate, last.arriveTime);
+      if (arr == null || dep == null || l.departDate !== arrDate) return;
+      const gap = (dep - arr) / 60000;
+      if (gap < 0 || gap > 720 || !sameLocation(last.toLocation, l.fromLocation)) return;
+      if (!best || gap < best.gap) best = { c, gap };
+    });
+    if (best) best.c.push(l); else chains.push([l]);
+  });
+  return chains;
+}
+function JourneyTotals({ chains }) {
+  const sums = chains.map((c) => journeySummary(c)).filter(Boolean);
+  const t = sums.reduce((a, j) => ({ total: a.total + (j.totalMin || 0), travel: a.travel + j.travelMin, wait: a.wait + j.waitMin, km: a.km + j.distanceKm, cost: a.cost + j.cost }), { total: 0, travel: 0, wait: 0, km: 0, cost: 0 });
+  const stat = (label, value, color) => (
+    <div style={{ flex: "1 1 45%", background: hexA(BRASS_HEX, 0.08), borderRadius: 12, padding: "8px 10px" }}>
+      <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
+      <div style={{ fontFamily: mono, fontSize: 16, fontWeight: 800, color: color || INK, marginTop: 2 }}>{value}</div>
+    </div>
+  );
+  return (
+    <div style={{ border: `1.5px solid ${hexA(BRASS_HEX, 0.28)}`, borderRadius: 16, padding: 12, marginBottom: 12, background: hexA(BRASS_HEX, 0.04) }}>
+      <div style={{ fontSize: 11, color: BRASS, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Total · {chains.length} journey{chains.length === 1 ? "" : "s"}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {stat("Total journey", fmtLongDur(t.total), BRASS)}
+        {stat("Travel time", fmtLongDur(t.travel))}
+        {stat("Waiting time", fmtLongDur(t.wait))}
+        {stat("Distance", fmtKm(t.km))}
+        {stat("Expenses", inr(t.cost), BRASS)}
+      </div>
+    </div>
+  );
+}
+function JourneySummary({ legs, minLegs = 2 }) {
   const j = journeySummary(legs);
-  if (!j || legs.length < 2) return null;
+  if (!j || legs.length < minLegs) return null;
   const stamp = (d, t) => [d ? formatDMY(d) : "", t ? fmtTimeString12(t) : ""].filter(Boolean).join(" ");
   const stat = (label, value, color) => (
     <div style={{ flex: "1 1 45%", background: hexA(BRASS_HEX, 0.08), borderRadius: 12, padding: "8px 10px" }}>
@@ -913,6 +974,7 @@ function JourneySummary({ legs }) {
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
               <div style={{ fontFamily: mono, fontSize: 12, fontWeight: 700, color: TEAL }}>{r.dur != null ? fmtLongDur(r.dur) : "-"}</div>
+              {parseFloat(r.leg.distanceKm) > 0 && <div style={{ fontFamily: mono, fontSize: 12, color: INK_DIM }}>{fmtKm(parseFloat(r.leg.distanceKm))}</div>}
               {parseFloat(r.leg.amount) > 0 && <div style={{ fontFamily: mono, fontSize: 12, color: INK_DIM }}>{inr(parseFloat(r.leg.amount))}</div>}
             </div>
           </div>
@@ -920,9 +982,10 @@ function JourneySummary({ legs }) {
       ))}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
         {stat("Total journey", fmtLongDur(j.totalMin), BRASS)}
-        {stat("Total cost", inr(j.cost), BRASS)}
+        {stat("Total expenses", inr(j.cost), BRASS)}
         {stat("Travel time", fmtLongDur(j.travelMin))}
         {stat("Waiting time", fmtLongDur(j.waitMin))}
+        {stat("Distance", fmtKm(j.distanceKm))}
       </div>
       {j.warnings.map((w, i) => <div key={i} style={{ fontSize: 12.5, fontWeight: 700, color: CORAL, marginTop: 6 }}>{w}</div>)}
     </div>
@@ -3134,7 +3197,7 @@ function LifeTracker() {
   const [travelTimeInputMode, setTravelTimeInputMode] = useState("24h");
   const travelFormRef = useRef(null);
   const travelCardRefs = useRef({});
-  const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", arrivalTime: "", arrivalDate: "", legs: [], amount: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [] });
+  const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", arrivalTime: "", arrivalDate: "", legs: [], amount: "", distanceKm: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [] });
   const [travelForm, setTravelForm] = useState(blankTravelForm());
   const [newTravelNoteText, setNewTravelNoteText] = useState("");
   const toggleTravelReminder = (offset) => setTravelForm((f) => ({ ...f, reminderOffsets: f.reminderOffsets.includes(offset) ? f.reminderOffsets.filter((o) => o !== offset) : [...f.reminderOffsets, offset] }));
@@ -3147,12 +3210,12 @@ function LifeTracker() {
   const removeNoteFromTravelForm = (noteId) => setTravelForm((f) => ({ ...f, notes: (f.notes || []).filter((n) => n.id !== noteId) }));
   // Leg 1 lives in the main form fields; connecting legs (2+) live in travelForm.legs.
   const buildTravelLegs = (f = travelForm) => [
-    { mode: f.mode, fromLocation: f.fromLocation.trim(), toLocation: f.toLocation.trim(), departDate: f.travelDate, departTime: f.travelTime, arriveDate: f.arrivalDate || f.travelDate, arriveTime: f.arrivalTime, amount: parseFloat(f.amount) || 0 },
-    ...(f.legs || []).filter((l) => l.toLocation.trim()).map((l) => ({ mode: l.mode, fromLocation: l.fromLocation.trim(), toLocation: l.toLocation.trim(), departDate: l.departDate, departTime: l.departTime, arriveDate: l.arriveDate || l.departDate, arriveTime: l.arriveTime, amount: parseFloat(l.amount) || 0 })),
+    { mode: f.mode, fromLocation: f.fromLocation.trim(), toLocation: f.toLocation.trim(), departDate: f.travelDate, departTime: f.travelTime, arriveDate: f.arrivalDate || f.travelDate, arriveTime: f.arrivalTime, amount: parseFloat(f.amount) || 0, distanceKm: parseFloat(f.distanceKm) || 0 },
+    ...(f.legs || []).filter((l) => l.toLocation.trim()).map((l) => ({ mode: l.mode, fromLocation: l.fromLocation.trim(), toLocation: l.toLocation.trim(), departDate: l.departDate, departTime: l.departTime, arriveDate: l.arriveDate || l.departDate, arriveTime: l.arriveTime, amount: parseFloat(l.amount) || 0, distanceKm: parseFloat(l.distanceKm) || 0 })),
   ];
   const addTravelLeg = () => setTravelForm((f) => {
     const all = buildTravelLegs(f); const prev = all[all.length - 1]; const day = prev.arriveDate || prev.departDate || "";
-    return { ...f, legs: [...(f.legs || []), { id: "lg" + Date.now(), mode: "Bus", fromLocation: prev.toLocation, toLocation: "", departDate: day, departTime: "", arriveDate: day, arriveTime: "", amount: "" }] };
+    return { ...f, legs: [...(f.legs || []), { id: "lg" + Date.now(), mode: "Bus", fromLocation: prev.toLocation, toLocation: "", departDate: day, departTime: "", arriveDate: day, arriveTime: "", amount: "", distanceKm: "" }] };
   });
   const updateTravelLeg = (id, patch) => setTravelForm((f) => ({ ...f, legs: f.legs.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
   const removeTravelLeg = (id) => setTravelForm((f) => ({ ...f, legs: f.legs.filter((l) => l.id !== id) }));
@@ -3163,8 +3226,9 @@ function LifeTracker() {
       mode: (multi ? l1.mode : t.mode) || "Train", fromLocation: (multi ? l1.fromLocation : t.fromLocation) || "", toLocation: (multi ? l1.toLocation : t.toLocation) || "",
       travelDate: (multi ? l1.departDate : t.travelDate) || "", travelTime: (multi ? l1.departTime : t.travelTime) || "",
       arrivalTime: (multi ? l1.arriveTime : t.arrivalTime) || "", arrivalDate: (multi ? l1.arriveDate : t.arrivalDate) || "",
-      legs: multi ? t.legs.slice(1).map((l, i) => ({ id: "lg" + Date.now() + i, mode: l.mode || "Bus", fromLocation: l.fromLocation || "", toLocation: l.toLocation || "", departDate: l.departDate || "", departTime: l.departTime || "", arriveDate: l.arriveDate || "", arriveTime: l.arriveTime || "", amount: l.amount ? String(l.amount) : "" })) : [],
+      legs: multi ? t.legs.slice(1).map((l, i) => ({ id: "lg" + Date.now() + i, mode: l.mode || "Bus", fromLocation: l.fromLocation || "", toLocation: l.toLocation || "", departDate: l.departDate || "", departTime: l.departTime || "", arriveDate: l.arriveDate || "", arriveTime: l.arriveTime || "", amount: l.amount ? String(l.amount) : "", distanceKm: l.distanceKm ? String(l.distanceKm) : "" })) : [],
       amount: multi ? (l1.amount ? String(l1.amount) : "") : (t.amount != null ? String(t.amount) : ""),
+      distanceKm: multi ? (l1.distanceKm ? String(l1.distanceKm) : "") : (t.distanceKm ? String(t.distanceKm) : ""),
       bookingDetails: t.bookingDetails || "", reminderOffsets: t.reminderOffsets || (t.reminderOffset ? [t.reminderOffset] : ["1d"]),
       paymentStatus: t.paymentStatus || "Not Paid", notes: (t.notes || []).map((n) => ({ ...n })),
     });
@@ -3195,7 +3259,7 @@ function LifeTracker() {
     if (!travelForm.fromLocation.trim() || !travelForm.toLocation.trim() || !travelForm.travelDate) return;
     const base = {
       mode: travelForm.mode, fromLocation: travelForm.fromLocation.trim(), toLocation: travelForm.toLocation.trim(),
-      travelDate: travelForm.travelDate, travelTime: travelForm.travelTime, arrivalTime: travelForm.arrivalTime, amount: parseFloat(travelForm.amount) || 0,
+      travelDate: travelForm.travelDate, travelTime: travelForm.travelTime, arrivalTime: travelForm.arrivalTime, amount: parseFloat(travelForm.amount) || 0, distanceKm: parseFloat(travelForm.distanceKm) || 0,
       bookingDetails: travelForm.bookingDetails.trim(), reminderOffsets: travelForm.reminderOffsets, paymentStatus: travelForm.paymentStatus,
       notes: travelForm.notes || [],
     };
@@ -3207,6 +3271,7 @@ function LifeTracker() {
       const last = allLegs[allLegs.length - 1];
       base.legs = allLegs; base.toLocation = last.toLocation; base.arrivalTime = last.arriveTime; base.arrivalDate = last.arriveDate || "";
       base.amount = allLegs.reduce((a, l) => a + l.amount, 0);
+      base.distanceKm = allLegs.reduce((a, l) => a + (l.distanceKm || 0), 0);
     } else base.legs = null;
     if (editingTravelId) {
       setTravelPlans((prev) => prev.map((t) => (t.id !== editingTravelId ? t : { ...t, ...base })));
@@ -3773,6 +3838,7 @@ function LifeTracker() {
                           <TextField type="date" value={travelForm.arrivalDate} onChange={(e) => setTravelForm({ ...travelForm, arrivalDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                         </div>
                         <TextField type="number" placeholder={travelForm.legs.length ? "Leg 1 amount" : "Amount"} value={travelForm.amount} onChange={(e) => setTravelForm({ ...travelForm, amount: e.target.value })} style={{ fontFamily: mono }} />
+                        <TextField type="number" placeholder="Distance in km (optional)" value={travelForm.distanceKm} onChange={(e) => setTravelForm({ ...travelForm, distanceKm: e.target.value })} style={{ fontFamily: mono }} />
                         {travelForm.legs.map((l, i) => {
                           const timeIn = (v, on) => (travelTimeInputMode === "24h" ? <Time24Input value={v} onChange={on} style={{ fontFamily: mono }} /> : <Time12Input value={v} onChange={on} style={{ fontFamily: mono }} />);
                           return (
@@ -3795,12 +3861,10 @@ function LifeTracker() {
                               <TextField type="date" value={l.arriveDate} onChange={(e) => updateTravelLeg(l.id, { arriveDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                               {timeIn(l.arriveTime, (v) => updateTravelLeg(l.id, { arriveTime: v }))}
                               <TextField type="number" placeholder="Leg amount" value={l.amount} onChange={(e) => updateTravelLeg(l.id, { amount: e.target.value })} style={{ fontFamily: mono }} />
+                              <TextField type="number" placeholder="Leg distance in km (optional)" value={l.distanceKm || ""} onChange={(e) => updateTravelLeg(l.id, { distanceKm: e.target.value })} style={{ fontFamily: mono }} />
                             </div>
                           );
                         })}
-                        <button onClick={addTravelLeg} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: hexA(BRASS_HEX, 0.1), border: `1.5px dashed ${BRASS}`, color: BRASS, borderRadius: 12, padding: "10px 12px", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
-                          <Plus size={16} /> Add connecting leg (bus, train...)
-                        </button>
                         <JourneySummary legs={buildTravelLegs()} />
                         <div>
                           <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Payment status</div>
@@ -7528,6 +7592,7 @@ function LifeTracker() {
               options={[
                 {id:"overview",label:"Overview",icon:TrendingUp},
                 {id:"finance",label:"Finance",icon:Wallet},
+                {id:"travel",label:"Travel",icon:Plane},
                 {id:"habits",label:"Habits",icon:Flame}
               ]} />
           </Card>
@@ -7827,6 +7892,18 @@ function LifeTracker() {
               </Card>
             </>}
           </>}
+
+          {progressSubTab === "travel" && (() => {
+            const chains = connectJourneys(travelPlans).filter((c) => matchesPeriod(c[0].departDate));
+            return <>
+              <div className="progress-section-head"><div className="progress-section-title">{fmtPeriod}</div></div>
+              {chains.length ? <>
+                <JourneyTotals chains={chains} />
+                <div className="progress-section-head"><div className="progress-section-title">Journey summary</div></div>
+                {chains.map((c, i) => <JourneySummary key={i} legs={c} minLegs={1} />)}
+              </> : <div className="progress-empty">No journeys in this period. Add trips in the Travel tab and connected ones are linked automatically.</div>}
+            </>;
+          })()}
 
           {progressSubTab === "habits" && <>
             {/* Overall habit progress ring + completed/total/percentage summary. */}
