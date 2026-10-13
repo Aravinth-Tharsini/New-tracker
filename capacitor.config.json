@@ -1,5 +1,4 @@
-{
-  "appId": "com.aravinth.lifetracker",
-  "appName": "Life Tracker",
-  "webDir": "www"
+"server": {
+  "url": "https://new-tracker-theta.vercel.app",
+  "cleartext": false
 }
