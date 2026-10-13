@@ -37,6 +37,8 @@ jobs:
 
       - name: Use my app icon
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq imagemagick
           im() { if command -v magick >/dev/null 2>&1; then magick "$@"; else convert "$@"; fi; }
           RES=android/app/src/main/res
           rm -rf $RES/mipmap-anydpi-v26
@@ -53,7 +55,7 @@ jobs:
         run: |
           if [ -n "$KEYSTORE_B64" ]; then
             mkdir -p ~/.android
-            echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+            echo "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > ~/.android/debug.keystore
           fi
 
       - name: Allow notifications and exact alarms
