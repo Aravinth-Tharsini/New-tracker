@@ -8064,12 +8064,7 @@ function LifeTracker() {
             </button>
           </div>
 
-          {window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() ? (
-          <Card style={{ marginBottom: 9 }}>
-            <SectionLabel>Reminders</SectionLabel>
-            <div style={{ fontSize: 14, color: INK_FAINT }}>Reminders are sent by this app directly on your phone, so you do not need to enable push. If they do not appear, allow notifications and alarms for this app in Android settings.</div>
-          </Card>
-          ) : (
+          {window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() ? null : (
           <Card style={{ marginBottom: 9 }}>
             <SectionLabel>Push notifications</SectionLabel>
             <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 10 }}>
