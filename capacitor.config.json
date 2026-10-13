@@ -1,6 +1,6 @@
 {
-  "appId": "com.your.realid",
-  "appName": "Your Real Name",
+  "appId": "com.aravinth.lifetracker",
+  "appName": "Life Tracker",
   "webDir": "www",
   "server": {
     "url": "https://new-tracker-theta.vercel.app",
