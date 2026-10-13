@@ -14,10 +14,31 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3" />
   <meta name="theme-color" content="#F5F5F7" />
   <meta name="color-scheme" content="light dark" />
+  <!-- Paint the real page + system bars dark/light BEFORE the app loads, so the status bar and
+       the strip behind the gesture-nav bar never flash/stay gray or white. -->
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem("life-tracker:__store__");
+        var store = raw ? JSON.parse(raw) : {};
+        var dark = store.darkMode != null ? JSON.parse(store.darkMode) === true
+          : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var bg = dark ? "#000000" : "#F5F5F7";
+        var d = document.documentElement;
+        d.style.background = bg;
+        d.style.colorScheme = dark ? "dark" : "light";
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute("content", bg);
+        var c = document.querySelector('meta[name="color-scheme"]');
+        if (c) c.setAttribute("content", dark ? "dark" : "light");
+        document.addEventListener("DOMContentLoaded", function () { document.body.style.background = bg; });
+      } catch (e) {}
+    })();
+  </script>
 
   <!-- iOS: run as a standalone app with no browser chrome when added to Home Screen -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Life Tracker" />
 
   <!-- Android/Chrome: same, for "Add to Home screen" -->
@@ -47,6 +68,7 @@
 /* ===== SIMPLE MOBILE AUTO-FIT UI ===== */
 *{box-sizing:border-box;}
 html,#root{width:100%;max-width:100%;min-height:100%;margin:0;overflow-x:hidden;}
+html{min-height:100vh;min-height:100dvh;background-color:inherit;}
 /* IMPORTANT: overflow-x:hidden must NOT also be set on <body> at the same time as <html>.
    Stacking it on both is a known iOS/WebKit trigger that can silently disable vertical
    touch-scrolling on the whole page (content renders, but scrolling stops responding
@@ -852,7 +874,7 @@ function journeySummary(legs) {
     if (prev.arr == null || r.dep == null) return;
     const w = Math.round((r.dep - prev.arr) / 60000);
     if (w < 0) warnings.push(`Leg ${i + 1} departs before leg ${i} arrives. Check the dates.`);
-    else { r.wait = w; if (w < 20) warnings.push(`Leg ${i} to ${i + 1}: only ${w} min to connect.`); }
+    else { r.wait = w; }
   });
   const travelMin = rows.reduce((a, r) => a + (r.dur || 0), 0);
   const waitMin = rows.reduce((a, r) => a + (r.wait || 0), 0);
@@ -879,7 +901,7 @@ function JourneySummary({ legs }) {
       {j.rows.map((r, i) => (
         <div key={i}>
           {i > 0 && (
-            <div style={{ margin: "4px 0 4px 8px", paddingLeft: 10, borderLeft: `2px dashed ${BRASS_DIM}`, fontSize: 12, fontWeight: 700, color: r.wait != null && r.wait < 20 ? CORAL : INK_DIM }}>
+            <div style={{ margin: "4px 0 4px 8px", paddingLeft: 10, borderLeft: `2px dashed ${BRASS_DIM}`, fontSize: 12, fontWeight: 700, color: INK_DIM }}>
               {r.wait != null ? `Wait ${fmtLongDur(r.wait)}` : "Wait: set times"}
             </div>
           )}
