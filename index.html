@@ -958,6 +958,17 @@ async function geocodePlace(name) {
   const tries = [name, cleaned, bigWord.length >= 5 ? bigWord : ""].filter((v, i, a) => v && a.indexOf(v) === i);
   let hit = null;
   for (const q of tries) { hit = await ask(q, "&countrycodes=in"); if (hit) break; } // India first so "Salem" means Salem, Tamil Nadu
+  if (!hit) {
+    // Photon (also OpenStreetMap data) forgives spelling mistakes, e.g. "Dodballapura" for "Doddaballapura".
+    for (const q of tries) {
+      try {
+        const r = await fetch("https://photon.komoot.io/api/?limit=1&lang=en&lat=20.6&lon=78.9&q=" + encodeURIComponent(q));
+        const j = r.ok ? await r.json() : null;
+        const f = j && j.features && j.features[0];
+        if (f && f.geometry && f.geometry.coordinates) { hit = { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }; break; }
+      } catch (e) { /* ignore, fall through */ }
+    }
+  }
   if (!hit) hit = await ask(name, "");
   geoCache[key] = hit;
   return hit;
