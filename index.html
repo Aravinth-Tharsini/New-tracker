@@ -1108,6 +1108,10 @@ async function saveBackupFile(filename, content, mime, opts = {}) {
   }
   if (!P) { browserDownload(filename, content, mime); return { ok: true, where: "your Downloads folder" }; }
   let saved = null;
+  if (opts.download && P.AlarmRing && P.AlarmRing.saveDownload) {
+    // Writes straight into the phone's Downloads/LifeTracker folder (no share sheet needed).
+    try { const d = await P.AlarmRing.saveDownload({ filename, data: content, mime }); return { ok: true, where: (d && d.path) || "Downloads/LifeTracker" }; } catch (e) {}
+  }
   if (opts.askPermission) {
     // Shows Android's storage permission prompt where the phone's Android version uses one.
     try { const st = await P.Filesystem.checkPermissions(); if (st && st.publicStorage !== "granted") await P.Filesystem.requestPermissions(); } catch (e) {}
@@ -1131,7 +1135,12 @@ async function saveBackupFile(filename, content, mime, opts = {}) {
   return { ok: !!saved, saved, where: saved ? (saved.dir === "DOCUMENTS" ? "Documents/LifeTracker" : saved.dir === "EXTERNAL" ? "Android/data folder (LifeTracker)" : "app storage") : null };
 }
 function downloadFile(filename, content, mime) {
-  if (nativeFS()) { saveBackupFile(filename, content, mime, { share: true }); return; }
+  if (nativeFS()) {
+    saveBackupFile(filename, content, mime, { share: true, download: !/calendar/i.test(mime) }).then((r) => {
+      if (r && r.ok && r.where && !r.shared) { try { alert("Saved to " + r.where); } catch (e) {} }
+    });
+    return;
+  }
   browserDownload(filename, content, mime);
 }
 
@@ -2365,7 +2374,7 @@ function LifeTracker() {
     const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, exportedAt: new Date().toISOString() };
     const fname = `life-tracker-backup-${formatDMYForFilename(dateKey())}.json`;
     let r;
-    try { r = await saveBackupFile(fname, JSON.stringify(payload, null, 2), "application/json", { share: !isAuto, askPermission: !isAuto }); }
+    try { r = await saveBackupFile(fname, JSON.stringify(payload, null, 2), "application/json", { share: !isAuto, askPermission: !isAuto, download: true }); }
     catch (e) { r = { ok: false }; }
     if (r.needsUpdate) setImportMessage("Export needs the newest app. Build and install the new APK (it adds the file and share plugins), then try again.");
     else if (r.shareError) setImportMessage(`Saved to ${r.where}, but the share sheet failed: ${r.shareError}`);
