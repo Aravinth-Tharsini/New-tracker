@@ -995,8 +995,10 @@ function haversineKm(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
-// Returns km (number), or null when the places cannot be found with confidence. Throws when offline.
-async function lookupDistanceKm(from, to, mode) {
+// Returns { km, minutes } (minutes only for Bus / Car / Bike), or null when the places cannot be found with confidence.
+// Throws when offline.
+const ROAD_TIME_FACTOR = { Bus: 1.25, Car: 1, Bike: 1.1 }; // the road router assumes car speed, a bus is slower
+async function lookupRoute(from, to, mode) {
   let a = await geocodePlace(from);
   if (!a) return null;
   let b = await geocodePlace(to);
@@ -1008,13 +1010,26 @@ async function lookupDistanceKm(from, to, mode) {
     if (b.guess && haversineKm(a, b) > 300) { b = await geocodePlace(to, a); if (!b) return null; }
   }
   const straight = haversineKm(a, b);
-  if (mode === "Flight") return Math.round(straight);
+  if (mode === "Flight") return { km: Math.round(straight), minutes: null };
+  const factor = ROAD_TIME_FACTOR[mode];
   try {
     const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`);
     const j = await r.json();
-    if (j && j.routes && j.routes[0] && j.routes[0].distance > 0) return Math.round(j.routes[0].distance / 100) / 10;
+    if (j && j.routes && j.routes[0] && j.routes[0].distance > 0) {
+      return { km: Math.round(j.routes[0].distance / 100) / 10, minutes: factor ? Math.max(1, Math.round((j.routes[0].duration / 60) * factor)) : null };
+    }
   } catch (e) { /* fall back to the straight-line estimate below */ }
-  return Math.round(straight * 1.3 * 10) / 10; // road/rail is usually about 30% longer than the straight line
+  const km = Math.round(straight * 1.3 * 10) / 10; // road/rail is usually about 30% longer than the straight line
+  return { km, minutes: factor ? Math.round((km / 40) * 60) : null };
+}
+async function lookupDistanceKm(from, to, mode) { const r = await lookupRoute(from, to, mode); return r ? r.km : null; }
+// Departure date + time + minutes -> arrival date and time.
+function estimateArrival(depDate, depTime, minutes) {
+  if (!depDate || !depTime || !(minutes > 0)) return null;
+  const d = new Date(depDate + "T" + depTime + ":00");
+  if (Number.isNaN(d.getTime())) return null;
+  d.setMinutes(d.getMinutes() + minutes);
+  return { date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`, time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` };
 }
 function DistHint({ status }) {
   if (!status) return null;
@@ -1120,7 +1135,7 @@ function JourneySummary({ legs, minLegs = 2 }) {
             <TravelModeIcon mode={r.leg.mode} size={16} color={BRASS} style={{ flexShrink: 0, marginTop: 2 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>{r.leg.fromLocation} → {r.leg.toLocation}</div>
-              <div style={{ fontFamily: mono, fontSize: 12, color: INK_DIM, marginTop: 1 }}>{stamp(r.leg.departDate, r.leg.departTime)} → {stamp(r.leg.arriveDate || r.leg.departDate, r.leg.arriveTime)}</div>
+              <div style={{ fontFamily: mono, fontSize: 12, color: INK_DIM, marginTop: 1 }}>{stamp(r.leg.departDate, r.leg.departTime)} → {stamp(r.leg.arriveDate || r.leg.departDate, r.leg.arriveTime)}{r.leg.arriveEstimated ? " (est.)" : ""}</div>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
               <div style={{ fontFamily: mono, fontSize: 12, fontWeight: 700, color: TEAL }}>{r.dur != null ? fmtLongDur(r.dur) : "-"}</div>
@@ -3445,14 +3460,16 @@ function LifeTracker() {
   const travelCardRefs = useRef({});
   const blankTravelForm = () => ({ mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", arrivalTime: "", arrivalDate: "", legs: [], amount: "", distanceKm: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [] });
   const [travelForm, setTravelForm] = useState(blankTravelForm());
-  // Auto distance: when From + To (and mode) are filled, fetch the km online. Never overwrites a number you typed yourself.
+  // Auto distance (and, for Bus / Car / Bike, an estimated arrival time): when From + To (and mode) are filled, look them up online.
+  // Never overwrites a number or time you typed yourself.
   const autoDistRef = useRef({});
   const [distStatus, setDistStatus] = useState({});
-  const distTargetsKey = JSON.stringify([travelForm.mode, travelForm.fromLocation, travelForm.toLocation, !!travelForm.distanceKm, (travelForm.legs || []).map((l) => [l.id, l.mode, l.fromLocation, l.toLocation, !!l.distanceKm])]);
+  const [timeEst, setTimeEst] = useState({}); // target id -> the estimated arrival time that was filled in
+  const distTargetsKey = JSON.stringify([travelForm.mode, travelForm.fromLocation, travelForm.toLocation, !!travelForm.distanceKm, travelForm.travelDate, travelForm.travelTime, !!travelForm.arrivalTime, (travelForm.legs || []).map((l) => [l.id, l.mode, l.fromLocation, l.toLocation, !!l.distanceKm, l.departDate, l.departTime, !!l.arriveTime])]);
   useEffect(() => {
     if (!showAddTravel) return undefined;
     let cancelled = false;
-    const targets = [{ id: "main", mode: travelForm.mode, from: travelForm.fromLocation, to: travelForm.toLocation }, ...(travelForm.legs || []).map((l) => ({ id: l.id, mode: l.mode, from: l.fromLocation, to: l.toLocation }))];
+    const targets = [{ id: "main", mode: travelForm.mode, from: travelForm.fromLocation, to: travelForm.toLocation, depDate: travelForm.travelDate, depTime: travelForm.travelTime, arrTime: travelForm.arrivalTime, km: travelForm.distanceKm }, ...(travelForm.legs || []).map((l) => ({ id: l.id, mode: l.mode, from: l.fromLocation, to: l.toLocation, depDate: l.departDate, depTime: l.departTime, arrTime: l.arriveTime, km: l.distanceKm }))];
     const setStat = (id, v) => setDistStatus((st) => ({ ...st, [id]: v }));
     const timer = setTimeout(async () => {
       for (const t of targets) {
@@ -3461,22 +3478,38 @@ function LifeTracker() {
         if (from.length < 3 || to.length < 3) { setStat(t.id, ""); continue; }
         const key = [normLoc(from), normLoc(to), t.mode].join("|");
         const rec = autoDistRef.current[t.id];
-        const boxNow = t.id === "main" ? travelForm.distanceKm : ((travelForm.legs || []).find((l) => l.id === t.id) || {}).distanceKm;
-        const boxEmpty = boxNow === undefined || boxNow === null || boxNow === "";
-        if (rec && rec.key === key && !boxEmpty) continue; // same places and a number is there: nothing to do (empty box = fill again)
+        const kmEmpty = t.km === undefined || t.km === null || t.km === "";
+        const needTime = !!ROAD_TIME_FACTOR[t.mode] && !!t.depDate && !!t.depTime && !t.arrTime;
+        const sameKey = !!rec && rec.key === key;
+        if (sameKey && !kmEmpty && !needTime) continue; // same places, a number is there, no time to fill
         setStat(t.id, "loading");
         try {
-          const km = await lookupDistanceKm(from, to, t.mode);
-          if (cancelled) return;
-          if (km == null) { autoDistRef.current[t.id] = { key, value: null }; setStat(t.id, "notfound"); continue; }
-          autoDistRef.current[t.id] = { key, value: String(km) };
+          let km, minutes;
+          if (sameKey && rec.value != null) { km = Number(rec.value); minutes = rec.minutes; }
+          else {
+            const res = await lookupRoute(from, to, t.mode);
+            if (cancelled) return;
+            if (!res) { autoDistRef.current[t.id] = { key, value: null, minutes: null }; setStat(t.id, "notfound"); continue; }
+            km = res.km; minutes = res.minutes;
+          }
           const prevAuto = rec ? rec.value : null;
+          autoDistRef.current[t.id] = { key, value: String(km), minutes: minutes != null ? minutes : null };
+          const arr = needTime ? estimateArrival(t.depDate, t.depTime, minutes) : null;
           setTravelForm((f) => {
-            const cur = t.id === "main" ? f.distanceKm : ((f.legs || []).find((l) => l.id === t.id) || {}).distanceKm;
-            const typedByUser = cur !== undefined && cur !== null && cur !== "" && String(cur) !== String(prevAuto);
-            if (typedByUser) return f;
-            return t.id === "main" ? { ...f, distanceKm: String(km) } : { ...f, legs: f.legs.map((l) => (l.id === t.id ? { ...l, distanceKm: String(km) } : l)) };
+            const isMain = t.id === "main";
+            const leg = isMain ? f : (f.legs || []).find((l) => l.id === t.id) || {};
+            const cur = leg.distanceKm;
+            const typedKm = cur !== undefined && cur !== null && cur !== "" && String(cur) !== String(prevAuto);
+            const patch = {};
+            if (!typedKm) patch.distanceKm = String(km);
+            if (arr && !(isMain ? f.arrivalTime : leg.arriveTime)) {
+              if (isMain) { patch.arrivalTime = arr.time; if (arr.date !== f.travelDate) patch.arrivalDate = arr.date; }
+              else { patch.arriveTime = arr.time; patch.arriveDate = arr.date; }
+            }
+            if (!Object.keys(patch).length) return f;
+            return isMain ? { ...f, ...patch } : { ...f, legs: f.legs.map((l) => (l.id === t.id ? { ...l, ...patch } : l)) };
           });
+          if (arr) setTimeEst((e) => ({ ...e, [t.id]: arr.time }));
           setStat(t.id, "auto");
         } catch (e) { if (!cancelled) setStat(t.id, "offline"); }
       }
@@ -3484,7 +3517,7 @@ function LifeTracker() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [distTargetsKey, showAddTravel]);
 
-  // Trips saved earlier (or without km) get their distance filled in automatically in the background.
+  // Trips saved earlier get missing km, and (Bus / Car / Bike) a missing arrival time, filled in automatically in the background.
   const backfillTriedRef = useRef({});
   useEffect(() => {
     if (!loaded) return undefined;
@@ -3493,11 +3526,15 @@ function LifeTracker() {
     travelPlans.forEach((t) => {
       if (t.dismissed) return;
       const multi = Array.isArray(t.legs) && t.legs.length > 1;
-      (multi ? t.legs : [t]).forEach((l, i) => {
+      (multi ? t.legs : [t]).forEach((l, i, arr) => {
         const from = (l.fromLocation || "").trim(), to = (l.toLocation || "").trim(), mode = l.mode || t.mode;
-        if (from.length < 3 || to.length < 3 || parseFloat(l.distanceKm) > 0) return;
-        const key = [t.id, i, normLoc(from), normLoc(to), mode].join("|");
-        if (!backfillTriedRef.current[key]) needs.push({ planId: t.id, idx: i, multi, from, to, mode, key });
+        const depDate = multi ? l.departDate : t.travelDate, depTime = multi ? l.departTime : t.travelTime;
+        const hasArr = multi ? l.arriveTime : t.arrivalTime;
+        const needKm = !(parseFloat(l.distanceKm) > 0);
+        const needTime = !!ROAD_TIME_FACTOR[mode] && !!depDate && !!depTime && !hasArr;
+        if (from.length < 3 || to.length < 3 || (!needKm && !needTime)) return;
+        const key = [t.id, i, normLoc(from), normLoc(to), mode, needKm ? "k" : "", needTime ? "t" : ""].join("|");
+        if (!backfillTriedRef.current[key]) needs.push({ planId: t.id, idx: i, multi, isLast: i === arr.length - 1, nextDep: multi && arr[i + 1] ? journeyStamp(arr[i + 1].departDate, arr[i + 1].departTime) : null, from, to, mode, depDate, depTime, needKm, needTime, key });
       });
     });
     if (!needs.length) return undefined;
@@ -3505,17 +3542,31 @@ function LifeTracker() {
       for (const n of needs) {
         if (cancelled) return;
         try {
-          const km = await lookupDistanceKm(n.from, n.to, n.mode);
+          const res = await lookupRoute(n.from, n.to, n.mode);
           if (cancelled) return;
           backfillTriedRef.current[n.key] = true;
-          if (km == null) continue;
+          if (!res) continue;
+          let arr = n.needTime ? estimateArrival(n.depDate, n.depTime, res.minutes) : null;
+          // An estimate that would arrive after the next leg has already left is not used.
+          if (arr && n.nextDep != null && journeyStamp(arr.date, arr.time) > n.nextDep) arr = null;
           setTravelPlans((prev) => prev.map((t) => {
             if (t.id !== n.planId) return t;
             if (n.multi && Array.isArray(t.legs)) {
-              const legs = t.legs.map((l, i) => (i === n.idx && !(parseFloat(l.distanceKm) > 0) ? { ...l, distanceKm: km } : l));
-              return { ...t, legs, distanceKm: legs.reduce((a, l) => a + (parseFloat(l.distanceKm) || 0), 0) };
+              const legs = t.legs.map((l, i) => {
+                if (i !== n.idx) return l;
+                const out = { ...l };
+                if (n.needKm && !(parseFloat(l.distanceKm) > 0)) out.distanceKm = res.km;
+                if (arr && !l.arriveTime) { out.arriveTime = arr.time; out.arriveDate = arr.date; out.arriveEstimated = true; }
+                return out;
+              });
+              const next = { ...t, legs, distanceKm: legs.reduce((a, l) => a + (parseFloat(l.distanceKm) || 0), 0) };
+              if (n.isLast && arr && !t.arrivalTime) { next.arrivalTime = arr.time; next.arrivalDate = arr.date; }
+              return next;
             }
-            return parseFloat(t.distanceKm) > 0 ? t : { ...t, distanceKm: km };
+            const next = { ...t };
+            if (n.needKm && !(parseFloat(t.distanceKm) > 0)) next.distanceKm = res.km;
+            if (arr && !t.arrivalTime) { next.arrivalTime = arr.time; next.arrivalDate = arr.date !== t.travelDate ? arr.date : (t.arrivalDate || ""); next.arrivalEstimated = true; }
+            return next;
           }));
         } catch (e) { return; } // offline: try again next time the trips change or the app opens
       }
@@ -3652,7 +3703,7 @@ function LifeTracker() {
   });
   const removeTravelLeg = (id) => setTravelForm((f) => ({ ...f, legs: f.legs.filter((l) => l.id !== id) }));
   const openEditTravel = (t) => {
-    autoDistRef.current = {}; setDistStatus({});
+    autoDistRef.current = {}; setDistStatus({}); setTimeEst({});
     const multi = Array.isArray(t.legs) && t.legs.length > 1;
     const l1 = multi ? t.legs[0] : null;
     setTravelForm({
@@ -3674,7 +3725,7 @@ function LifeTracker() {
     });
   };
   const cancelTravelForm = () => {
-    autoDistRef.current = {}; setDistStatus({});
+    autoDistRef.current = {}; setDistStatus({}); setTimeEst({});
     const wasEditingId = editingTravelId;
     setShowAddTravel(false);
     setEditingTravelId(null);
@@ -4266,6 +4317,7 @@ function LifeTracker() {
                           ) : (
                             <Time12Input value={travelForm.arrivalTime} onChange={(v) => setTravelForm({ ...travelForm, arrivalTime: v })} style={{ fontFamily: mono }} />
                           )}
+                          {timeEst.main && timeEst.main === travelForm.arrivalTime && <div style={{ fontSize: 12, color: TEAL, padding: "3px 2px 0" }}>Arrival time estimated from the road route (approx.). You can change it.</div>}
                         </div>
                         <div>
                           <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Arrival date (only if different from travel date)</div>
@@ -4295,6 +4347,7 @@ function LifeTracker() {
                               <div style={{ fontSize: 12, color: INK_FAINT }}>Arrival date &amp; time</div>
                               <TextField type="date" value={l.arriveDate} onChange={(e) => updateTravelLeg(l.id, { arriveDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                               {timeIn(l.arriveTime, (v) => updateTravelLeg(l.id, { arriveTime: v }))}
+                              {timeEst[l.id] && timeEst[l.id] === l.arriveTime && <div style={{ fontSize: 12, color: TEAL, padding: "3px 2px 0" }}>Arrival time estimated from the road route (approx.). You can change it.</div>}
                               <TextField type="number" placeholder="Leg amount" value={l.amount} onChange={(e) => updateTravelLeg(l.id, { amount: e.target.value })} style={{ fontFamily: mono }} />
                               <TextField type="number" placeholder="Leg distance in km (optional)" value={l.distanceKm || ""} onChange={(e) => updateTravelLeg(l.id, { distanceKm: e.target.value })} style={{ fontFamily: mono }} />
                               <DistHint status={distStatus[l.id]} />
