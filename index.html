@@ -1096,8 +1096,22 @@ function nativeFS() {
 }
 async function saveBackupFile(filename, content, mime, opts = {}) {
   const P = nativeFS();
+  const cap0 = window.Capacitor;
+  const isNative = !!(cap0 && cap0.isNativePlatform && cap0.isNativePlatform());
+  if (!P && isNative) {
+    // Installed APK is older than this page and has no file plugins: try the system share sheet, else explain.
+    try {
+      const f = new File([content], filename, { type: mime });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title: filename }); return { ok: true, shared: true }; }
+    } catch (e) { if (/abort|cancel/i.test(String(e && (e.name || e.message)))) return { ok: false, cancelled: true }; }
+    return { ok: false, needsUpdate: true };
+  }
   if (!P) { browserDownload(filename, content, mime); return { ok: true, where: "your Downloads folder" }; }
   let saved = null;
+  if (opts.askPermission) {
+    // Shows Android's storage permission prompt where the phone's Android version uses one.
+    try { const st = await P.Filesystem.checkPermissions(); if (st && st.publicStorage !== "granted") await P.Filesystem.requestPermissions(); } catch (e) {}
+  }
   for (const dir of ["DOCUMENTS", "EXTERNAL", "DATA"]) {
     try {
       const r = await P.Filesystem.writeFile({ path: "LifeTracker/" + filename, data: content, directory: dir, encoding: "utf8", recursive: true });
@@ -1111,6 +1125,7 @@ async function saveBackupFile(filename, content, mime, opts = {}) {
       return { ok: true, shared: true, saved };
     } catch (e) {
       if (/cancel/i.test(String(e && (e.message || e)))) return { ok: !!saved, cancelled: true, saved };
+      return { ok: !!saved, saved, shareError: String((e && e.message) || e).slice(0, 80), where: saved ? (saved.dir === "DOCUMENTS" ? "Documents/LifeTracker" : saved.dir === "EXTERNAL" ? "Android/data/<app>/files/LifeTracker" : "app storage") : null };
     }
   }
   return { ok: !!saved, saved, where: saved ? (saved.dir === "DOCUMENTS" ? "Documents/LifeTracker" : saved.dir === "EXTERNAL" ? "Android/data folder (LifeTracker)" : "app storage") : null };
@@ -2350,9 +2365,11 @@ function LifeTracker() {
     const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, exportedAt: new Date().toISOString() };
     const fname = `life-tracker-backup-${formatDMYForFilename(dateKey())}.json`;
     let r;
-    try { r = await saveBackupFile(fname, JSON.stringify(payload, null, 2), "application/json", { share: !isAuto }); }
+    try { r = await saveBackupFile(fname, JSON.stringify(payload, null, 2), "application/json", { share: !isAuto, askPermission: !isAuto }); }
     catch (e) { r = { ok: false }; }
-    if (!r.ok) setImportMessage("Backup failed. Please try again.");
+    if (r.needsUpdate) setImportMessage("Export needs the newest app. Build and install the new APK (it adds the file and share plugins), then try again.");
+    else if (r.shareError) setImportMessage(`Saved to ${r.where}, but the share sheet failed: ${r.shareError}`);
+    else if (!r.ok) setImportMessage("Backup failed. Please try again.");
     else if (r.shared) setImportMessage("Backup ready. Choose where to save or send it." + (r.saved && r.saved.dir === "DOCUMENTS" ? " A copy is also in Documents/LifeTracker." : ""));
     else if (r.cancelled) setImportMessage(r.saved ? `Backup saved to ${r.where || "Documents/LifeTracker"}.` : "Backup cancelled.");
     else setImportMessage(`${isAuto ? "Daily backup" : "Backup"} saved to ${r.where || "your device"}.`);
