@@ -53,9 +53,11 @@ jobs:
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
         run: |
+          mkdir -p ~/.android
           if [ -n "$KEYSTORE_B64" ]; then
-            mkdir -p ~/.android
             echo "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > ~/.android/debug.keystore
+          else
+            cp debug.keystore ~/.android/debug.keystore
           fi
 
       - name: Allow notifications and exact alarms
