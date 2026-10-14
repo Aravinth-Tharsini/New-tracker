@@ -939,37 +939,53 @@ function versionIsNewer(latest, current) {
 // distance with OSRM. Flights use the straight-line distance. If anything fails the km box stays editable by hand. ----
 const geoCache = {};
 let lastGeoCall = 0;
-async function geocodePlace(name) {
-  const key = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  if (!key) return null;
+// Finds a place on the map. Hits that are only a spelling-tolerant guess carry guess:true.
+// With an anchor (the other end of the trip) the search stays near it, which avoids same-name places far away.
+async function geocodePlace(name, anchor) {
+  const norm = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!norm) return null;
+  const key = norm + (anchor ? "@" + anchor.lat.toFixed(1) + "," + anchor.lon.toFixed(1) : "");
   if (geoCache[key] !== undefined) return geoCache[key];
-  const ask = async (q, extra) => {
+  const pause = async () => {
     const wait = lastGeoCall + 1100 - Date.now(); // Nominatim allows about 1 request per second
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     lastGeoCall = Date.now();
+  };
+  const ask = async (q, extra) => {
+    await pause();
     const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1" + extra + "&q=" + encodeURIComponent(q));
     if (!r.ok) throw new Error("geocode");
     const j = await r.json();
-    return j && j[0] ? { lat: parseFloat(j[0].lat), lon: parseFloat(j[0].lon) } : null;
+    return j && j[0] ? { lat: parseFloat(j[0].lat), lon: parseFloat(j[0].lon), guess: false } : null;
   };
-  // Station-style names such as "KSR BENGALURU (SBC)" or "ERODE JN (ED)" are cleaned up and retried, then the main place word.
+  const photon = async (q) => {
+    try {
+      await pause();
+      const bias = anchor ? `&lat=${anchor.lat}&lon=${anchor.lon}` : "&lat=20.6&lon=78.9";
+      const r = await fetch("https://photon.komoot.io/api/?limit=1&lang=en" + bias + "&q=" + encodeURIComponent(q));
+      const j = r.ok ? await r.json() : null;
+      const f = j && j.features && j.features[0];
+      if (f && f.geometry && f.geometry.coordinates) return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], guess: true };
+    } catch (e) { /* ignore */ }
+    return null;
+  };
+  // Station-style names such as "KSR BENGALURU (SBC" or "ERODE JN (ED)" are cleaned; generic words (railway, station, bus stand...) are dropped.
   const cleaned = String(name).replace(/\([^)]*\)?/g, " ").replace(/\bjn\b\.?/gi, "Junction").replace(/\s+/g, " ").trim();
-  const bigWord = cleaned.split(" ").sort((x, y) => y.length - x.length)[0] || "";
-  const tries = [name, cleaned, bigWord.length >= 5 ? bigWord : ""].filter((v, i, a) => v && a.indexOf(v) === i);
+  const words = cleaned.split(" ");
+  const sig = words.filter((w) => !GENERIC_LOC_WORDS.has(w.toLowerCase())).join(" ");
+  const bigWord = words.slice().sort((x, y) => y.length - x.length)[0] || "";
+  const tries = [name, cleaned, sig, bigWord.length >= 5 ? bigWord : ""].filter((v, i, arr) => v && arr.indexOf(v) === i);
   let hit = null;
-  for (const q of tries) { hit = await ask(q, "&countrycodes=in"); if (hit) break; } // India first so "Salem" means Salem, Tamil Nadu
-  if (!hit) {
-    // Photon (also OpenStreetMap data) forgives spelling mistakes, e.g. "Dodballapura" for "Doddaballapura".
-    for (const q of tries) {
-      try {
-        const r = await fetch("https://photon.komoot.io/api/?limit=1&lang=en&lat=20.6&lon=78.9&q=" + encodeURIComponent(q));
-        const j = r.ok ? await r.json() : null;
-        const f = j && j.features && j.features[0];
-        if (f && f.geometry && f.geometry.coordinates) { hit = { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }; break; }
-      } catch (e) { /* ignore, fall through */ }
-    }
+  if (anchor) {
+    const d = 2.5; // degrees, about 280 km each way
+    const box = `&bounded=1&viewbox=${anchor.lon - d},${anchor.lat + d},${anchor.lon + d},${anchor.lat - d}`;
+    for (const q of tries) { hit = await ask(q, box); if (hit) break; }
+    if (!hit) { for (const q of [sig, cleaned].filter((v, i, arr) => v && arr.indexOf(v) === i)) { const h = await photon(q); if (h && haversineKm(h, anchor) <= 300) { hit = h; break; } } }
+  } else {
+    for (const q of tries) { hit = await ask(q, "&countrycodes=in"); if (hit) break; } // India first so "Salem" means Salem, Tamil Nadu
+    if (!hit) { for (const q of [sig, cleaned, bigWord].filter((v, i, arr) => v && arr.indexOf(v) === i)) { hit = await photon(q); if (hit) break; } }
+    if (!hit) hit = await ask(name, "");
   }
-  if (!hit) hit = await ask(name, "");
   geoCache[key] = hit;
   return hit;
 }
@@ -979,12 +995,18 @@ function haversineKm(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
-// Returns km (number), or null when a place cannot be found. Throws when offline.
+// Returns km (number), or null when the places cannot be found with confidence. Throws when offline.
 async function lookupDistanceKm(from, to, mode) {
-  const a = await geocodePlace(from);
+  let a = await geocodePlace(from);
   if (!a) return null;
-  const b = await geocodePlace(to);
+  let b = await geocodePlace(to);
   if (!b) return null;
+  if (mode !== "Flight") {
+    // A spelling-tolerant guess that lands far away is probably a different place with a similar name:
+    // look again near the other end of the trip, and give no number (rather than a wrong one) if that fails.
+    if (a.guess && haversineKm(a, b) > 300) { a = await geocodePlace(from, b); if (!a) return null; }
+    if (b.guess && haversineKm(a, b) > 300) { b = await geocodePlace(to, a); if (!b) return null; }
+  }
   const straight = haversineKm(a, b);
   if (mode === "Flight") return Math.round(straight);
   try {
@@ -3426,7 +3448,7 @@ function LifeTracker() {
   // Auto distance: when From + To (and mode) are filled, fetch the km online. Never overwrites a number you typed yourself.
   const autoDistRef = useRef({});
   const [distStatus, setDistStatus] = useState({});
-  const distTargetsKey = JSON.stringify([travelForm.mode, travelForm.fromLocation, travelForm.toLocation, (travelForm.legs || []).map((l) => [l.id, l.mode, l.fromLocation, l.toLocation])]);
+  const distTargetsKey = JSON.stringify([travelForm.mode, travelForm.fromLocation, travelForm.toLocation, !!travelForm.distanceKm, (travelForm.legs || []).map((l) => [l.id, l.mode, l.fromLocation, l.toLocation, !!l.distanceKm])]);
   useEffect(() => {
     if (!showAddTravel) return undefined;
     let cancelled = false;
@@ -3439,7 +3461,9 @@ function LifeTracker() {
         if (from.length < 3 || to.length < 3) { setStat(t.id, ""); continue; }
         const key = [normLoc(from), normLoc(to), t.mode].join("|");
         const rec = autoDistRef.current[t.id];
-        if (rec && rec.key === key) continue;
+        const boxNow = t.id === "main" ? travelForm.distanceKm : ((travelForm.legs || []).find((l) => l.id === t.id) || {}).distanceKm;
+        const boxEmpty = boxNow === undefined || boxNow === null || boxNow === "";
+        if (rec && rec.key === key && !boxEmpty) continue; // same places and a number is there: nothing to do (empty box = fill again)
         setStat(t.id, "loading");
         try {
           const km = await lookupDistanceKm(from, to, t.mode);
@@ -3498,6 +3522,46 @@ function LifeTracker() {
     }, 2000);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [travelPlans, loaded]);
+
+
+  // One-time check of earlier auto-filled distances (they have decimals): a figure far above the real route is replaced.
+  useEffect(() => {
+    if (!loaded || !travelPlans.length) return undefined;
+    let done = false; try { done = localStorage.getItem("kmRepairV2") === "1"; } catch (e) {}
+    if (done) return undefined;
+    let cancelled = false;
+    const jobs = [];
+    travelPlans.forEach((t) => {
+      if (t.dismissed) return;
+      const multi = Array.isArray(t.legs) && t.legs.length > 1;
+      (multi ? t.legs : [t]).forEach((l, i) => {
+        const km = parseFloat(l.distanceKm), mode = l.mode || t.mode, from = (l.fromLocation || "").trim(), to = (l.toLocation || "").trim();
+        if (!(km > 0) || Number.isInteger(km) || mode === "Flight" || from.length < 3 || to.length < 3) return;
+        jobs.push({ planId: t.id, idx: i, multi, from, to, mode, km });
+      });
+    });
+    const timer = setTimeout(async () => {
+      for (const j of jobs) {
+        if (cancelled) return;
+        try {
+          const fresh = await lookupDistanceKm(j.from, j.to, j.mode);
+          if (cancelled) return;
+          if (fresh != null && j.km > fresh * 2.5 + 20) {
+            setTravelPlans((prev) => prev.map((t) => {
+              if (t.id !== j.planId) return t;
+              if (j.multi && Array.isArray(t.legs)) {
+                const legs = t.legs.map((l, i) => (i === j.idx ? { ...l, distanceKm: fresh } : l));
+                return { ...t, legs, distanceKm: legs.reduce((a, l) => a + (parseFloat(l.distanceKm) || 0), 0) };
+              }
+              return { ...t, distanceKm: fresh };
+            }));
+          }
+        } catch (e) { return; } // offline: run again next time
+      }
+      try { localStorage.setItem("kmRepairV2", "1"); } catch (e) {}
+    }, 4000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [loaded, travelPlans]);
 
   // Notifications are checked quietly in the background when the APK opens (no test button needed).
   const [notifBlocked, setNotifBlocked] = useState(false);
