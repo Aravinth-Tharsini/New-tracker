@@ -1081,12 +1081,43 @@ function toCSV(rows) {
   const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   return [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");
 }
-function downloadFile(filename, content, mime) {
+function browserDownload(filename, content, mime) {
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = filename; document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+// In the Android APK a blob "download" link does nothing, so files are written with the native
+// Filesystem plugin instead, and (for manual exports) handed to the Share sheet to save/send.
+function nativeFS() {
+  const cap = window.Capacitor;
+  return cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins && cap.Plugins.Filesystem ? cap.Plugins : null;
+}
+async function saveBackupFile(filename, content, mime, opts = {}) {
+  const P = nativeFS();
+  if (!P) { browserDownload(filename, content, mime); return { ok: true, where: "your Downloads folder" }; }
+  let saved = null;
+  for (const dir of ["DOCUMENTS", "EXTERNAL", "DATA"]) {
+    try {
+      const r = await P.Filesystem.writeFile({ path: "LifeTracker/" + filename, data: content, directory: dir, encoding: "utf8", recursive: true });
+      saved = { dir, uri: r.uri }; break;
+    } catch (e) {}
+  }
+  if (opts.share && P.Share) {
+    try {
+      const c = await P.Filesystem.writeFile({ path: filename, data: content, directory: "CACHE", encoding: "utf8" });
+      await P.Share.share({ title: filename, files: [c.uri], dialogTitle: "Save or send file" });
+      return { ok: true, shared: true, saved };
+    } catch (e) {
+      if (/cancel/i.test(String(e && (e.message || e)))) return { ok: !!saved, cancelled: true, saved };
+    }
+  }
+  return { ok: !!saved, saved, where: saved ? (saved.dir === "DOCUMENTS" ? "Documents/LifeTracker" : saved.dir === "EXTERNAL" ? "Android/data folder (LifeTracker)" : "app storage") : null };
+}
+function downloadFile(filename, content, mime) {
+  if (nativeFS()) { saveBackupFile(filename, content, mime, { share: true }); return; }
+  browserDownload(filename, content, mime);
 }
 
 const ROUTINE_ICON_EMOJI = {
@@ -2314,15 +2345,18 @@ function LifeTracker() {
   useEffect(() => { if (loaded) window.storage.set("pushSubscription", JSON.stringify(pushSubscription), false).catch(() => {}); }, [pushSubscription, loaded]);
 
   // ---- Data Link: export / import (offline backup) ----
-  const exportData = () => {
+  const exportData = async (auto) => {
+    const isAuto = auto === true; // the button passes a click event, the daily timer passes true
     const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, exportedAt: new Date().toISOString() };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `life-tracker-backup-${formatDMYForFilename(dateKey())}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setImportMessage("Backup file downloaded.");
+    const fname = `life-tracker-backup-${formatDMYForFilename(dateKey())}.json`;
+    let r;
+    try { r = await saveBackupFile(fname, JSON.stringify(payload, null, 2), "application/json", { share: !isAuto }); }
+    catch (e) { r = { ok: false }; }
+    if (!r.ok) setImportMessage("Backup failed. Please try again.");
+    else if (r.shared) setImportMessage("Backup ready. Choose where to save or send it." + (r.saved && r.saved.dir === "DOCUMENTS" ? " A copy is also in Documents/LifeTracker." : ""));
+    else if (r.cancelled) setImportMessage(r.saved ? `Backup saved to ${r.where || "Documents/LifeTracker"}.` : "Backup cancelled.");
+    else setImportMessage(`${isAuto ? "Daily backup" : "Backup"} saved to ${r.where || "your device"}.`);
+    return r.ok;
   };
   const autoExportTimerRef = useRef(null);
   useEffect(() => {
@@ -2330,8 +2364,7 @@ function LifeTracker() {
     if (lastAutoExportAt === today) return; // already downloaded once today
     if (autoExportTimerRef.current) clearTimeout(autoExportTimerRef.current);
     autoExportTimerRef.current = setTimeout(() => {
-      exportData();
-      setLastAutoExportAt(today);
+      exportData(true).then((ok) => { if (ok) setLastAutoExportAt(today); });
     }, 2500);
     return () => clearTimeout(autoExportTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -8240,7 +8273,7 @@ function LifeTracker() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${LINE}` }}>
                 <div style={{ paddingRight: 10 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>Auto-download backup daily</div>
-                  <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 2 }}>Works on any device, including phones. Downloads one backup file to your Downloads folder the first time you make a change each day.</div>
+                  <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 2 }}>Works on any device, including phones. Saves one backup file (Documents/LifeTracker on the app, Downloads in a browser) the first time you make a change each day.</div>
                 </div>
                 <button onClick={() => setAutoExportEnabled((v) => !v)} style={{ flexShrink: 0, width: 44, height: 26, borderRadius: 999, border: "none", cursor: "pointer", background: autoExportEnabled ? BRASS : LINE, position: "relative", padding: 0 }}>
                   <span style={{ position: "absolute", top: 2, left: autoExportEnabled ? 20 : 2, width: 22, height: 22, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "left 0.15s" }} />
