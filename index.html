@@ -2310,9 +2310,9 @@ function ProgressBar({ pct, color = BRASS }) { return <div style={{ height: 8, b
 function ActionButton({ onClick, label, icon: Icon, tone = BRASS, big, spinning }) {
   return <button onClick={onClick} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, background: tone, border: "none", color: "#FFFFFF", borderRadius: 980, padding: big ? "13px 24px" : "10px 17px", fontSize: big ? 16 : 14, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}><Icon size={big ? 17 : 15} className={spinning ? "spin-icon" : undefined} /> {label}</button>;
 }
-function ChipButton({ onClick, label, active, icon: Icon }) {
+function ChipButton({ onClick, label, active, icon: Icon, fill }) {
   return (
-    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 6, background: active ? BRASS : PANEL_2, border: "none", color: active ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 6, ...(fill ? { width: "100%", minWidth: 0, justifyContent: "flex-start", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : {}), background: active ? BRASS : PANEL_2, border: "none", color: active ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
       {Icon && <Icon size={14} strokeWidth={2.3} />}
       {label}
     </button>
@@ -6580,9 +6580,9 @@ function LifeTracker() {
                               </div>
 
                               {subOptions.length > 0 && (
-                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 16 }}>
                                   {subOptions.map((s) => (
-                                    <ChipButton key={s} label={s} icon={SUBCATEGORY_ICON[s]} active={activeSub === s} onClick={() => setFlow("dailyExpense", { sub: s })} />
+                                    <ChipButton fill key={s} label={s} icon={SUBCATEGORY_ICON[s]} active={activeSub === s} onClick={() => setFlow("dailyExpense", { sub: s })} />
                                   ))}
                                 </div>
                               )}
