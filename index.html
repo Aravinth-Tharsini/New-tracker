@@ -3648,17 +3648,51 @@ function LifeTracker() {
     window.addEventListener("app-update-ready", on);
     return () => window.removeEventListener("app-update-ready", on);
   }, []);
+  // Where APK updates come from: a GitHub repo ("user/repo") whose latest Release has the new APK. Set once in More.
+  const [updateRepo, setUpdateRepo] = useState(() => { try { return localStorage.getItem("apkUpdateRepo") || APK_UPDATE_REPO; } catch (e) { return APK_UPDATE_REPO; } });
+  const [repoDraft, setRepoDraft] = useState("");
+  const [editRepo, setEditRepo] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState("");
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const fetchLatestApk = async (repo) => {
+    const r = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+    if (!r.ok) throw new Error("release");
+    const j = await r.json();
+    if (!j || !j.tag_name || !versionIsNewer(j.tag_name, APP_VERSION)) return null;
+    const asset = (j.assets || []).find((x) => /\.apk$/i.test(x.name || ""));
+    return { version: String(j.tag_name).replace(/^v/i, ""), url: asset ? asset.browser_download_url : j.html_url };
+  };
   useEffect(() => {
     const cap = window.Capacitor;
-    if (!APK_UPDATE_REPO || !cap || !(cap.isNativePlatform && cap.isNativePlatform())) return;
+    if (!updateRepo || !cap || !(cap.isNativePlatform && cap.isNativePlatform())) return undefined;
     let cancelled = false;
-    fetch(`https://api.github.com/repos/${APK_UPDATE_REPO}/releases/latest`).then((r) => (r.ok ? r.json() : null)).then((j) => {
-      if (cancelled || !j || !j.tag_name || !versionIsNewer(j.tag_name, APP_VERSION)) return;
-      const asset = (j.assets || []).find((a) => /\.apk$/i.test(a.name || ""));
-      setApkUpdate({ version: String(j.tag_name).replace(/^v/i, ""), url: asset ? asset.browser_download_url : j.html_url });
-    }).catch(() => {});
+    fetchLatestApk(updateRepo).then((u) => { if (!cancelled && u) setApkUpdate(u); }).catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [updateRepo]);
+  const checkForUpdates = async () => {
+    setCheckingUpdate(true); setUpdateMsg("Checking...");
+    try {
+      if ("serviceWorker" in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) { await reg.update(); await new Promise((r) => setTimeout(r, 2500)); }
+      }
+    } catch (e) {}
+    if (window.__appUpdateReady) { setWebUpdateReady(true); setUpdateMsg(""); setCheckingUpdate(false); return; }
+    if (updateRepo) {
+      try {
+        const u = await fetchLatestApk(updateRepo);
+        if (u) { setApkUpdate(u); setUpdateMsg(""); setCheckingUpdate(false); return; }
+      } catch (e) { setUpdateMsg("Could not check for updates. Check your internet and the update source name."); setCheckingUpdate(false); return; }
+    }
+    setUpdateMsg(updateRepo ? "You have the latest version." : "No new web version found. Add the update source below to check for new APKs.");
+    setCheckingUpdate(false);
+  };
+  const saveUpdateRepo = () => {
+    const v = repoDraft.trim().replace(/^https?:\/\/github\.com\//i, "").replace(/\/+$/, "");
+    if (!/^[\w.-]+\/[\w.-]+$/.test(v)) { setUpdateMsg("Write it like username/New-tracker"); return; }
+    try { localStorage.setItem("apkUpdateRepo", v); } catch (e) {}
+    setUpdateRepo(v); setRepoDraft(""); setEditRepo(false); setUpdateMsg("Saved. Tap Check for update.");
+  };
   const applyWebUpdate = async () => {
     try {
       const reg = await navigator.serviceWorker.getRegistration();
@@ -8663,20 +8697,36 @@ function LifeTracker() {
 
       {page === "datalink" && (
         <div key="datalink-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
-          {(webUpdateReady || apkUpdate) && (
-            <>
-              <SectionLabel>App update</SectionLabel>
-              <Card style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Update available</div>
-                <div style={{ fontSize: 13, color: INK_FAINT, margin: "4px 0 10px", lineHeight: 1.4 }}>
-                  {apkUpdate ? `A new app version (${apkUpdate.version}) is ready. Download and install it. Your data stays on the phone.` : "A new version of the app is ready. Tap update to refresh. Your data stays safe."}
+          <SectionLabel>App update</SectionLabel>
+          <Card style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: (webUpdateReady || apkUpdate) ? BRASS : INK }}>{(webUpdateReady || apkUpdate) ? "Update available" : "App update"}</div>
+              <div style={{ fontSize: 12, color: INK_FAINT, fontFamily: mono }}>Version {APP_VERSION}</div>
+            </div>
+            <div style={{ fontSize: 13, color: INK_FAINT, margin: "4px 0 10px", lineHeight: 1.4 }}>
+              {apkUpdate ? `A new app version (${apkUpdate.version}) is ready. Download and install it. Your data stays on the phone.` : webUpdateReady ? "A new version of the app is ready. Tap update to refresh. Your data stays safe." : (updateMsg || "Tap the button to look for a new version.")}
+            </div>
+            {(webUpdateReady || apkUpdate) ? (
+              <button onClick={apkUpdate ? openApkUpdate : applyWebUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                <Download size={14} /> {apkUpdate ? "Download new app" : "Update now"}
+              </button>
+            ) : (
+              <button onClick={checkForUpdates} disabled={checkingUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: `1px solid ${BRASS}`, color: BRASS, borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: checkingUpdate ? 0.6 : 1 }}>
+                {checkingUpdate ? "Checking..." : "Check for update"}
+              </button>
+            )}
+            {(!updateRepo || editRepo) ? (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 12, color: INK_FAINT, marginBottom: 4 }}>Update source for new APKs (GitHub repo, like username/New-tracker)</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <TextField placeholder="username/New-tracker" value={repoDraft} onChange={(e) => setRepoDraft(e.target.value)} style={{ flex: 1 }} />
+                  <button onClick={saveUpdateRepo} style={{ background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "0 14px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Save</button>
                 </div>
-                <button onClick={apkUpdate ? openApkUpdate : applyWebUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                  <Download size={14} /> {apkUpdate ? "Download new app" : "Update now"}
-                </button>
-              </Card>
-            </>
-          )}
+              </div>
+            ) : (
+              <div onClick={() => { setRepoDraft(updateRepo); setEditRepo(true); }} style={{ fontSize: 12, color: INK_FAINT, marginTop: 8, cursor: "pointer" }}>Update source: {updateRepo} (change)</div>
+            )}
+          </Card>
           {notifBlocked && (
             <Card style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: CORAL }}>Notifications are blocked</div>
