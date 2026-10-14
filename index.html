@@ -49,7 +49,7 @@
     // this app installable and show the "Install app" / "Add to Home Screen" prompt.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("service-worker.js").then((reg) => {
+        navigator.serviceWorker.register("service-worker.js", { updateViaCache: "none" }).then((reg) => {
           // Tell the app (More screen only) when a newer version of the web app has been downloaded.
           const ready = () => { window.__appUpdateReady = true; window.dispatchEvent(new Event("app-update-ready")); };
           if (reg.waiting && navigator.serviceWorker.controller) ready();
@@ -927,7 +927,7 @@ function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // ---- App updates (shown on the More screen only) ----
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
 // repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
-const APP_VERSION = "2026.10.14";
+const APP_VERSION = "2026.10.15";
 const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
 function versionIsNewer(latest, current) {
   const a = String(latest || "").replace(/^[^0-9]*/, "").split(/[.\-]/).map((n) => parseInt(n, 10) || 0);
@@ -3668,8 +3668,24 @@ function LifeTracker() {
     fetchLatestApk(updateRepo).then((u) => { if (!cancelled && u) setApkUpdate(u); }).catch(() => {});
     return () => { cancelled = true; };
   }, [updateRepo]);
+  // Reads the live index.html (the service worker lets "?t=" requests go straight to the network) and compares
+  // its APP_VERSION with the running one, so a new version is found even if service-worker.js was not changed.
+  const checkWebVersion = async () => {
+    try {
+      const r = await fetch("index.html?t=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) return false;
+      const m = (await r.text()).match(/const APP_VERSION = "([^"]+)"/);
+      return !!(m && versionIsNewer(m[1], APP_VERSION));
+    } catch (e) { return false; }
+  };
+  useEffect(() => {
+    let off = false;
+    checkWebVersion().then((n) => { if (!off && n) setWebUpdateReady(true); });
+    return () => { off = true; };
+  }, []);
   const checkForUpdates = async () => {
     setCheckingUpdate(true); setUpdateMsg("Checking...");
+    if (await checkWebVersion()) { setWebUpdateReady(true); setUpdateMsg(""); setCheckingUpdate(false); return; }
     try {
       if ("serviceWorker" in navigator) {
         const reg = await navigator.serviceWorker.getRegistration();

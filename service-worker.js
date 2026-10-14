@@ -7,7 +7,7 @@
 // icons, manifest.json, or index.html itself. Changing this string is what makes the
 // activate handler below actually throw away old cached bytes and pull fresh ones.
 // If you forget to bump this, updated files can keep serving stale from cache indefinitely.
-const CACHE_NAME = "life-tracker-cache-v3";
+const CACHE_NAME = "life-tracker-cache-v4";
 
 // Core files that make up the app shell — cached immediately on install.
 const APP_SHELL = [
