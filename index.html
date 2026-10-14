@@ -928,7 +928,7 @@ function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
 // repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
 const APP_VERSION = "2026.10.14";
-const APK_UPDATE_REPO = "";
+const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
 function versionIsNewer(latest, current) {
   const a = String(latest || "").replace(/^[^0-9]*/, "").split(/[.\-]/).map((n) => parseInt(n, 10) || 0);
   const b = String(current || "").replace(/^[^0-9]*/, "").split(/[.\-]/).map((n) => parseInt(n, 10) || 0);
@@ -3648,14 +3648,13 @@ function LifeTracker() {
     window.addEventListener("app-update-ready", on);
     return () => window.removeEventListener("app-update-ready", on);
   }, []);
-  // Where APK updates come from: a GitHub repo ("user/repo") whose latest Release has the new APK. Set once in More.
-  const [updateRepo, setUpdateRepo] = useState(() => { try { return localStorage.getItem("apkUpdateRepo") || APK_UPDATE_REPO; } catch (e) { return APK_UPDATE_REPO; } });
-  const [repoDraft, setRepoDraft] = useState("");
-  const [editRepo, setEditRepo] = useState(false);
+  // APK updates come from the fixed GitHub repo in APK_UPDATE_REPO (top of the script). No manual entry.
+  const updateRepo = APK_UPDATE_REPO;
   const [updateMsg, setUpdateMsg] = useState("");
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const fetchLatestApk = async (repo) => {
     const r = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+    if (r.status === 404) return null; // the repo has no Release yet: nothing to update to
     if (!r.ok) throw new Error("release");
     const j = await r.json();
     if (!j || !j.tag_name || !versionIsNewer(j.tag_name, APP_VERSION)) return null;
@@ -3684,14 +3683,8 @@ function LifeTracker() {
         if (u) { setApkUpdate(u); setUpdateMsg(""); setCheckingUpdate(false); return; }
       } catch (e) { setUpdateMsg("Could not check for updates. Check your internet and the update source name."); setCheckingUpdate(false); return; }
     }
-    setUpdateMsg(updateRepo ? "You have the latest version." : "No new web version found. Add the update source below to check for new APKs.");
+    setUpdateMsg("You have the latest version.");
     setCheckingUpdate(false);
-  };
-  const saveUpdateRepo = () => {
-    const v = repoDraft.trim().replace(/^https?:\/\/github\.com\//i, "").replace(/\/+$/, "");
-    if (!/^[\w.-]+\/[\w.-]+$/.test(v)) { setUpdateMsg("Write it like username/New-tracker"); return; }
-    try { localStorage.setItem("apkUpdateRepo", v); } catch (e) {}
-    setUpdateRepo(v); setRepoDraft(""); setEditRepo(false); setUpdateMsg("Saved. Tap Check for update.");
   };
   const applyWebUpdate = async () => {
     try {
@@ -8714,17 +8707,6 @@ function LifeTracker() {
               <button onClick={checkForUpdates} disabled={checkingUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: `1px solid ${BRASS}`, color: BRASS, borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: checkingUpdate ? 0.6 : 1 }}>
                 {checkingUpdate ? "Checking..." : "Check for update"}
               </button>
-            )}
-            {(!updateRepo || editRepo) ? (
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 12, color: INK_FAINT, marginBottom: 4 }}>Update source for new APKs (GitHub repo, like username/New-tracker)</div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <TextField placeholder="username/New-tracker" value={repoDraft} onChange={(e) => setRepoDraft(e.target.value)} style={{ flex: 1 }} />
-                  <button onClick={saveUpdateRepo} style={{ background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "0 14px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Save</button>
-                </div>
-              </div>
-            ) : (
-              <div onClick={() => { setRepoDraft(updateRepo); setEditRepo(true); }} style={{ fontSize: 12, color: INK_FAINT, marginTop: 8, cursor: "pointer" }}>Update source: {updateRepo} (change)</div>
             )}
           </Card>
           {notifBlocked && (
