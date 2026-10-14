@@ -922,17 +922,22 @@ async function geocodePlace(name) {
   const key = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   if (!key) return null;
   if (geoCache[key] !== undefined) return geoCache[key];
-  const ask = async (extra) => {
+  const ask = async (q, extra) => {
     const wait = lastGeoCall + 1100 - Date.now(); // Nominatim allows about 1 request per second
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     lastGeoCall = Date.now();
-    const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1" + extra + "&q=" + encodeURIComponent(name));
+    const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1" + extra + "&q=" + encodeURIComponent(q));
     if (!r.ok) throw new Error("geocode");
     const j = await r.json();
     return j && j[0] ? { lat: parseFloat(j[0].lat), lon: parseFloat(j[0].lon) } : null;
   };
-  let hit = await ask("&countrycodes=in"); // try India first so "Salem" means Salem, Tamil Nadu
-  if (!hit) hit = await ask("");
+  // Station-style names such as "KSR BENGALURU (SBC)" or "ERODE JN (ED)" are cleaned up and retried, then the main place word.
+  const cleaned = String(name).replace(/\([^)]*\)?/g, " ").replace(/\bjn\b\.?/gi, "Junction").replace(/\s+/g, " ").trim();
+  const bigWord = cleaned.split(" ").sort((x, y) => y.length - x.length)[0] || "";
+  const tries = [name, cleaned, bigWord.length >= 5 ? bigWord : ""].filter((v, i, a) => v && a.indexOf(v) === i);
+  let hit = null;
+  for (const q of tries) { hit = await ask(q, "&countrycodes=in"); if (hit) break; } // India first so "Salem" means Salem, Tamil Nadu
+  if (!hit) hit = await ask(name, "");
   geoCache[key] = hit;
   return hit;
 }
@@ -3422,6 +3427,45 @@ function LifeTracker() {
     }, 1200);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [distTargetsKey, showAddTravel]);
+
+  // Trips saved earlier (or without km) get their distance filled in automatically in the background.
+  const backfillTriedRef = useRef({});
+  useEffect(() => {
+    if (!loaded) return undefined;
+    let cancelled = false;
+    const needs = [];
+    travelPlans.forEach((t) => {
+      if (t.dismissed) return;
+      const multi = Array.isArray(t.legs) && t.legs.length > 1;
+      (multi ? t.legs : [t]).forEach((l, i) => {
+        const from = (l.fromLocation || "").trim(), to = (l.toLocation || "").trim(), mode = l.mode || t.mode;
+        if (from.length < 3 || to.length < 3 || parseFloat(l.distanceKm) > 0) return;
+        const key = [t.id, i, normLoc(from), normLoc(to), mode].join("|");
+        if (!backfillTriedRef.current[key]) needs.push({ planId: t.id, idx: i, multi, from, to, mode, key });
+      });
+    });
+    if (!needs.length) return undefined;
+    const timer = setTimeout(async () => {
+      for (const n of needs) {
+        if (cancelled) return;
+        try {
+          const km = await lookupDistanceKm(n.from, n.to, n.mode);
+          if (cancelled) return;
+          backfillTriedRef.current[n.key] = true;
+          if (km == null) continue;
+          setTravelPlans((prev) => prev.map((t) => {
+            if (t.id !== n.planId) return t;
+            if (n.multi && Array.isArray(t.legs)) {
+              const legs = t.legs.map((l, i) => (i === n.idx && !(parseFloat(l.distanceKm) > 0) ? { ...l, distanceKm: km } : l));
+              return { ...t, legs, distanceKm: legs.reduce((a, l) => a + (parseFloat(l.distanceKm) || 0), 0) };
+            }
+            return parseFloat(t.distanceKm) > 0 ? t : { ...t, distanceKm: km };
+          }));
+        } catch (e) { return; } // offline: try again next time the trips change or the app opens
+      }
+    }, 2000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [travelPlans, loaded]);
   const [newTravelNoteText, setNewTravelNoteText] = useState("");
   const toggleTravelReminder = (offset) => setTravelForm((f) => ({ ...f, reminderOffsets: f.reminderOffsets.includes(offset) ? f.reminderOffsets.filter((o) => o !== offset) : [...f.reminderOffsets, offset] }));
   const addNoteToTravelForm = () => {
