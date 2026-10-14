@@ -885,6 +885,8 @@ function journeySummary(legs) {
   const stops = [legs[0].fromLocation, ...legs.map((l) => l.toLocation)].filter(Boolean);
   return { rows, warnings, travelMin, waitMin, totalMin, cost, distanceKm, stops };
 }
+// Theme accent for module-level components (the BRASS_HEX const only exists inside LifeTracker).
+function brassHex() { return typeof document !== "undefined" && document.documentElement.style.colorScheme === "dark" ? "#0A84FF" : "#0071E3"; }
 function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 function normLoc(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
 function sameLocation(a, b) {
@@ -927,13 +929,13 @@ function JourneyTotals({ chains }) {
   const sums = chains.map((c) => journeySummary(c)).filter(Boolean);
   const t = sums.reduce((a, j) => ({ total: a.total + (j.totalMin || 0), travel: a.travel + j.travelMin, wait: a.wait + j.waitMin, km: a.km + j.distanceKm, cost: a.cost + j.cost }), { total: 0, travel: 0, wait: 0, km: 0, cost: 0 });
   const stat = (label, value, color) => (
-    <div style={{ flex: "1 1 45%", background: hexA(BRASS_HEX, 0.08), borderRadius: 12, padding: "8px 10px" }}>
+    <div style={{ flex: "1 1 45%", background: hexA(brassHex(), 0.08), borderRadius: 12, padding: "8px 10px" }}>
       <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
       <div style={{ fontFamily: mono, fontSize: 16, fontWeight: 800, color: color || INK, marginTop: 2 }}>{value}</div>
     </div>
   );
   return (
-    <div style={{ border: `1.5px solid ${hexA(BRASS_HEX, 0.28)}`, borderRadius: 16, padding: 12, marginBottom: 12, background: hexA(BRASS_HEX, 0.04) }}>
+    <div style={{ border: `1.5px solid ${hexA(brassHex(), 0.28)}`, borderRadius: 16, padding: 12, marginBottom: 12, background: hexA(brassHex(), 0.04) }}>
       <div style={{ fontSize: 11, color: BRASS, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Total · {chains.length} journey{chains.length === 1 ? "" : "s"}</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {stat("Total journey", fmtLongDur(t.total), BRASS)}
@@ -950,13 +952,13 @@ function JourneySummary({ legs, minLegs = 2 }) {
   if (!j || legs.length < minLegs) return null;
   const stamp = (d, t) => [d ? formatDMY(d) : "", t ? fmtTimeString12(t) : ""].filter(Boolean).join(" ");
   const stat = (label, value, color) => (
-    <div style={{ flex: "1 1 45%", background: hexA(BRASS_HEX, 0.08), borderRadius: 12, padding: "8px 10px" }}>
+    <div style={{ flex: "1 1 45%", background: hexA(brassHex(), 0.08), borderRadius: 12, padding: "8px 10px" }}>
       <div style={{ fontSize: 11, color: INK_FAINT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
       <div style={{ fontFamily: mono, fontSize: 16, fontWeight: 800, color: color || INK, marginTop: 2 }}>{value}</div>
     </div>
   );
   return (
-    <div style={{ border: `1.5px solid ${hexA(BRASS_HEX, 0.28)}`, borderRadius: 16, padding: 12, marginTop: 10, background: hexA(BRASS_HEX, 0.04) }}>
+    <div style={{ border: `1.5px solid ${hexA(brassHex(), 0.28)}`, borderRadius: 16, padding: 12, marginTop: 10, background: hexA(brassHex(), 0.04) }}>
       <div style={{ fontSize: 11, color: BRASS, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Journey summary</div>
       <div style={{ fontSize: 14, fontWeight: 700, color: INK, lineHeight: 1.4, marginBottom: 8, wordBreak: "break-word" }}>{j.stops.join(" \u2192 ")}</div>
       {j.rows.map((r, i) => (
@@ -2297,6 +2299,11 @@ function LifeTracker() {
     if (meta) meta.setAttribute("content", bg);
     const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]');
     if (colorSchemeMeta) colorSchemeMeta.setAttribute("content", darkMode ? "dark" : "light");
+    // Android APK (Capacitor): colour the real status bar + gesture-nav bar to match the theme.
+    try {
+      const AR = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AlarmRing;
+      if (AR && AR.setBars) AR.setBars({ color: bg, dark: darkMode });
+    } catch (e) {}
   }, [darkMode]);
   useEffect(() => { if (loaded) window.storage.set("dataMode", JSON.stringify(dataMode), false).catch(() => {}); }, [dataMode, loaded]);
   useEffect(() => { if (loaded) window.storage.set("sheetUrl", JSON.stringify(sheetUrl), false).catch(() => {}); }, [sheetUrl, loaded]);
