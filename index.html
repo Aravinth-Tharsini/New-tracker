@@ -2529,6 +2529,25 @@ function LifeTracker() {
     }
   };
 
+  const [notifStatus, setNotifStatus] = useState("");
+  const testNotifications = async () => {
+    const cap = window.Capacitor;
+    if (!cap || !(cap.isNativePlatform && cap.isNativePlatform())) { setNotifStatus("Open the installed APK app to test. A browser can't schedule alarms."); return; }
+    const LN = cap.Plugins && cap.Plugins.LocalNotifications;
+    const AR = cap.Plugins && cap.Plugins.AlarmRing;
+    if (!LN) { setNotifStatus("Notification plugin is missing. Install the newest APK."); return; }
+    try {
+      let perm = await LN.checkPermissions();
+      if (perm.display !== "granted") perm = await LN.requestPermissions();
+      if (perm.display !== "granted") { setNotifStatus("Notifications are blocked. Open phone Settings \u2192 Apps \u2192 Life Tracker \u2192 Notifications and turn them on."); return; }
+      let exact = "n/a";
+      try { if (LN.checkExactNotificationSetting) { const ex = await LN.checkExactNotificationSetting(); exact = ex.exact_alarm; if (exact !== "granted" && LN.changeExactNotificationSetting) await LN.changeExactNotificationSetting(); } } catch (e) {}
+      try { if (LN.createChannel) await LN.createChannel({ id: "reminders_high", name: "Reminders", description: "Trip, daily activity and plan reminders", importance: 5, visibility: 1, vibration: true, lights: true }); } catch (e) {}
+      await LN.schedule({ notifications: [{ id: 999001, title: "Test notification", body: "If you see this, notifications work.", channelId: "reminders_high", schedule: { at: new Date(Date.now() + 10000), allowWhileIdle: true } }] });
+      let pend = 0; try { const pn = await LN.getPending(); pend = (pn.notifications || []).length; } catch (e) {}
+      setNotifStatus(`Test sent for 10 seconds from now. Lock the screen and wait. Permission: granted. Exact alarms: ${exact}. Ringing alarm plugin: ${AR ? "yes" : "no (old APK)"}. Reminders scheduled: ${pend}.`);
+    } catch (e) { setNotifStatus("Test failed: " + String((e && e.message) || e).slice(0, 100)); }
+  };
   const toggleReminders = () => {
     setRemindersEnabled((v) => {
       const next = !v;
@@ -8253,6 +8272,14 @@ function LifeTracker() {
 
       {page === "datalink" && (
         <div key="datalink-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
+          <SectionLabel>Notifications</SectionLabel>
+          <Card style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 8 }}>Daily tasks, routines and plans only remind you when they have a time set. Tap below to check permission and get a test notification in 10 seconds.</div>
+            <button onClick={testNotifications} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+              <Bell size={14} /> Check &amp; test notifications
+            </button>
+            {notifStatus && <div style={{ fontSize: 13, color: TEAL, marginTop: 8, lineHeight: 1.4 }}>{notifStatus}</div>}
+          </Card>
           <SectionLabel>Storage mode</SectionLabel>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
             <button onClick={() => setDataMode("offline")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "11px 8px", borderRadius: 10, background: dataMode === "offline" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "offline" ? BRASS : LINE}`, cursor: "pointer" }}>
