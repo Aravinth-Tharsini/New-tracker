@@ -402,13 +402,22 @@ import ReactDOM from "react-dom/client";
 
 // ---- storage polyfill: saves data in this browser using localStorage ----
 const PREFIX = "life-tracker:";
+let __storeCache = null; // parsed store kept in memory so each save no longer re-parses all data
 function readAll() {
+  if (__storeCache) return __storeCache;
   try {
     const raw = localStorage.getItem(PREFIX + "__store__");
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) { return {}; }
+    __storeCache = raw ? JSON.parse(raw) : {};
+  } catch (e) { __storeCache = {}; }
+  return __storeCache;
 }
-function writeAll(store) { localStorage.setItem(PREFIX + "__store__", JSON.stringify(store)); }
+function writeAll(store) {
+  __storeCache = store;
+  try { localStorage.setItem(PREFIX + "__store__", JSON.stringify(store)); window.__storageFailed = false; }
+  catch (e) { window.__storageFailed = true; console.error("Save failed (storage full?)", e); }
+}
+// Ask the browser not to clear this app's data when the phone is low on space.
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
 // Reads a persisted value the same way window.storage.get() would, but synchronously. Used only
 // to hydrate initial React state (see below) — everything else still goes through window.storage.
 function readPersistedSync(key, fallback) {
@@ -927,7 +936,7 @@ function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // ---- App updates (shown on the More screen only) ----
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
 // repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
-const APP_VERSION = "2026.10.15";
+const APP_VERSION = "2026.10.16";
 const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
 function versionIsNewer(latest, current) {
   const a = String(latest || "").replace(/^[^0-9]*/, "").split(/[.\-]/).map((n) => parseInt(n, 10) || 0);
@@ -9037,7 +9046,23 @@ function doPost(e) {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<LifeTracker />);
+class AppErrorBoundary extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err) { console.error("App crashed", err); }
+  render() {
+    if (!this.state.err) return this.props.children;
+    return (
+      <div style={{ padding: 24, fontFamily: "system-ui, sans-serif", textAlign: "center", marginTop: 80 }}>
+        <div style={{ fontSize: 40 }}>\u26A0\uFE0F</div>
+        <h2 style={{ margin: "12px 0 6px" }}>Something went wrong</h2>
+        <p style={{ opacity: 0.7, fontSize: 14, lineHeight: 1.5 }}>Your data is safe on this phone. Tap reload to continue.</p>
+        <button onClick={() => window.location.reload()} style={{ marginTop: 12, padding: "12px 28px", borderRadius: 14, border: "none", background: "#0071E3", color: "#fff", fontSize: 16, fontWeight: 700 }}>Reload app</button>
+      </div>
+    );
+  }
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<AppErrorBoundary><LifeTracker /></AppErrorBoundary>);
   </script>
 </body>
 </html>
