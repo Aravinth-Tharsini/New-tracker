@@ -79,6 +79,8 @@ jobs:
             public void onCreate(Bundle savedInstanceState) {
               registerPlugin(AlarmRingPlugin.class);
               super.onCreate(savedInstanceState);
+              getWindow().setStatusBarColor(android.graphics.Color.BLACK);
+              getWindow().setNavigationBarColor(android.graphics.Color.BLACK);
             }
           }
           EOF
@@ -139,6 +141,27 @@ jobs:
                 }
               }
               sp.edit().putString("ids", ids.toString()).apply();
+              call.resolve();
+            }
+
+            @PluginMethod
+            public void setBars(final PluginCall call) {
+              final String col = call.getString("color", "#000000");
+              final boolean dark = call.getBoolean("dark", true);
+              getActivity().runOnUiThread(new Runnable() {
+                public void run() {
+                  try {
+                    int c = android.graphics.Color.parseColor(col);
+                    android.view.Window w = getActivity().getWindow();
+                    w.setStatusBarColor(c);
+                    w.setNavigationBarColor(c);
+                    androidx.core.view.WindowInsetsControllerCompat ic =
+                      androidx.core.view.WindowCompat.getInsetsController(w, w.getDecorView());
+                    ic.setAppearanceLightStatusBars(!dark);
+                    ic.setAppearanceLightNavigationBars(!dark);
+                  } catch (Exception e) {}
+                }
+              });
               call.resolve();
             }
           }
