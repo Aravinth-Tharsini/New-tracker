@@ -1110,7 +1110,19 @@ async function saveBackupFile(filename, content, mime, opts = {}) {
   let saved = null;
   if (opts.download && P.AlarmRing && P.AlarmRing.saveDownload) {
     // Writes straight into the phone's Downloads/LifeTracker folder (no share sheet needed).
-    try { const d = await P.AlarmRing.saveDownload({ filename, data: content, mime }); return { ok: true, where: (d && d.path) || "Downloads/LifeTracker" }; } catch (e) {}
+    try {
+      const d = await P.AlarmRing.saveDownload({ filename, data: content, mime });
+      const where = (d && d.path) || "Downloads/LifeTracker";
+      if (opts.share && P.Share && P.Filesystem) {
+        // Also open the share sheet so the file can go to Drive / WhatsApp / etc.
+        try {
+          const c = await P.Filesystem.writeFile({ path: filename, data: content, directory: "CACHE", encoding: "utf8" });
+          await P.Share.share({ title: filename, files: [c.uri], dialogTitle: "Share backup" });
+        } catch (e) {}
+        return { ok: true, shared: true, where };
+      }
+      return { ok: true, where };
+    } catch (e) {}
   }
   if (opts.askPermission) {
     // Shows Android's storage permission prompt where the phone's Android version uses one.
@@ -2379,6 +2391,7 @@ function LifeTracker() {
     if (r.needsUpdate) setImportMessage("Export needs the newest app. Build and install the new APK (it adds the file and share plugins), then try again.");
     else if (r.shareError) setImportMessage(`Saved to ${r.where}, but the share sheet failed: ${r.shareError}`);
     else if (!r.ok) setImportMessage("Backup failed. Please try again.");
+    else if (r.shared && r.where) setImportMessage(`Saved to ${r.where}. You can also share it from the share sheet.`);
     else if (r.shared) setImportMessage("Backup ready. Choose where to save or send it." + (r.saved && r.saved.dir === "DOCUMENTS" ? " A copy is also in Documents/LifeTracker." : ""));
     else if (r.cancelled) setImportMessage(r.saved ? `Backup saved to ${r.where || "Documents/LifeTracker"}.` : "Backup cancelled.");
     else setImportMessage(`${isAuto ? "Daily backup" : "Backup"} saved to ${r.where || "your device"}.`);
@@ -8290,7 +8303,7 @@ function LifeTracker() {
                 <button onClick={() => fileInputRef.current && fileInputRef.current.click()} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: `1.5px solid ${BRASS}`, color: BRASS, borderRadius: 8, padding: "9px 10px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}>
                   <Upload size={15} /> Import backup
                 </button>
-                <input ref={fileInputRef} type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) importDataFile(f); e.target.value = ""; }} />
+                <input ref={fileInputRef} type="file" accept="*/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) importDataFile(f); e.target.value = ""; }} />
               </div>
               <button onClick={exportExpensesCSV} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "8px 10px", fontSize: 14, cursor: "pointer", fontFamily: disp, fontWeight: 600, marginTop: 8 }}>
                 <Download size={14} /> Export expense CSV
