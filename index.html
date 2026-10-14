@@ -49,7 +49,17 @@
     // this app installable and show the "Install app" / "Add to Home Screen" prompt.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("service-worker.js").catch(() => {});
+        navigator.serviceWorker.register("service-worker.js").then((reg) => {
+          // Tell the app (More screen only) when a newer version of the web app has been downloaded.
+          const ready = () => { window.__appUpdateReady = true; window.dispatchEvent(new Event("app-update-ready")); };
+          if (reg.waiting && navigator.serviceWorker.controller) ready();
+          reg.addEventListener("updatefound", () => {
+            const nw = reg.installing;
+            if (nw) nw.addEventListener("statechange", () => { if (nw.state === "installed" && navigator.serviceWorker.controller) ready(); });
+          });
+          const check = () => { try { reg.update().catch(() => {}); } catch (e) {} };
+          check(); setInterval(check, 60 * 60 * 1000);
+        }).catch(() => {});
       });
     }
   </script>
@@ -914,6 +924,17 @@ function journeySummary(rawLegs) {
 // Theme accent for module-level components (the BRASS_HEX const only exists inside LifeTracker).
 function brassHex() { return typeof document !== "undefined" && document.documentElement.style.colorScheme === "dark" ? "#0A84FF" : "#0071E3"; }
 function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
+// ---- App updates (shown on the More screen only) ----
+// APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
+// repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
+const APP_VERSION = "2026.10.14";
+const APK_UPDATE_REPO = "";
+function versionIsNewer(latest, current) {
+  const a = String(latest || "").replace(/^[^0-9]*/, "").split(/[.\-]/).map((n) => parseInt(n, 10) || 0);
+  const b = String(current || "").replace(/^[^0-9]*/, "").split(/[.\-]/).map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x > y; }
+  return false;
+}
 // ---- Automatic distance (needs internet): finds both places on OpenStreetMap (Nominatim), then the road
 // distance with OSRM. Flights use the straight-line distance. If anything fails the km box stays editable by hand. ----
 const geoCache = {};
@@ -3466,6 +3487,66 @@ function LifeTracker() {
     }, 2000);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [travelPlans, loaded]);
+
+  // Notifications are checked quietly in the background when the APK opens (no test button needed).
+  const [notifBlocked, setNotifBlocked] = useState(false);
+  useEffect(() => {
+    const cap = window.Capacitor;
+    if (!cap || !(cap.isNativePlatform && cap.isNativePlatform())) return;
+    const LN = cap.Plugins && cap.Plugins.LocalNotifications;
+    if (!LN) return;
+    (async () => {
+      try {
+        let perm = await LN.checkPermissions();
+        if (perm.display !== "granted") perm = await LN.requestPermissions();
+        setNotifBlocked(perm.display !== "granted");
+        if (perm.display !== "granted") return;
+        try { if (LN.createChannel) await LN.createChannel({ id: "reminders_high", name: "Reminders", description: "Trip, daily activity and plan reminders", importance: 5, visibility: 1, vibration: true, lights: true }); } catch (e) {}
+        try {
+          // Exact alarms: ask only once, because this opens a phone settings screen.
+          let asked = false; try { asked = localStorage.getItem("exactAlarmAsked") === "1"; } catch (e) {}
+          if (!asked && LN.checkExactNotificationSetting) {
+            const ex = await LN.checkExactNotificationSetting();
+            if (ex.exact_alarm !== "granted" && LN.changeExactNotificationSetting) { try { localStorage.setItem("exactAlarmAsked", "1"); } catch (e) {} await LN.changeExactNotificationSetting(); }
+          }
+        } catch (e) {}
+      } catch (e) {}
+    })();
+  }, []);
+
+  // Update check: a newer web version (service worker) and/or a newer APK (latest GitHub release). Shown on More only.
+  const [webUpdateReady, setWebUpdateReady] = useState(() => !!window.__appUpdateReady);
+  const [apkUpdate, setApkUpdate] = useState(null);
+  useEffect(() => {
+    const on = () => setWebUpdateReady(true);
+    window.addEventListener("app-update-ready", on);
+    return () => window.removeEventListener("app-update-ready", on);
+  }, []);
+  useEffect(() => {
+    const cap = window.Capacitor;
+    if (!APK_UPDATE_REPO || !cap || !(cap.isNativePlatform && cap.isNativePlatform())) return;
+    let cancelled = false;
+    fetch(`https://api.github.com/repos/${APK_UPDATE_REPO}/releases/latest`).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (cancelled || !j || !j.tag_name || !versionIsNewer(j.tag_name, APP_VERSION)) return;
+      const asset = (j.assets || []).find((a) => /\.apk$/i.test(a.name || ""));
+      setApkUpdate({ version: String(j.tag_name).replace(/^v/i, ""), url: asset ? asset.browser_download_url : j.html_url });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const applyWebUpdate = async () => {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg && reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map((k) => caches.delete(k))); }
+      if (reg) await reg.unregister();
+    } catch (e) {}
+    window.location.reload(); // your saved data stays; only the app files are refreshed
+  };
+  const openApkUpdate = () => {
+    if (!apkUpdate) return;
+    const B = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser;
+    if (B && B.open) B.open({ url: apkUpdate.url }); else window.open(apkUpdate.url, "_blank");
+  };
   const [newTravelNoteText, setNewTravelNoteText] = useState("");
   const toggleTravelReminder = (offset) => setTravelForm((f) => ({ ...f, reminderOffsets: f.reminderOffsets.includes(offset) ? f.reminderOffsets.filter((o) => o !== offset) : [...f.reminderOffsets, offset] }));
   const addNoteToTravelForm = () => {
@@ -8454,14 +8535,26 @@ function LifeTracker() {
 
       {page === "datalink" && (
         <div key="datalink-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
-          <SectionLabel>Notifications</SectionLabel>
-          <Card style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 8 }}>Daily tasks, routines and plans only remind you when they have a time set. Tap below to check permission and get a test notification in 10 seconds.</div>
-            <button onClick={testNotifications} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-              <Bell size={14} /> Check &amp; test notifications
-            </button>
-            {notifStatus && <div style={{ fontSize: 13, color: TEAL, marginTop: 8, lineHeight: 1.4 }}>{notifStatus}</div>}
-          </Card>
+          {(webUpdateReady || apkUpdate) && (
+            <>
+              <SectionLabel>App update</SectionLabel>
+              <Card style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Update available</div>
+                <div style={{ fontSize: 13, color: INK_FAINT, margin: "4px 0 10px", lineHeight: 1.4 }}>
+                  {apkUpdate ? `A new app version (${apkUpdate.version}) is ready. Download and install it. Your data stays on the phone.` : "A new version of the app is ready. Tap update to refresh. Your data stays safe."}
+                </div>
+                <button onClick={apkUpdate ? openApkUpdate : applyWebUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                  <Download size={14} /> {apkUpdate ? "Download new app" : "Update now"}
+                </button>
+              </Card>
+            </>
+          )}
+          {notifBlocked && (
+            <Card style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: CORAL }}>Notifications are blocked</div>
+              <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 4, lineHeight: 1.4 }}>Reminders cannot ring. Open phone Settings, Apps, Life Tracker, Notifications and turn them on.</div>
+            </Card>
+          )}
           <SectionLabel>Storage mode</SectionLabel>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
             <button onClick={() => setDataMode("offline")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "11px 8px", borderRadius: 10, background: dataMode === "offline" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "offline" ? BRASS : LINE}`, cursor: "pointer" }}>
@@ -8514,9 +8607,6 @@ function LifeTracker() {
                 </button>
                 <input ref={fileInputRef} type="file" accept="*/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) importDataFile(f); e.target.value = ""; }} />
               </div>
-              <button onClick={exportExpensesCSV} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "8px 10px", fontSize: 14, cursor: "pointer", fontFamily: disp, fontWeight: 600, marginTop: 8 }}>
-                <Download size={14} /> Export expense CSV
-              </button>
               {importMessage && <div style={{ fontSize: 14, color: TEAL, marginTop: 8 }}>{importMessage}</div>}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${LINE}` }}>
                 <div style={{ paddingRight: 10 }}>
