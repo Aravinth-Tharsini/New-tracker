@@ -1093,35 +1093,30 @@ function estimateArrival(depDate, depTime, minutes) {
 }
 // Home: one swipeable strip that holds the day's numbers and quick actions. The most urgent slide (pending / due) comes first.
 function HomeSlides({ slides }) {
-  const [idx, setIdx] = useState(0);
-  const active = Math.min(idx, slides.length - 1);
+  // Four compact stat cards in one row: Completed, Expenses, Pending, Due.
+  const order = [
+    { key: "completed", sub: "activities" },
+    { key: "expenses", sub: "today" },
+    { key: "pending", sub: "activities" },
+    { key: "due", sub: "repayments" },
+  ];
+  const cards = order.map((o) => { const sl = slides.find((x) => x.key === o.key); return sl ? { ...sl, sub: o.sub } : null; }).filter(Boolean);
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div className="homeSlides" onScroll={(e) => { const el = e.currentTarget; const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); if (i !== idx) setIdx(i); }} style={{ display: "flex", overflowX: "auto", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}>
-        {slides.map((sl) => {
-          const SIcon = sl.icon;
-          return (
-            <div key={sl.key} style={{ flex: "0 0 100%", scrollSnapAlign: "start", boxSizing: "border-box" }}>
-              <button onClick={sl.onClick || undefined} style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 18, padding: "16px 16px", cursor: sl.onClick ? "pointer" : "default", textAlign: "left", fontFamily: "inherit", boxShadow: CARD_SHADOW, color: INK }}>
-                <div style={{ width: 46, height: 46, borderRadius: 14, background: sl.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <SIcon size={22} color={sl.fg} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sl.label}</div>
-                  <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 2 }}>{sl.sub}</div>
-                </div>
-                {sl.value != null && <div style={{ fontSize: 26, fontFamily: mono, fontWeight: 800, color: sl.fg, flexShrink: 0 }}>{sl.value}</div>}
-                {sl.onClick && <ChevronRight size={18} color={INK_FAINT} style={{ flexShrink: 0 }} />}
-              </button>
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))`, gap: 8, marginBottom: 12 }}>
+      {cards.map((sl) => {
+        const SIcon = sl.icon;
+        const val = String(sl.value == null ? "" : sl.value);
+        return (
+          <button key={sl.key} onClick={sl.onClick || undefined} style={{ minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 3, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 20, padding: "12px 4px 11px", cursor: sl.onClick ? "pointer" : "default", fontFamily: "inherit", boxShadow: CARD_SHADOW, color: INK }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: sl.bg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 3 }}>
+              <SIcon size={19} color={sl.fg} />
             </div>
-          );
-        })}
-      </div>
-      {slides.length > 1 && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 5, marginTop: 8 }}>
-          {slides.map((sl, i) => <span key={sl.key} style={{ width: i === active ? 16 : 6, height: 6, borderRadius: 3, background: i === active ? BRASS : LINE, transition: "all .2s ease" }} />)}
-        </div>
-      )}
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: INK_DIM, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sl.label}</div>
+            <div style={{ fontSize: val.length > 7 ? 13 : val.length > 5 ? 16 : 20, fontFamily: mono, fontWeight: 800, color: sl.fg, lineHeight: 1.15, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{val}</div>
+            <div style={{ fontSize: 10, color: INK_FAINT, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sl.sub}</div>
+          </button>
+        );
+      })}
     </div>
   );
 }
