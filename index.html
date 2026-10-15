@@ -1120,6 +1120,52 @@ function HomeSlides({ slides }) {
     </div>
   );
 }
+// XP: every finished task (any day) is worth 10 XP. Level n starts at 25*(n-1)^2 XP, so level 5 needs 400 XP.
+const XP_PER_TASK = 10;
+const XP_TITLES = ["Beginner", "Starter", "Walker", "Climber", "Achiever", "Pro", "Champion", "Master", "Legend"];
+function xpInfo(totalDone) {
+  const xp = totalDone * XP_PER_TASK;
+  const level = Math.floor(Math.sqrt(xp / 25)) + 1;
+  const next = 25 * level * level;
+  return { xp, level, next, toNext: next - xp, pct: Math.min(100, Math.round((xp / next) * 100)), title: XP_TITLES[Math.min(level, XP_TITLES.length) - 1] };
+}
+// One combined card: today's ring + message on top, XP level + bar underneath.
+function ProgressXPCard({ pct, done, total, xp }) {
+  const msg = total === 0 ? "Add an activity to get started" : pct >= 100 ? "Perfect day, amazing!" : pct >= 75 ? "Almost there, finish strong!" : pct >= 40 ? "Good going, keep it up!" : pct > 0 ? "Nice start, keep it up!" : "Let's get the first one done";
+  const todayXp = done * XP_PER_TASK;
+  return (
+    <Card style={{ marginBottom: 14, padding: 0, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 16px 14px" }}>
+        <RingProgress pct={pct} size={78} color={TEAL} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: INK }}>Today's Progress</div>
+          <div style={{ marginTop: 3, fontSize: 12.5, color: INK_DIM }}>{done} of {total} activities completed</div>
+          <div style={{ marginTop: 5, fontSize: 13, fontWeight: 700, color: BRASS }}>{msg}</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px 16px", borderTop: `1px solid ${LINE}`, background: hexA(BRASS, 0.05) }}>
+        <div style={{ flexShrink: 0, width: 54, height: 54, borderRadius: "50%", background: BRASS, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", lineHeight: 1, boxShadow: `0 4px 10px ${hexA(BRASS, 0.35)}` }}>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".06em", opacity: 0.9 }}>LVL</span>
+          <span style={{ fontSize: 22, fontWeight: 800, fontFamily: mono, marginTop: 2 }}>{xp.level}</span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>{xp.title}</span>
+            <span style={{ fontSize: 12, fontFamily: mono, fontWeight: 700, color: INK_FAINT, whiteSpace: "nowrap" }}>{xp.xp} / {xp.next} XP</span>
+          </div>
+          <div style={{ height: 8, borderRadius: 4, background: hexA(BRASS, 0.16), marginTop: 7, overflow: "hidden" }}>
+            <div style={{ width: `${xp.pct}%`, height: "100%", borderRadius: 4, background: BRASS, transition: "width .6s ease" }} />
+          </div>
+          <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11.5, color: INK_FAINT }}>
+            <span>{xp.toNext} XP to level {xp.level + 1}</span>
+            <span style={{ color: todayXp > 0 ? TEAL : INK_FAINT, fontWeight: 700 }}>+{todayXp} XP today</span>
+          </div>
+          <div style={{ marginTop: 2, fontSize: 11, color: INK_FAINT }}>Each task completed = +{XP_PER_TASK} XP</div>
+        </div>
+      </div>
+    </Card>
+  );
+}
 // Per-reminder choice shown next to a time input: a quiet notification, or a loud alarm that opens full screen when tapped.
 function ReminderTypePick({ value, onChange }) {
   return (
@@ -5724,17 +5770,7 @@ function LifeTracker() {
 
           <HomeSlides key={homeSlides[0].key} slides={homeSlides} />
 
-          {totalActivities > 0 && (
-            <Card style={{ marginBottom: 14, padding: "14px 16px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <RingProgress pct={progressPercent} size={68} color={TEAL} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 750, color: INK }}>Today's Progress</div>
-                  <div style={{ marginTop: 4, fontSize: 12.5, color: INK_DIM }}>{completedActivities} of {totalActivities} activities completed</div>
-                </div>
-              </div>
-            </Card>
-          )}
+          <ProgressXPCard pct={progressPercent} done={completedActivities} total={totalActivities} xp={xpInfo(Object.values(dailyLogs || {}).reduce((n, log) => n + Object.values(log || {}).filter((r) => r && r.status === "done").length, 0))} />
 
 
           {overdueToday.length > 0 && (
