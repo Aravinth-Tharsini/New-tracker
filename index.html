@@ -2746,6 +2746,7 @@ function LifeTracker() {
   const [reminderStyle, setReminderStyle] = useState(() => ({ daily: "alarm", plans: "alarm", trips: "notification", ...(readPersistedSync("reminderStyle", {}) || {}) }));
   useEffect(() => { if (loaded) window.storage.set("reminderStyle", JSON.stringify(reminderStyle), false).catch(() => {}); }, [reminderStyle, loaded]);
   const [alarmScreen, setAlarmScreen] = useState(null);
+  const alarmDoneRef = useRef(null); // set below: tells the alarm listener if a task is already finished
   useEffect(() => { if (loaded) window.storage.set("darkMode", JSON.stringify(darkMode), false).catch(() => {}); }, [darkMode, loaded]);
   // Keeps the real <html>/<body> background (and the browser's theme-color chrome) in sync with dark
   // mode too, not just the in-app container — otherwise overscroll/bounce or any area outside the app's
@@ -4296,7 +4297,7 @@ function LifeTracker() {
         const pending = await LN.getPending();
         if (pending.notifications && pending.notifications.length) await LN.cancel({ notifications: pending.notifications });
         const list = []; const nowMs = Date.now(); let nid = 1;
-        const decor = (cat, item) => { const alarm = ((item && item.reminderType) || reminderStyle[cat]) === "alarm"; return { channelId: alarm ? "alarms_full" : "reminders_normal", extra: { alarm } }; };
+        const decor = (cat, item) => { const alarm = ((item && item.reminderType) || reminderStyle[cat]) === "alarm"; return { channelId: alarm ? "alarms_full" : "reminders_normal", extra: { alarm, kind: cat, itemId: (item && item.id) || "" } }; };
         const add = (title, body, at, cat, item) => { if (at && at.getTime() > nowMs + 5000) list.push({ id: nid++, title, body, schedule: { at, allowWhileIdle: true }, ...decor(cat, item) }); };
         const NATIVE_WD = { Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6, Sat: 7, Sun: 1 };
         const AR = null; // the old auto-ringing alarm plugin is replaced by notification + full-screen alarm screen
@@ -4322,13 +4323,19 @@ function LifeTracker() {
           });
           add(`Trip in 1 hour: ${label}`, `${t.mode}${t.travelTime ? " at " + fmtTimeString12(t.travelTime) : ""}`, new Date(dep.getTime() - 3600000), "trips", t);
         });
-        // Daily activities with a set time: repeat every day, or on the chosen weekdays.
+        // Daily activities with a set time: one alarm per day for the next 7 days (re-planned whenever the app opens
+        // or a task changes), so a task already done/skipped today does NOT ring again today.
         dailyItems.filter(isItemValid).filter((i) => i.scheduledTime).forEach((i) => {
           const [hh, mm] = i.scheduledTime.split(":").map(Number); if (Number.isNaN(hh) || Number.isNaN(mm)) return;
-          if (AR) { addRepeatingAlarms(i.name, "Time for your daily activity", hh, mm, i.days || []); return; }
           const days = (i.days || []).filter((d) => NATIVE_WD[d]);
-          if (days.length && days.length < 7) days.forEach((d) => list.push({ id: nid++, title: i.name, body: "Time for your daily activity", schedule: { on: { weekday: NATIVE_WD[d], hour: hh, minute: mm }, repeats: true, allowWhileIdle: true }, ...decor("daily", i) }));
-          else list.push({ id: nid++, title: i.name, body: "Time for your daily activity", schedule: { on: { hour: hh, minute: mm }, repeats: true, allowWhileIdle: true }, ...decor("daily", i) });
+          const rec = (dailyLogs[today] || {})[i.id] || {};
+          const doneToday = rec.status === "done" || rec.status === "skipped";
+          for (let k = 0; k < 7; k++) {
+            const d = new Date(); d.setDate(d.getDate() + k); d.setHours(hh, mm, 0, 0);
+            if (k === 0 && doneToday) continue;
+            if (days.length && days.length < 7 && !days.includes(WD_NAMES[d.getDay()])) continue;
+            add(i.name, "Time for your daily activity", d, "daily", i);
+          }
         });
         // My Day plans: one-off plans fire reminderMinutes before; repeating plans fire at their time on each repeat day.
         myDayEvents.filter((e) => !e.completed && !e.dismissed && e.eventDate && e.eventTime && e.reminderEnabled !== false).forEach((e) => {
@@ -4351,7 +4358,7 @@ function LifeTracker() {
       } catch (err) {}
     }, 1500);
     return () => clearTimeout(timer);
-  }, [travelPlans, dailyItems, myDayEvents, today, reminderStyle]);
+  }, [travelPlans, dailyItems, myDayEvents, today, reminderStyle, dailyItems.filter((i) => { const r = (dailyLogs[today] || {})[i.id] || {}; return r.status === "done" || r.status === "skipped"; }).map((i) => i.id).join(",")]);
 
   // Tapping an alarm in the notification panel opens the full-screen alarm screen.
   useEffect(() => {
@@ -4362,15 +4369,40 @@ function LifeTracker() {
     try {
       Promise.resolve(LN.addListener("localNotificationActionPerformed", (ev) => {
         const n = ev && ev.notification;
-        if (n && n.extra && n.extra.alarm) setAlarmScreen({ title: n.title || "Alarm", body: n.body || "" });
+        if (n && n.extra && n.extra.alarm && !(alarmDoneRef.current && alarmDoneRef.current(n.extra.kind, n.extra.itemId))) setAlarmScreen({ title: n.title || "Alarm", body: n.body || "", kind: n.extra.kind || "", itemId: n.extra.itemId || "" });
       })).then((h) => { if (gone) { try { h && h.remove && h.remove(); } catch (e) {} } else handle = h; }).catch(() => {});
     } catch (e) {}
     return () => { gone = true; if (handle && handle.remove) handle.remove(); };
   }, []);
   const snoozeAlarm = async (mins) => {
     const LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
-    if (LN && alarmScreen) { try { await LN.schedule({ notifications: [{ id: 990000 + (Date.now() % 9000), title: alarmScreen.title, body: alarmScreen.body, channelId: "alarms_full", extra: { alarm: true }, schedule: { at: new Date(Date.now() + mins * 60000), allowWhileIdle: true } }] }); } catch (e) {} }
+    if (LN && alarmScreen) { try { await LN.schedule({ notifications: [{ id: 990000 + (Date.now() % 9000), title: alarmScreen.title, body: alarmScreen.body, channelId: "alarms_full", extra: { alarm: true, kind: alarmScreen.kind || "", itemId: alarmScreen.itemId || "" }, schedule: { at: new Date(Date.now() + mins * 60000), allowWhileIdle: true } }] }); } catch (e) {} }
     setAlarmScreen(null);
+  };
+  // Done: mark the task finished (daily activity / trip / My Day plan) and close the alarm.
+  const doneAlarm = () => {
+    const a = alarmScreen; setAlarmScreen(null);
+    if (!a) return;
+    try {
+      let kind = a.kind, id = a.itemId;
+      if (!id) { // older alarms carry no id: match by title
+        const di = dailyItems.find((i) => i.name === a.title);
+        const tp = travelPlans.find((t) => !t.completed && !t.dismissed && a.title.indexOf(`${t.fromLocation} \u2192 ${t.toLocation}`) >= 0);
+        const me = myDayEvents.find((e) => !e.completed && (e.title || "Plan") === a.title);
+        if (di) { kind = "daily"; id = di.id; } else if (tp) { kind = "trips"; id = tp.id; } else if (me) { kind = "plans"; id = me.id; }
+      }
+      if (!id) return;
+      if (kind === "daily") updateField(id, { status: "done", time: new Date().toISOString() });
+      else if (kind === "trips") completeTravelPlan(id);
+      else if (kind === "plans") setMyDayEvents((prev) => prev.map((e) => (e.id !== id ? e : { ...e, completed: true, completedAt: new Date().toISOString() })));
+    } catch (err) {}
+  };
+  alarmDoneRef.current = (kind, id) => {
+    if (!id) return false;
+    if (kind === "daily") { const r = field(id); return r.status === "done" || r.status === "skipped"; }
+    if (kind === "trips") { const t = travelPlans.find((x) => x.id === id); return !t || t.completed || t.dismissed; }
+    if (kind === "plans") { const e = myDayEvents.find((x) => x.id === id); return !e || e.completed || e.dismissed; }
+    return false;
   };
 
   // ---- Evening nudge: one notification per day, only after 8pm, only if there's something
@@ -4592,7 +4624,7 @@ function LifeTracker() {
                           )}
                         </div>
                         <div>
-                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Arrival time (optional)</div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Reach time (optional)</div>
                           {travelTimeInputMode === "24h" ? (
                             <Time24Input value={travelForm.arrivalTime} onChange={(v) => setTravelForm({ ...travelForm, arrivalTime: v })} style={{ fontFamily: mono }} />
                           ) : (
@@ -4601,7 +4633,19 @@ function LifeTracker() {
                           {timeEst.main && timeEst.main === travelForm.arrivalTime && <div style={{ fontSize: 12, color: TEAL, padding: "3px 2px 0" }}>Arrival time estimated from the road route (approx.). You can change it.</div>}
                         </div>
                         <div>
-                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Arrival date (only if different from travel date)</div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Reach date</div>
+                          {(() => {
+                            const dayAfter = (d, n) => { if (!d) return ""; const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() + n); const pad = (v) => String(v).padStart(2, "0"); return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`; };
+                            const sameDay = travelForm.travelDate && (!travelForm.arrivalDate || travelForm.arrivalDate === travelForm.travelDate);
+                            const nextDay = travelForm.travelDate && travelForm.arrivalDate === dayAfter(travelForm.travelDate, 1);
+                            const chip = (on) => ({ flex: 1, background: on ? BRASS : PANEL_2, color: on ? "#FFFFFF" : INK_DIM, border: "none", borderRadius: 980, padding: "8px 10px", fontSize: 14, fontWeight: 700, cursor: "pointer" });
+                            return (
+                              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                                <button onClick={() => setTravelForm({ ...travelForm, arrivalDate: "" })} style={chip(!!sameDay)}>Today (same day)</button>
+                                <button onClick={() => travelForm.travelDate && setTravelForm({ ...travelForm, arrivalDate: dayAfter(travelForm.travelDate, 1) })} style={chip(!!nextDay)}>Tomorrow (next day)</button>
+                              </div>
+                            );
+                          })()}
                           <TextField type="date" value={travelForm.arrivalDate} onChange={(e) => setTravelForm({ ...travelForm, arrivalDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                         </div>
                         <TextField type="number" placeholder={travelForm.legs.length ? "Leg 1 amount" : "Amount"} value={travelForm.amount} onChange={(e) => setTravelForm({ ...travelForm, amount: e.target.value })} style={{ fontFamily: mono }} />
@@ -5315,8 +5359,35 @@ function LifeTracker() {
                   </div>
   );
 
+  // ---- Swipe left/right to move between the bottom-nav pages (Home, Today, Planner, Progress, More) ----
+  const SWIPE_ORDER = ["dashboard", "daily", "categories", "analysis", "datalink"];
+  const swipeRef = useRef(null);
+  const onSwipeStart = (e) => {
+    swipeRef.current = null;
+    if (alarmScreen || !e.touches || e.touches.length !== 1) return;
+    // Don't hijack typing, sliders, date pickers, side-scrolling rows, or popups/sheets.
+    for (let el = e.target; el && el !== e.currentTarget; el = el.parentElement) {
+      const tag = el.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const cs = window.getComputedStyle(el);
+      if (cs.position === "fixed") return;
+      if ((cs.overflowX === "auto" || cs.overflowX === "scroll") && el.scrollWidth > el.clientWidth + 2) return;
+    }
+    const t = e.touches[0];
+    swipeRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  };
+  const onSwipeEnd = (e) => {
+    const st = swipeRef.current; swipeRef.current = null;
+    if (!st || !e.changedTouches || !e.changedTouches.length) return;
+    const t = e.changedTouches[0]; const dx = t.clientX - st.x, dy = t.clientY - st.y;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.6 || Date.now() - st.t > 700) return;
+    const i = SWIPE_ORDER.indexOf(page); if (i < 0) return;
+    const next = SWIPE_ORDER[i + (dx < 0 ? 1 : -1)];
+    if (next) switchSection(next);
+  };
+
   return (
-    <div data-theme={darkMode ? "dark" : "light"} style={{ background: BG, minHeight: "100dvh", width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: disp, color: INK, boxSizing: "border-box", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
+    <div data-theme={darkMode ? "dark" : "light"} onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} style={{ background: BG, minHeight: "100dvh", width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: disp, color: INK, boxSizing: "border-box", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
       <style>{`
         *{box-sizing:border-box;} input,select,button{max-width:100%; font-family:${disp};} .no-scrollbar{scrollbar-width:none; -ms-overflow-style:none;} .no-scrollbar::-webkit-scrollbar{display:none; width:0; height:0;}
         [data-theme="light"]{
@@ -9238,9 +9309,12 @@ function doPost(e) {
           <div style={{ fontSize: 56, fontWeight: 300, marginTop: 18, fontFamily: mono }}>{new Date(now).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</div>
           <div style={{ fontSize: 26, fontWeight: 700, marginTop: 14, lineHeight: 1.25 }}>{alarmScreen.title}</div>
           {alarmScreen.body ? <div style={{ fontSize: 16, opacity: 0.85, marginTop: 8, lineHeight: 1.4 }}>{alarmScreen.body}</div> : null}
-          <div style={{ display: "flex", gap: 12, marginTop: 44, width: "100%", maxWidth: 360 }}>
-            <button onClick={() => snoozeAlarm(10)} style={{ flex: 1, padding: "15px 10px", borderRadius: 14, border: "1.5px solid rgba(255,255,255,0.7)", background: "transparent", color: "#FFFFFF", fontSize: 16, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Snooze 10 min</button>
-            <button onClick={() => setAlarmScreen(null)} style={{ flex: 1, padding: "15px 10px", borderRadius: 14, border: "none", background: "#FFFFFF", color: "#1E4FCB", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Dismiss</button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 44, width: "100%", maxWidth: 360 }}>
+            {true ? <button onClick={doneAlarm} style={{ padding: "16px 10px", borderRadius: 14, border: "none", background: "#22C55E", color: "#FFFFFF", fontSize: 17, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{"\u2713"} Done</button> : null}
+            <div style={{ display: "flex", gap: 12 }}>
+              <button onClick={() => snoozeAlarm(10)} style={{ flex: 1, padding: "15px 10px", borderRadius: 14, border: "1.5px solid rgba(255,255,255,0.7)", background: "transparent", color: "#FFFFFF", fontSize: 16, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Snooze 10 min</button>
+              <button onClick={() => setAlarmScreen(null)} style={{ flex: 1, padding: "15px 10px", borderRadius: 14, border: "none", background: "#FFFFFF", color: "#1E4FCB", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Dismiss</button>
+            </div>
           </div>
         </div>
       )}
