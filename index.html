@@ -1092,15 +1092,12 @@ function estimateArrival(depDate, depTime, minutes) {
   return { date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`, time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` };
 }
 // Home: one swipeable strip that holds the day's numbers and quick actions. The most urgent slide (pending / due) comes first.
-function HomeSlides({ stats, attention, quickAdd, quickLog }) {
+function HomeSlides({ stats, focus }) {
   const ref = useRef(null);
   const [idx, setIdx] = useState(0);
   const order = [{ key: "completed", sub: "activities" }, { key: "expenses", sub: "today" }, { key: "pending", sub: "activities" }, { key: "due", sub: "repayments" }];
   const cards = order.map((o) => { const sl = stats.find((x) => x.key === o.key); return sl ? { ...sl, sub: o.sub } : null; }).filter(Boolean);
-  const pages = [];
-  if (attention.length) pages.push("attention");
-  pages.push("stats", "quick");
-  if (quickLog.length) pages.push("log");
+  const pages = ["focus", "stats"];
   const active = Math.min(idx, pages.length - 1);
   const head = (Icon, color, text, extra) => (
     <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
@@ -1128,11 +1125,23 @@ function HomeSlides({ stats, attention, quickAdd, quickLog }) {
     <div style={{ marginBottom: 12 }}>
       <div ref={ref} className="homeSlides" onScroll={(e) => { const el = e.currentTarget; const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); if (i !== idx) setIdx(i); }} style={{ display: "flex", alignItems: "stretch", overflowX: "auto", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}>
         {pages.map((p) => {
-          if (p === "attention") return (
+          if (p === "focus") return (
             <div key={p} style={slideStyle}>
-              <div style={{ ...shell, borderLeft: `4px solid #F59E0B`, background: `linear-gradient(135deg, ${hexA("#F59E0B", 0.10)} 0%, ${PANEL} 60%)` }}>
-                {head(Bell, "#F59E0B", "Needs your attention", <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#F59E0B", borderRadius: 980, padding: "2px 8px" }}>{attention.length}</span>)}
-                {attention.slice(0, 3).map((r, i, arr) => row(r, i === arr.length - 1))}
+              <div style={{ ...shell, borderRadius: 26, padding: "14px 16px 8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <Target size={20} color={BRASS} strokeWidth={2.2} />
+                  <span style={{ fontSize: 17, fontWeight: 800, color: INK, flex: 1 }}>Today's Focus</span>
+                  <span style={{ fontSize: 12, color: INK_FAINT }}>Do these next</span>
+                </div>
+                {focus.length > 0
+                  ? focus.map((r, i, arr) => (
+                    <button key={r.key} onClick={r.onClick} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "11px 0", background: "transparent", border: "none", borderBottom: i === arr.length - 1 ? "none" : `1px solid ${LINE}`, cursor: "pointer", textAlign: "left", fontFamily: "inherit", color: INK }}>
+                      <span style={{ width: 30, height: 30, borderRadius: "50%", background: BRASS, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, flexShrink: 0 }}>{i + 1}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+                      <span style={{ fontSize: 13, fontFamily: mono, fontWeight: 700, color: BRASS, whiteSpace: "nowrap" }}>{r.time}</span>
+                    </button>
+                  ))
+                  : <div style={{ fontSize: 12.5, color: INK_DIM, padding: "8px 0 10px" }}>You're all caught up. Nothing needs your focus right now.</div>}
               </div>
             </div>
           );
@@ -1153,34 +1162,12 @@ function HomeSlides({ stats, attention, quickAdd, quickLog }) {
               </div>
             </div>
           );
-          if (p === "quick") return (
-            <div key={p} style={slideStyle}>
-              <div style={shell}>
-                {head(Plus, BRASS, "Quick add")}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
-                  {quickAdd.map((q) => { const QI = q.icon; return (
-                    <button key={q.key} onClick={q.onClick} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 8px", borderRadius: 14, border: `1px solid ${LINE}`, background: hexA(q.fg, 0.08), cursor: "pointer", fontFamily: "inherit", minWidth: 0 }}>
-                      <span style={{ width: 26, height: 26, borderRadius: 9, background: hexA(q.fg, 0.16), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><QI size={14} color={q.fg} /></span>
-                      <span style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q.label}</span>
-                    </button>
-                  ); })}
-                </div>
-              </div>
-            </div>
-          );
-          return (
-            <div key={p} style={slideStyle}>
-              <div style={shell}>
-                {head(ClipboardCheck, TEAL, "Quick log", <span style={{ fontSize: 11, color: INK_FAINT }}>tap to open</span>)}
-                {quickLog.slice(0, 3).map((r, i, arr) => row(r, i === arr.length - 1))}
-              </div>
-            </div>
-          );
+          return null;
         })}
       </div>
       {pages.length > 1 && (
         <div style={{ display: "flex", justifyContent: "center", gap: 5, marginTop: 8 }}>
-          {pages.map((p, i) => <span key={p} onClick={() => { const el = ref.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); }} style={{ width: i === active ? 16 : 6, height: 6, borderRadius: 3, background: i === active ? (p === "attention" ? "#F59E0B" : BRASS) : LINE, transition: "all .2s ease", cursor: "pointer" }} />)}
+          {pages.map((p, i) => <span key={p} onClick={() => { const el = ref.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); }} style={{ width: i === active ? 16 : 6, height: 6, borderRadius: 3, background: i === active ? BRASS : LINE, transition: "all .2s ease", cursor: "pointer" }} />)}
         </div>
       )}
     </div>
@@ -5945,16 +5932,9 @@ function LifeTracker() {
               ...(soonItem ? [{ key: "soon", icon: Bell, fg: BRASS_HEX, label: `Coming up: ${soonItem.name}`, sub: `at ${fmtTimeString12(effectiveScheduledTime(soonItem))}`, onClick: openItem(soonItem) }] : []),
               ...(atRiskStreaks.length > 0 ? [{ key: "streak", icon: Flame, fg: "#F59E0B", label: `${atRiskStreaks.length} ${atRiskStreaks.length > 1 ? "streaks" : "streak"} end tonight if not done`, sub: atRiskStreaks.slice(0, 2).map((i) => i.name).join(", "), onClick: openItem(atRiskStreaks[0]) }] : []),
             ];
-            const quickAddOpts = [
-              { key: "task", label: "Task", icon: ClipboardCheck, fg: BRASS_HEX, onClick: () => openQuickCapture("task") },
-              { key: "expense", label: "Expense", icon: Wallet, fg: "#8B5CF6", onClick: addExpenseNow },
-              { key: "reminder", label: "Reminder", icon: Bell, fg: "#F59E0B", onClick: () => openQuickCapture("reminder") },
-              { key: "note", label: "Note", icon: Pencil, fg: TEAL_HEX, onClick: () => openQuickCapture("note") },
-              { key: "goal", label: "Goal", icon: Target, fg: "#EC4899", onClick: () => openQuickCapture("goal") },
-              { key: "event", label: "Event", icon: CalendarDays, fg: "#06B6D4", onClick: () => openQuickCapture("event") },
-            ];
             const quickLogRows = quickPendingHome.map((i) => ({ key: "q" + i.id, icon: ICON_MAP[i.icon] || Activity, fg: TODAY_CARD_ACCENT[i.category] || BRASS_HEX, label: i.name, sub: "Pending \u00b7 log now", onClick: openItem(i) }));
-            return <HomeSlides key={attentionNotes.length > 0 ? "att" : "noatt"} stats={homeSlides} attention={attentionNotes} quickAdd={quickAddOpts} quickLog={quickLogRows} />;
+            const focusItems = pendingItemsToday.filter((i) => field(i.id).status !== "skipped").slice(0, 3).map((i) => ({ key: "f" + i.id, label: i.name, time: fmtTimeString12(effectiveScheduledTime(i)), onClick: openItem(i) }));
+            return <HomeSlides stats={homeSlides} focus={focusItems} />;
           })()}
 
           <ProgressXPCard pct={progressPercent} done={completedActivities} total={totalActivities} xp={xpInfo(Object.values(dailyLogs || {}).reduce((n, log) => n + Object.values(log || {}).filter((r) => r && r.status === "done").length, 0))} />
