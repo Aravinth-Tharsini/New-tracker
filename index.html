@@ -1092,31 +1092,97 @@ function estimateArrival(depDate, depTime, minutes) {
   return { date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`, time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` };
 }
 // Home: one swipeable strip that holds the day's numbers and quick actions. The most urgent slide (pending / due) comes first.
-function HomeSlides({ slides }) {
-  // Four compact stat cards in one row: Completed, Expenses, Pending, Due.
-  const order = [
-    { key: "completed", sub: "activities" },
-    { key: "expenses", sub: "today" },
-    { key: "pending", sub: "activities" },
-    { key: "due", sub: "repayments" },
-  ];
-  const cards = order.map((o) => { const sl = slides.find((x) => x.key === o.key); return sl ? { ...sl, sub: o.sub } : null; }).filter(Boolean);
+function HomeSlides({ stats, attention, quickAdd, quickLog }) {
+  const ref = useRef(null);
+  const [idx, setIdx] = useState(0);
+  const order = [{ key: "completed", sub: "activities" }, { key: "expenses", sub: "today" }, { key: "pending", sub: "activities" }, { key: "due", sub: "repayments" }];
+  const cards = order.map((o) => { const sl = stats.find((x) => x.key === o.key); return sl ? { ...sl, sub: o.sub } : null; }).filter(Boolean);
+  const pages = [];
+  if (attention.length) pages.push("attention");
+  pages.push("stats", "quick");
+  if (quickLog.length) pages.push("log");
+  const active = Math.min(idx, pages.length - 1);
+  const head = (Icon, color, text, extra) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+      <Icon size={15} color={color} />
+      <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, flex: 1 }}>{text}</span>
+      {extra}
+    </div>
+  );
+  const row = (r, last) => {
+    const RI = r.icon;
+    return (
+      <button key={r.key} onClick={r.onClick} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "7px 0", background: "transparent", border: "none", borderTop: "none", borderBottom: last ? "none" : `1px solid ${LINE}`, cursor: "pointer", textAlign: "left", fontFamily: "inherit", color: INK }}>
+        <span style={{ width: 32, height: 32, borderRadius: 10, background: hexA(r.fg, 0.14), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><RI size={16} color={r.fg} /></span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+          {r.sub && <span style={{ display: "block", fontSize: 11.5, color: INK_FAINT, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.sub}</span>}
+        </span>
+        <ChevronRight size={16} color={INK_FAINT} style={{ flexShrink: 0 }} />
+      </button>
+    );
+  };
+  const slideStyle = { flex: "0 0 100%", scrollSnapAlign: "start", boxSizing: "border-box", display: "flex" };
+  const shell = { width: "100%", boxSizing: "border-box", background: PANEL, border: `1px solid ${LINE}`, borderRadius: 20, padding: "12px 14px", boxShadow: CARD_SHADOW };
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))`, gap: 8, marginBottom: 12 }}>
-      {cards.map((sl) => {
-        const SIcon = sl.icon;
-        const val = String(sl.value == null ? "" : sl.value);
-        return (
-          <button key={sl.key} onClick={sl.onClick || undefined} style={{ minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 3, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 20, padding: "12px 4px 11px", cursor: sl.onClick ? "pointer" : "default", fontFamily: "inherit", boxShadow: CARD_SHADOW, color: INK }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: sl.bg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 3 }}>
-              <SIcon size={19} color={sl.fg} />
+    <div style={{ marginBottom: 12 }}>
+      <div ref={ref} className="homeSlides" onScroll={(e) => { const el = e.currentTarget; const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); if (i !== idx) setIdx(i); }} style={{ display: "flex", alignItems: "stretch", overflowX: "auto", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}>
+        {pages.map((p) => {
+          if (p === "attention") return (
+            <div key={p} style={slideStyle}>
+              <div style={{ ...shell, borderLeft: `4px solid #F59E0B`, background: `linear-gradient(135deg, ${hexA("#F59E0B", 0.10)} 0%, ${PANEL} 60%)` }}>
+                {head(Bell, "#F59E0B", "Needs your attention", <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#F59E0B", borderRadius: 980, padding: "2px 8px" }}>{attention.length}</span>)}
+                {attention.slice(0, 3).map((r, i, arr) => row(r, i === arr.length - 1))}
+              </div>
             </div>
-            <div style={{ fontSize: 11.5, fontWeight: 600, color: INK_DIM, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sl.label}</div>
-            <div style={{ fontSize: val.length > 7 ? 13 : val.length > 5 ? 16 : 20, fontFamily: mono, fontWeight: 800, color: sl.fg, lineHeight: 1.15, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{val}</div>
-            <div style={{ fontSize: 10, color: INK_FAINT, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sl.sub}</div>
-          </button>
-        );
-      })}
+          );
+          if (p === "stats") return (
+            <div key={p} style={slideStyle}>
+              <div style={{ width: "100%", display: "grid", gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))`, gap: 8 }}>
+                {cards.map((sl) => {
+                  const SIcon = sl.icon; const val = String(sl.value == null ? "" : sl.value);
+                  return (
+                    <button key={sl.key} onClick={sl.onClick || undefined} style={{ minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 3, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 20, padding: "12px 4px 11px", cursor: sl.onClick ? "pointer" : "default", fontFamily: "inherit", boxShadow: CARD_SHADOW, color: INK }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 12, background: sl.bg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 3 }}><SIcon size={19} color={sl.fg} /></div>
+                      <div style={{ fontSize: 11.5, fontWeight: 600, color: INK_DIM, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sl.label}</div>
+                      <div style={{ fontSize: val.length > 7 ? 13 : val.length > 5 ? 16 : 20, fontFamily: mono, fontWeight: 800, color: sl.fg, lineHeight: 1.15, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{val}</div>
+                      <div style={{ fontSize: 10, color: INK_FAINT, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sl.sub}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+          if (p === "quick") return (
+            <div key={p} style={slideStyle}>
+              <div style={shell}>
+                {head(Plus, BRASS, "Quick add")}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+                  {quickAdd.map((q) => { const QI = q.icon; return (
+                    <button key={q.key} onClick={q.onClick} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 8px", borderRadius: 14, border: `1px solid ${LINE}`, background: hexA(q.fg, 0.08), cursor: "pointer", fontFamily: "inherit", minWidth: 0 }}>
+                      <span style={{ width: 26, height: 26, borderRadius: 9, background: hexA(q.fg, 0.16), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><QI size={14} color={q.fg} /></span>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q.label}</span>
+                    </button>
+                  ); })}
+                </div>
+              </div>
+            </div>
+          );
+          return (
+            <div key={p} style={slideStyle}>
+              <div style={shell}>
+                {head(ClipboardCheck, TEAL, "Quick log", <span style={{ fontSize: 11, color: INK_FAINT }}>tap to open</span>)}
+                {quickLog.slice(0, 3).map((r, i, arr) => row(r, i === arr.length - 1))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {pages.length > 1 && (
+        <div style={{ display: "flex", justifyContent: "center", gap: 5, marginTop: 8 }}>
+          {pages.map((p, i) => <span key={p} onClick={() => { const el = ref.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); }} style={{ width: i === active ? 16 : 6, height: 6, borderRadius: 3, background: i === active ? (p === "attention" ? "#F59E0B" : BRASS) : LINE, transition: "all .2s ease", cursor: "pointer" }} />)}
+        </div>
+      )}
     </div>
   );
 }
@@ -1129,39 +1195,53 @@ function xpInfo(totalDone) {
   const next = 25 * level * level;
   return { xp, level, next, toNext: next - xp, pct: Math.min(100, Math.round((xp / next) * 100)), title: XP_TITLES[Math.min(level, XP_TITLES.length) - 1] };
 }
-// One combined card: today's ring + message on top, XP level + bar underneath.
+// One combined card: today's ring + steps on top, XP level ring + bar underneath.
 function ProgressXPCard({ pct, done, total, xp }) {
   const msg = total === 0 ? "Add an activity to get started" : pct >= 100 ? "Perfect day, amazing!" : pct >= 75 ? "Almost there, finish strong!" : pct >= 40 ? "Good going, keep it up!" : pct > 0 ? "Nice start, keep it up!" : "Let's get the first one done";
   const todayXp = done * XP_PER_TASK;
+  const R = 29, C = 2 * Math.PI * R;
   return (
     <Card style={{ marginBottom: 14, padding: 0, overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 16px 14px" }}>
-        <RingProgress pct={pct} size={78} color={TEAL} />
+      <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 16px 14px", background: `linear-gradient(135deg, ${hexA(TEAL, 0.10)} 0%, ${hexA(TEAL, 0)} 70%)` }}>
+        <RingProgress pct={pct} size={84} color={TEAL} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: INK }}>Today's Progress</div>
-          <div style={{ marginTop: 3, fontSize: 12.5, color: INK_DIM }}>{done} of {total} activities completed</div>
-          <div style={{ marginTop: 5, fontSize: 13, fontWeight: 700, color: BRASS }}>{msg}</div>
+          <div style={{ marginTop: 2, fontSize: 12.5, color: INK_DIM }}><b style={{ color: TEAL, fontFamily: mono }}>{done}</b> of {total} activities done</div>
+          {total > 0 && total <= 12 && (
+            <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+              {Array.from({ length: total }).map((_, i) => <span key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: i < done ? TEAL : hexA(TEAL, 0.18) }} />)}
+            </div>
+          )}
+          <div style={{ marginTop: 7, fontSize: 12.5, fontWeight: 700, color: BRASS }}>{msg}</div>
         </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px 16px", borderTop: `1px solid ${LINE}`, background: hexA(BRASS, 0.05) }}>
-        <div style={{ flexShrink: 0, width: 54, height: 54, borderRadius: "50%", background: BRASS, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", lineHeight: 1, boxShadow: `0 4px 10px ${hexA(BRASS, 0.35)}` }}>
-          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".06em", opacity: 0.9 }}>LVL</span>
-          <span style={{ fontSize: 22, fontWeight: 800, fontFamily: mono, marginTop: 2 }}>{xp.level}</span>
+      <div style={{ padding: "14px 16px 15px", borderTop: `1px solid ${LINE}`, background: hexA(BRASS, 0.05) }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ position: "relative", width: 66, height: 66, flexShrink: 0 }}>
+            <svg width="66" height="66" viewBox="0 0 66 66" style={{ position: "absolute", inset: 0 }}>
+              <circle cx="33" cy="33" r={R} fill="none" stroke={hexA(BRASS, 0.18)} strokeWidth="5" />
+              <circle cx="33" cy="33" r={R} fill="none" stroke={BRASS} strokeWidth="5" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C - (xp.pct / 100) * C} transform="rotate(-90 33 33)" style={{ transition: "stroke-dashoffset .6s ease" }} />
+            </svg>
+            <div style={{ position: "absolute", inset: 9, borderRadius: "50%", background: BRASS, color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", lineHeight: 1, boxShadow: `0 3px 8px ${hexA(BRASS, 0.35)}` }}>
+              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: ".06em", opacity: 0.9 }}>LVL</span>
+              <span style={{ fontSize: 19, fontWeight: 800, fontFamily: mono, marginTop: 1 }}>{xp.level}</span>
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ fontSize: 17, fontWeight: 800, color: INK }}>{xp.title}</span>
+              <span style={{ fontSize: 12, fontFamily: mono, fontWeight: 700, color: INK_DIM, whiteSpace: "nowrap" }}>{xp.xp} <span style={{ color: INK_FAINT }}>/ {xp.next} XP</span></span>
+            </div>
+            <div style={{ height: 9, borderRadius: 5, background: hexA(BRASS, 0.16), marginTop: 7, overflow: "hidden" }}>
+              <div style={{ width: `${xp.pct}%`, height: "100%", borderRadius: 5, background: `linear-gradient(90deg, ${BRASS}, #5B8DF0)`, transition: "width .6s ease" }} />
+            </div>
+          </div>
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-            <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>{xp.title}</span>
-            <span style={{ fontSize: 12, fontFamily: mono, fontWeight: 700, color: INK_FAINT, whiteSpace: "nowrap" }}>{xp.xp} / {xp.next} XP</span>
-          </div>
-          <div style={{ height: 8, borderRadius: 4, background: hexA(BRASS, 0.16), marginTop: 7, overflow: "hidden" }}>
-            <div style={{ width: `${xp.pct}%`, height: "100%", borderRadius: 4, background: BRASS, transition: "width .6s ease" }} />
-          </div>
-          <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11.5, color: INK_FAINT }}>
-            <span>{xp.toNext} XP to level {xp.level + 1}</span>
-            <span style={{ color: todayXp > 0 ? TEAL : INK_FAINT, fontWeight: 700 }}>+{todayXp} XP today</span>
-          </div>
-          <div style={{ marginTop: 2, fontSize: 11, color: INK_FAINT }}>Each task completed = +{XP_PER_TASK} XP</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 11 }}>
+          <span style={{ fontSize: 12, color: INK_DIM }}><b style={{ color: INK, fontFamily: mono }}>{xp.toNext} XP</b> to level {xp.level + 1}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 800, color: todayXp > 0 ? TEAL : INK_FAINT, background: todayXp > 0 ? hexA(TEAL, 0.13) : hexA(INK_FAINT, 0.1), borderRadius: 980, padding: "3px 10px", whiteSpace: "nowrap" }}>+{todayXp} XP today</span>
         </div>
+        <div style={{ marginTop: 6, fontSize: 11, color: INK_FAINT }}>Each task you complete earns +{XP_PER_TASK} XP</div>
       </div>
     </Card>
   );
@@ -5768,7 +5848,29 @@ function LifeTracker() {
             </div>
           </div>
 
-          <HomeSlides key={homeSlides[0].key} slides={homeSlides} />
+          {(() => {
+            // Auto-surfaced "needs attention" notes: show first in the strip only when something really needs the person.
+            const nowMinHome = now.getHours() * 60 + now.getMinutes();
+            const atRiskStreaks = now.getHours() >= 17 ? pendingItemsToday.filter((i) => (streaks[i.id] || 0) > 0) : [];
+            const soonItem = upcomingToday[0] && (scheduledMinutes(upcomingToday[0]) - nowMinHome) <= 30 ? upcomingToday[0] : null;
+            const openItem = (i) => () => { setExpandedDailyCategory(i.category); setActiveTab(i.id); setPage("daily"); };
+            const attentionNotes = [
+              ...(overdueToday.length > 0 ? [{ key: "missed", icon: Clock, fg: CORAL, label: `${overdueToday.length} missed ${overdueToday.length > 1 ? "activities" : "activity"}`, sub: `${overdueToday[0].name} \u00b7 was due ${fmtTimeString12(effectiveScheduledTime(overdueToday[0]))}`, onClick: openItem(overdueToday[0]) }] : []),
+              ...(dueRepayments > 0 ? [{ key: "repay", icon: CreditCard, fg: CORAL, label: `${dueRepayments} ${dueRepayments > 1 ? "repayments" : "repayment"} due`, sub: "Tap to review", onClick: () => { setPage("categories"); setCatTab("financegoals"); } }] : []),
+              ...(soonItem ? [{ key: "soon", icon: Bell, fg: BRASS_HEX, label: `Coming up: ${soonItem.name}`, sub: `at ${fmtTimeString12(effectiveScheduledTime(soonItem))}`, onClick: openItem(soonItem) }] : []),
+              ...(atRiskStreaks.length > 0 ? [{ key: "streak", icon: Flame, fg: "#F59E0B", label: `${atRiskStreaks.length} ${atRiskStreaks.length > 1 ? "streaks" : "streak"} end tonight if not done`, sub: atRiskStreaks.slice(0, 2).map((i) => i.name).join(", "), onClick: openItem(atRiskStreaks[0]) }] : []),
+            ];
+            const quickAddOpts = [
+              { key: "task", label: "Task", icon: ClipboardCheck, fg: BRASS_HEX, onClick: () => openQuickCapture("task") },
+              { key: "expense", label: "Expense", icon: Wallet, fg: "#8B5CF6", onClick: addExpenseNow },
+              { key: "reminder", label: "Reminder", icon: Bell, fg: "#F59E0B", onClick: () => openQuickCapture("reminder") },
+              { key: "note", label: "Note", icon: Pencil, fg: TEAL_HEX, onClick: () => openQuickCapture("note") },
+              { key: "goal", label: "Goal", icon: Target, fg: "#EC4899", onClick: () => openQuickCapture("goal") },
+              { key: "event", label: "Event", icon: CalendarDays, fg: "#06B6D4", onClick: () => openQuickCapture("event") },
+            ];
+            const quickLogRows = quickPendingHome.map((i) => ({ key: "q" + i.id, icon: ICON_MAP[i.icon] || Activity, fg: TODAY_CARD_ACCENT[i.category] || BRASS_HEX, label: i.name, sub: "Pending \u00b7 log now", onClick: openItem(i) }));
+            return <HomeSlides key={attentionNotes.length > 0 ? "att" : "noatt"} stats={homeSlides} attention={attentionNotes} quickAdd={quickAddOpts} quickLog={quickLogRows} />;
+          })()}
 
           <ProgressXPCard pct={progressPercent} done={completedActivities} total={totalActivities} xp={xpInfo(Object.values(dailyLogs || {}).reduce((n, log) => n + Object.values(log || {}).filter((r) => r && r.status === "done").length, 0))} />
 
