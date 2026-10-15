@@ -64,6 +64,51 @@
     }
   </script>
 
+  <!-- Startup guard: if the app fails to start (blocked CDN, no internet, runtime error) show the real
+       reason on screen instead of a blank white page. Plain JS, no dependencies. -->
+  <script>
+    (function () {
+      var shown = false;
+      function show(title, detail) {
+        try {
+          if (shown) return; shown = true;
+          var dark = document.documentElement.style.colorScheme === "dark";
+          var box = document.createElement("div");
+          box.id = "fatal-overlay";
+          box.style.cssText = "position:fixed;inset:0;z-index:2147483647;overflow:auto;padding:24px 20px;font-family:-apple-system,Roboto,sans-serif;background:" + (dark ? "#000" : "#F5F5F7") + ";color:" + (dark ? "#fff" : "#111");
+          var h = document.createElement("div"); h.style.cssText = "font-size:20px;font-weight:700;margin-bottom:10px"; h.textContent = title;
+          var d = document.createElement("pre"); d.style.cssText = "white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.45;margin:0 0 16px"; d.textContent = detail;
+          var b = document.createElement("button"); b.textContent = "Reload app"; b.style.cssText = "padding:12px 18px;border:0;border-radius:10px;background:#0071E3;color:#fff;font-size:16px;font-weight:600";
+          b.onclick = function () { location.reload(); };
+          box.appendChild(h); box.appendChild(d); box.appendChild(b);
+          (document.body || document.documentElement).appendChild(box);
+        } catch (e) {}
+      }
+      window.__showFatal = show;
+      window.addEventListener("error", function (ev) {
+        var t = ev && ev.target;
+        if (t && t !== window && t.tagName === "SCRIPT") {
+          var src = t.src || "";
+          if (/jspdf/i.test(src) || /update\.js/i.test(src)) return; // optional files: app still works
+          show("A required file did not load", "File: " + src + "\n\nCheck the phone's internet connection, then reload. (This app downloads React/Babel the first time it opens.)");
+          return;
+        }
+        var msg = (ev && ev.message) || "";
+        if (/ResizeObserver/i.test(msg) || msg === "Script error.") return;
+        show("The app hit an error", msg + (ev && ev.filename ? "\n" + ev.filename + ":" + ev.lineno + ":" + ev.colno : ""));
+      }, true);
+      window.addEventListener("unhandledrejection", function (ev) {
+        var r = ev && ev.reason; var m = String((r && (r.stack || r.message)) || r || "");
+        if (/importing a module script failed|Failed to fetch dynamically imported|esm\.sh/i.test(m)) show("A required file did not load", m);
+      });
+      // Watchdog: nothing rendered after 20 seconds = the app never started.
+      setTimeout(function () {
+        var r = document.getElementById("root");
+        if (r && !r.children.length) show("The app did not start", "Nothing was drawn after 20 seconds.\nMost likely React, lucide-react or Babel could not be downloaded (esm.sh / unpkg.com).\nCheck the internet connection and reload. If it keeps happening, the libraries must be bundled inside the APK.");
+      }, 20000);
+    })();
+  </script>
+
   <script type="importmap">
   {
     "imports": {
@@ -1033,7 +1078,6 @@ function estimateArrival(depDate, depTime, minutes) {
   d.setMinutes(d.getMinutes() + minutes);
   return { date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`, time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` };
 }
-// Per-reminder choice shown next to a time input: a quiet notification, or a loud alarm that opens full screen when tapped.
 // Home: one swipeable strip that holds the day's numbers and quick actions. The most urgent slide (pending / due) comes first.
 function HomeSlides({ slides }) {
   const [idx, setIdx] = useState(0);
@@ -1068,6 +1112,7 @@ function HomeSlides({ slides }) {
     </div>
   );
 }
+// Per-reminder choice shown next to a time input: a quiet notification, or a loud alarm that opens full screen when tapped.
 function ReminderTypePick({ value, onChange }) {
   return (
     <div style={{ marginTop: 8 }}>
@@ -9054,7 +9099,23 @@ function doPost(e) {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<LifeTracker />);
+class AppErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) { try { console.error("App crashed:", err, info && info.componentStack); } catch (e) {} }
+  render() {
+    if (!this.state.err) return this.props.children;
+    const msg = String((this.state.err && (this.state.err.stack || this.state.err.message)) || this.state.err).slice(0, 900);
+    return (
+      <div style={{ padding: "28px 20px", fontFamily: "-apple-system, Roboto, sans-serif", color: "#111", background: "#F5F5F7", minHeight: "100vh" }}>
+        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 10 }}>Something went wrong</div>
+        <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 13, lineHeight: 1.45, margin: "0 0 16px" }}>{msg}</pre>
+        <button onClick={() => window.location.reload()} style={{ padding: "12px 18px", border: 0, borderRadius: 10, background: "#0071E3", color: "#fff", fontSize: 16, fontWeight: 600 }}>Reload app</button>
+      </div>
+    );
+  }
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<AppErrorBoundary><LifeTracker /></AppErrorBoundary>);
   </script>
   <script src="update.js"></script>
 </body>
