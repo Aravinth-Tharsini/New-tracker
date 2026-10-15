@@ -391,6 +391,8 @@ button:active, [role="button"]:active {
 <style>
 /* Keep the bottom navigation visible while the page scrolls */
 body{padding-bottom:calc(88px + env(safe-area-inset-bottom));}
+.homeSlides{scrollbar-width:none;-ms-overflow-style:none;}
+.homeSlides::-webkit-scrollbar{display:none;}
 </style>
 
 <div id="root"></div>
@@ -1032,6 +1034,40 @@ function estimateArrival(depDate, depTime, minutes) {
   return { date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`, time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` };
 }
 // Per-reminder choice shown next to a time input: a quiet notification, or a loud alarm that opens full screen when tapped.
+// Home: one swipeable strip that holds the day's numbers and quick actions. The most urgent slide (pending / due) comes first.
+function HomeSlides({ slides }) {
+  const [idx, setIdx] = useState(0);
+  const active = Math.min(idx, slides.length - 1);
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div className="homeSlides" onScroll={(e) => { const el = e.currentTarget; const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); if (i !== idx) setIdx(i); }} style={{ display: "flex", overflowX: "auto", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}>
+        {slides.map((sl) => {
+          const SIcon = sl.icon;
+          return (
+            <div key={sl.key} style={{ flex: "0 0 100%", scrollSnapAlign: "start", boxSizing: "border-box" }}>
+              <button onClick={sl.onClick || undefined} style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 18, padding: "16px 16px", cursor: sl.onClick ? "pointer" : "default", textAlign: "left", fontFamily: "inherit", boxShadow: CARD_SHADOW, color: INK }}>
+                <div style={{ width: 46, height: 46, borderRadius: 14, background: sl.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <SIcon size={22} color={sl.fg} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sl.label}</div>
+                  <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 2 }}>{sl.sub}</div>
+                </div>
+                {sl.value != null && <div style={{ fontSize: 26, fontFamily: mono, fontWeight: 800, color: sl.fg, flexShrink: 0 }}>{sl.value}</div>}
+                {sl.onClick && <ChevronRight size={18} color={INK_FAINT} style={{ flexShrink: 0 }} />}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {slides.length > 1 && (
+        <div style={{ display: "flex", justifyContent: "center", gap: 5, marginTop: 8 }}>
+          {slides.map((sl, i) => <span key={sl.key} style={{ width: i === active ? 16 : 6, height: 6, borderRadius: 3, background: i === active ? BRASS : LINE, transition: "all .2s ease" }} />)}
+        </div>
+      )}
+    </div>
+  );
+}
 function ReminderTypePick({ value, onChange }) {
   return (
     <div style={{ marginTop: 8 }}>
@@ -5546,11 +5582,21 @@ function LifeTracker() {
         // The item right after pendingActivityTarget, for a separate small "NEXT" line under the NOW card.
         const afterNowTarget = [...upcomingToday, ...overdueToday].find((i) => i.id !== (pendingActivityTarget && pendingActivityTarget.id)) || null;
 
-        const statCards = [
-          { key: "completed", label: "Completed", sub: "activities", value: `${completedActivities}/${totalActivities}`, icon: CheckCircle2, fg: TEAL, bg: "rgba(52,199,89,0.14)" },
-          { key: "expenses", label: "Expenses", sub: "today", value: inr(todayExpenses), icon: Wallet, fg: "#8B5CF6", bg: "rgba(139,92,246,0.14)" },
-          { key: "pending", label: "Pending", sub: "activities", value: pendingActivities, icon: Clock, fg: "#F59E0B", bg: "rgba(245,158,11,0.14)" },
-          { key: "due", label: "Due", sub: "repayments", value: dueRepayments, icon: CreditCard, fg: dueRepayments ? CORAL : BRASS, bg: dueRepayments ? hexA(CORAL, 0.13) : "rgba(0,113,227,0.12)" },
+        // Swipe strip: urgent things first (pending, due, quick log of pending items), then the day's numbers.
+        const overdueIdsHome = new Set(overdueToday.map((o) => o.id));
+        const quickPendingHome = pendingItemsToday.filter((i) => field(i.id).status !== "skipped" && !overdueIdsHome.has(i.id) && (i.category !== "activity" || isWithinVisibilityWindow(i, now))).slice(0, 3);
+        const openPendingTarget = () => { if (pendingActivityTarget) { setExpandedDailyCategory(pendingActivityTarget.category); setActiveTab(pendingActivityTarget.id); } setPage("daily"); };
+        const addExpenseNow = () => { setExpandedDailyCategory("expense"); setPage("daily"); };
+        const slPending = { key: "pending", label: "Pending", sub: pendingActivities > 0 ? "activities \u00b7 tap to open the next one" : "activities", value: pendingActivities, icon: Clock, fg: "#F59E0B", bg: "rgba(245,158,11,0.14)", onClick: pendingActivities > 0 ? openPendingTarget : null };
+        const slDue = { key: "due", label: "Due", sub: "repayments", value: dueRepayments, icon: CreditCard, fg: dueRepayments ? CORAL : BRASS, bg: dueRepayments ? hexA(CORAL, 0.13) : "rgba(0,113,227,0.12)", onClick: null };
+        const homeSlides = [
+          ...(pendingActivities > 0 ? [slPending] : []),
+          ...(dueRepayments > 0 ? [slDue] : []),
+          ...quickPendingHome.map((i) => ({ key: "q" + i.id, label: i.name, sub: "Quick log \u00b7 tap to open", value: null, icon: ICON_MAP[i.icon] || Activity, fg: TODAY_CARD_ACCENT[i.category] || BRASS_HEX, bg: hexA(TODAY_CARD_ACCENT[i.category] || BRASS_HEX, 0.14), onClick: () => { setExpandedDailyCategory(i.category); setActiveTab(i.id); setPage("daily"); } })),
+          { key: "completed", label: "Completed", sub: "activities", value: `${completedActivities}/${totalActivities}`, icon: CheckCircle2, fg: TEAL, bg: "rgba(52,199,89,0.14)", onClick: null },
+          { key: "expenses", label: "Expenses", sub: "today \u00b7 tap to add expense", value: inr(todayExpenses), icon: Wallet, fg: "#8B5CF6", bg: "rgba(139,92,246,0.14)", onClick: addExpenseNow },
+          ...(pendingActivities > 0 ? [] : [slPending]),
+          ...(dueRepayments > 0 ? [] : [slDue]),
         ];
         return <div key="dashboard-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, width: "100%" }}>
           <div className="notificationStickyBar">
@@ -5620,21 +5666,7 @@ function LifeTracker() {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 7, marginBottom: 12 }}>
-            {statCards.map((s) => {
-              const SIcon = s.icon;
-              return (
-                <Card key={s.key} style={{ padding: "12px 8px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 6 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 10, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <SIcon size={17} color={s.fg} />
-                  </div>
-                  <div style={{ fontSize: 12, color: INK_DIM, fontWeight: 600 }}>{s.label}</div>
-                  <div style={{ fontSize: 18, fontFamily: mono, fontWeight: 800, color: s.fg }}>{s.value}</div>
-                  <div style={{ fontSize: 11, color: INK_FAINT }}>{s.sub}</div>
-                </Card>
-              );
-            })}
-          </div>
+          <HomeSlides key={homeSlides[0].key} slides={homeSlides} />
 
           {totalActivities > 0 && (
             <Card style={{ marginBottom: 14, padding: "14px 16px" }}>
@@ -5648,35 +5680,6 @@ function LifeTracker() {
             </Card>
           )}
 
-          {(() => {
-            // Streaks "at risk": an active streak (computed the same way as the Habits tab) for an
-            // item scheduled today that hasn't been completed yet. Shown from early evening onward
-            // so it reads as a heads-up, not an all-day nag. computeStreak already treats today as
-            // "not yet broken" until the day actually ends, so this only ever surfaces real streaks.
-            if (now.getHours() < 17) return null;
-            const atRisk = validItems.filter((i) => {
-              if (i.type !== "instant" && i.type !== "duration") return false;
-              if (field(i.id).status === "done" || field(i.id).status === "skipped") return false;
-              return (streaks[i.id] || 0) >= 2;
-            });
-            if (atRisk.length === 0) return null;
-            return (
-              <Card style={{ marginBottom: 16, padding: "12px 14px", borderLeft: `3px solid #F59E0B` }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: atRisk.length ? 6 : 0 }}>
-                  <Flame size={16} color="#F59E0B" />
-                  <div style={{ fontSize: 13.5, fontWeight: 750, color: INK }}>
-                    {atRisk.length === 1 ? "A streak ends tonight if not done" : `${atRisk.length} streaks end tonight if not done`}
-                  </div>
-                </div>
-                {atRisk.map((i) => (
-                  <button key={i.id} onClick={() => { setExpandedDailyCategory(i.category); setActiveTab(i.id); setPage("daily"); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "transparent", border: "none", padding: "5px 0", textAlign: "left", cursor: "pointer" }}>
-                    <span style={{ fontSize: 13, color: INK_DIM, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.name}</span>
-                    <span style={{ fontSize: 12, color: "#F59E0B", fontWeight: 700, fontFamily: mono, flexShrink: 0, marginLeft: 8 }}>{streaks[i.id]}🔥</span>
-                  </button>
-                ))}
-              </Card>
-            );
-          })()}
 
           {overdueToday.length > 0 && (
             <>
@@ -5753,41 +5756,6 @@ function LifeTracker() {
             </>
           )}
 
-          {(() => {
-            // "Add Expense" is always offered; up to 3 more slots surface today's soonest
-            // loggable items (config-driven, so this adapts to whatever the person has set up).
-            // Skipped items stay hidden (same rule as Missed/Next Up), routines follow the Today
-            // tab's 30-minute visibility window so a tap never lands on an item Today isn't
-            // showing, and overdue items are left to the Missed Today list right above.
-            const overdueIds = new Set(overdueToday.map((o) => o.id));
-            const quickPending = pendingItemsToday.filter((i) => field(i.id).status !== "skipped" && !overdueIds.has(i.id) && (i.category !== "activity" || isWithinVisibilityWindow(i, now)));
-            const quickActionItems = [
-              { key: "expense", icon: Wallet, label: "Add Expense", accent: TODAY_CARD_ACCENT.expense, onClick: () => { setExpandedDailyCategory("expense"); setPage("daily"); } },
-              ...quickPending.slice(0, 3).map((i) => ({
-                key: i.id, icon: ICON_MAP[i.icon] || Activity, label: i.name,
-                accent: TODAY_CARD_ACCENT[i.category] || BRASS_HEX,
-                onClick: () => { setExpandedDailyCategory(i.category); setActiveTab(i.id); setPage("daily"); },
-              })),
-            ];
-            return (
-              <>
-                <SectionLabel>Quick Actions</SectionLabel>
-                <div style={{ display: "grid", gridTemplateColumns: `repeat(${quickActionItems.length}, 1fr)`, gap: 8, marginBottom: 16 }}>
-                  {quickActionItems.map((qa) => {
-                    const QIcon = qa.icon;
-                    return (
-                      <button key={qa.key} onClick={qa.onClick} style={{ minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 16, padding: "14px 6px", cursor: "pointer", boxShadow: CARD_SHADOW }}>
-                        <div style={{ width: 34, height: 34, borderRadius: "50%", border: `2px solid ${qa.accent}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <QIcon size={16} color={qa.accent} strokeWidth={2.2} />
-                        </div>
-                        <span style={{ fontSize: 11.5, fontWeight: 650, color: INK, textAlign: "center", lineHeight: 1.2, maxWidth: "100%", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>{qa.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            );
-          })()}
 
           {(() => {
             // Urgency-ordered attention rows. Each row carries a rank (lower = more urgent) and the
