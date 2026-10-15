@@ -505,7 +505,7 @@ window.storage = {
 };
 // ---- end storage polyfill ----
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
 import {
   CalendarDays, LayoutGrid, TrendingUp, Plus, Trash2, Check, Wallet, Briefcase, HeartPulse,
   Settings2, Play, Square, ArrowUp, ArrowDown, ArrowRight, Sun, Building2, Dumbbell, Moon, Droplet, Receipt,
@@ -5362,6 +5362,20 @@ function LifeTracker() {
   // ---- Swipe left/right to move between the bottom-nav pages (Home, Today, Planner, Progress, More) ----
   const SWIPE_ORDER = ["dashboard", "daily", "categories", "analysis", "datalink"];
   const swipeRef = useRef(null);
+  // Smooth slide-in when the page changes (swipe or icon tap): new page glides in from the swipe direction.
+  const prevPageRef = useRef(page);
+  const rootRef = useRef(null);
+  useLayoutEffect(() => {
+    const prev = prevPageRef.current; prevPageRef.current = page;
+    if (prev === page || !rootRef.current) return;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const dir = SWIPE_ORDER.indexOf(page) >= SWIPE_ORDER.indexOf(prev) ? 1 : -1;
+    Array.from(rootRef.current.children).forEach((el) => {
+      if (el.tagName === "STYLE" || !el.animate) return;
+      if (window.getComputedStyle(el).position === "fixed") return;
+      try { el.animate([{ opacity: 0, transform: `translateX(${dir * 36}px)` }, { opacity: 1, transform: "translateX(0)" }], { duration: 280, easing: "cubic-bezier(.22,.8,.25,1)" }); } catch (e) {}
+    });
+  }, [page]);
   const onSwipeStart = (e) => {
     swipeRef.current = null;
     if (alarmScreen || !e.touches || e.touches.length !== 1) return;
@@ -5387,7 +5401,7 @@ function LifeTracker() {
   };
 
   return (
-    <div data-theme={darkMode ? "dark" : "light"} onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} style={{ background: BG, minHeight: "100dvh", width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: disp, color: INK, boxSizing: "border-box", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
+    <div ref={rootRef} data-theme={darkMode ? "dark" : "light"} onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} style={{ background: BG, minHeight: "100dvh", width: "100%", maxWidth: 480, margin: "0 auto", fontFamily: disp, color: INK, boxSizing: "border-box", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
       <style>{`
         *{box-sizing:border-box;} input,select,button{max-width:100%; font-family:${disp};} .no-scrollbar{scrollbar-width:none; -ms-overflow-style:none;} .no-scrollbar::-webkit-scrollbar{display:none; width:0; height:0;}
         [data-theme="light"]{
