@@ -72,16 +72,29 @@
       function show(title, detail) {
         try {
           if (shown) return; shown = true;
-          var dark = document.documentElement.style.colorScheme === "dark";
+          try { console.error("[Life Tracker]", title, detail); } catch (e) {}
+          var net = /did not load|did not start/i.test(title);
+          var msg = net ? "Please check your internet connection and reload the app." : "Please reload the app to continue.";
+          var css = document.createElement("style");
+          css.textContent = "@keyframes ltPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.85}}" +
+            "@keyframes ltIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}" +
+            "#fatal-overlay button:active{transform:scale(.96)}";
           var box = document.createElement("div");
           box.id = "fatal-overlay";
-          box.style.cssText = "position:fixed;inset:0;z-index:2147483647;overflow:auto;padding:24px 20px;font-family:-apple-system,Roboto,sans-serif;background:" + (dark ? "#000" : "#F5F5F7") + ";color:" + (dark ? "#fff" : "#111");
-          var h = document.createElement("div"); h.style.cssText = "font-size:20px;font-weight:700;margin-bottom:10px"; h.textContent = title;
-          var d = document.createElement("pre"); d.style.cssText = "white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.45;margin:0 0 16px"; d.textContent = detail;
-          var b = document.createElement("button"); b.textContent = "Reload app"; b.style.cssText = "padding:12px 18px;border:0;border-radius:10px;background:#0071E3;color:#fff;font-size:16px;font-weight:600";
-          b.onclick = function () { location.reload(); };
-          box.appendChild(h); box.appendChild(d); box.appendChild(b);
+          box.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;font-family:-apple-system,Roboto,'Segoe UI',sans-serif;color:#fff;background:linear-gradient(160deg,#0B1B4A 0%,#1E4FCB 100%)";
+          box.innerHTML =
+            '<div style="max-width:340px;width:100%;animation:ltIn .5s ease both">' +
+              '<div style="width:104px;height:104px;margin:0 auto 26px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 14px rgba(255,255,255,.07);animation:ltPulse 2.4s ease-in-out infinite">' +
+                '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>' +
+              '</div>' +
+              '<div style="font-size:27px;font-weight:800;letter-spacing:-.3px;margin-bottom:10px">Oops! Something went wrong</div>' +
+              '<div style="font-size:16px;line-height:1.5;opacity:.86;margin-bottom:6px">' + msg + '</div>' +
+              '<div style="font-size:14px;opacity:.65;margin-bottom:32px">Your data is safe.</div>' +
+              '<button id="fatal-reload" style="width:100%;padding:16px 20px;border:0;border-radius:999px;background:#fff;color:#1E4FCB;font-size:18px;font-weight:800;letter-spacing:.2px;box-shadow:0 10px 26px rgba(0,0,0,.28);cursor:pointer">Reload</button>' +
+            '</div>';
+          box.appendChild(css);
           (document.body || document.documentElement).appendChild(box);
+          var rb = document.getElementById("fatal-reload"); if (rb) rb.onclick = function () { location.reload(); };
         } catch (e) {}
       }
       window.__showFatal = show;
@@ -4224,10 +4237,13 @@ function LifeTracker() {
     const cap = window.Capacitor; const LN = cap && cap.Plugins && cap.Plugins.LocalNotifications;
     if (!LN || !LN.addListener) return undefined;
     let handle = null, gone = false;
-    LN.addListener("localNotificationActionPerformed", (ev) => {
-      const n = ev && ev.notification;
-      if (n && n.extra && n.extra.alarm) setAlarmScreen({ title: n.title || "Alarm", body: n.body || "" });
-    }).then((h) => { if (gone) h.remove(); else handle = h; }).catch(() => {});
+    // addListener returns a Promise in newer Capacitor versions but a plain handle in older ones, so wrap it.
+    try {
+      Promise.resolve(LN.addListener("localNotificationActionPerformed", (ev) => {
+        const n = ev && ev.notification;
+        if (n && n.extra && n.extra.alarm) setAlarmScreen({ title: n.title || "Alarm", body: n.body || "" });
+      })).then((h) => { if (gone) { try { h && h.remove && h.remove(); } catch (e) {} } else handle = h; }).catch(() => {});
+    } catch (e) {}
     return () => { gone = true; if (handle && handle.remove) handle.remove(); };
   }, []);
   const snoozeAlarm = async (mins) => {
@@ -9105,12 +9121,18 @@ class AppErrorBoundary extends React.Component {
   componentDidCatch(err, info) { try { console.error("App crashed:", err, info && info.componentStack); } catch (e) {} }
   render() {
     if (!this.state.err) return this.props.children;
-    const msg = String((this.state.err && (this.state.err.stack || this.state.err.message)) || this.state.err).slice(0, 900);
     return (
-      <div style={{ padding: "28px 20px", fontFamily: "-apple-system, Roboto, sans-serif", color: "#111", background: "#F5F5F7", minHeight: "100vh" }}>
-        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 10 }}>Something went wrong</div>
-        <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 13, lineHeight: 1.45, margin: "0 0 16px" }}>{msg}</pre>
-        <button onClick={() => window.location.reload()} style={{ padding: "12px 18px", border: 0, borderRadius: 10, background: "#0071E3", color: "#fff", fontSize: 16, fontWeight: 600 }}>Reload app</button>
+      <div style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 28, textAlign: "center", fontFamily: "-apple-system, Roboto, 'Segoe UI', sans-serif", color: "#FFFFFF", background: "linear-gradient(160deg, #0B1B4A 0%, #1E4FCB 100%)" }}>
+        <style>{"@keyframes ltPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.85}}@keyframes ltIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}.lt-reload:active{transform:scale(.96)}"}</style>
+        <div style={{ maxWidth: 340, width: "100%", animation: "ltIn .5s ease both" }}>
+          <div style={{ width: 104, height: 104, margin: "0 auto 26px", borderRadius: "50%", background: "rgba(255,255,255,.14)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 14px rgba(255,255,255,.07)", animation: "ltPulse 2.4s ease-in-out infinite" }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v6h-6" /></svg>
+          </div>
+          <div style={{ fontSize: 27, fontWeight: 800, letterSpacing: "-.3px", marginBottom: 10 }}>Oops! Something went wrong</div>
+          <div style={{ fontSize: 16, lineHeight: 1.5, opacity: 0.86, marginBottom: 6 }}>Please reload the app to continue.</div>
+          <div style={{ fontSize: 14, opacity: 0.65, marginBottom: 32 }}>Your data is safe.</div>
+          <button className="lt-reload" onClick={() => window.location.reload()} style={{ width: "100%", padding: "16px 20px", border: 0, borderRadius: 999, background: "#FFFFFF", color: "#1E4FCB", fontSize: 18, fontWeight: 800, letterSpacing: ".2px", boxShadow: "0 10px 26px rgba(0,0,0,.28)", cursor: "pointer" }}>Reload</button>
+        </div>
       </div>
     );
   }
