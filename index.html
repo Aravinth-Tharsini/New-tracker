@@ -1097,7 +1097,7 @@ function HomeSlides({ stats, focus }) {
   const [idx, setIdx] = useState(0);
   const order = [{ key: "completed", sub: "activities" }, { key: "expenses", sub: "today" }, { key: "pending", sub: "activities" }, { key: "due", sub: "repayments" }];
   const cards = order.map((o) => { const sl = stats.find((x) => x.key === o.key); return sl ? { ...sl, sub: o.sub } : null; }).filter(Boolean);
-  const pages = ["focus", "stats"];
+  const pages = focus.length > 0 ? ["focus", "stats"] : ["stats"];
   const active = Math.min(idx, pages.length - 1);
   const head = (Icon, color, text, extra) => (
     <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
