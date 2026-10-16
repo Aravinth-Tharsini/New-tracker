@@ -1097,7 +1097,7 @@ function HomeSlides({ stats, focus }) {
   const [idx, setIdx] = useState(0);
   const order = [{ key: "completed", sub: "activities" }, { key: "expenses", sub: "today" }, { key: "pending", sub: "activities" }, { key: "due", sub: "repayments" }];
   const cards = order.map((o) => { const sl = stats.find((x) => x.key === o.key); return sl ? { ...sl, sub: o.sub } : null; }).filter(Boolean);
-  const pages = focus.length > 0 ? ["focus", "stats"] : ["stats"];
+  const pages = ["stats"]; // Today's Focus slide removed from Home
   const active = Math.min(idx, pages.length - 1);
   const head = (Icon, color, text, extra) => (
     <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
@@ -1291,8 +1291,132 @@ function TreeArt({ g, v }) {
     </svg>
   );
 }
+// ---- Full-screen 3D tree: real 3D branch geometry, perspective-projected on a canvas (drag to orbit, pinch/scroll to zoom).
+function tree3dBuild(g, v) {
+  const cl = (x) => Math.max(0, Math.min(1, x));
+  const s = cl((g - 1) / 8), fl = cl((g - 6.2) / 1.5), fr = cl((g - 8.2) / 1.2);
+  const GREENS = ["#2E7D3A", "#3F9B4A", "#58B45A", "#7BC96B"], DRY = ["#C9B23E", "#B98A2E", "#A9A64A"];
+  const small = g < 1, maxD = small ? 0 : 1 + Math.round(s * 4);
+  const trunk = g < 0.35 ? 0 : small ? 5 + 17 * ((g - 0.35) / 0.65) : 12 + 18 * s;
+  const items = [];
+  const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  let n = 0; const col = () => { n++; return treeSeeded(n + 50) > v + 0.12 ? DRY[n % 3] : GREENS[n % 4]; };
+  const leaf = (p, r, id) => items.push({ k: "leaf", p, r, rot: treeSeeded(id) * 6.28, ph: treeSeeded(id + 2) * 6.28, c: col() });
+  const tips = [], mids = [];
+  const rec = (p, dir, len, w, d, id) => {
+    const e = [p[0] + dir[0] * len, p[1] + dir[1] * len, p[2] + dir[2] * len];
+    items.push({ k: "seg", a: p, b: e, w });
+    if (d >= maxD) { tips.push({ p: e, id }); return; }
+    if (d >= 1) mids.push({ p: [(p[0] + e[0]) / 2, (p[1] + e[1]) / 2, (p[2] + e[2]) / 2], id });
+    const ref = Math.abs(dir[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    const u = norm(cross(dir, ref)), v2 = cross(dir, u), kids = d === 0 ? 3 : 2, az0 = treeSeeded(id) * 6.283;
+    for (let k = 0; k < kids; k++) {
+      const az = az0 + k * (6.283 / kids) + (treeSeeded(id + k) - 0.5) * 0.5, sp = 0.45 + 0.25 * treeSeeded(id + k + 3);
+      const pr = [u[0] * Math.cos(az) + v2[0] * Math.sin(az), u[1] * Math.cos(az) + v2[1] * Math.sin(az), u[2] * Math.cos(az) + v2[2] * Math.sin(az)];
+      const nd = norm([dir[0] * Math.cos(sp) + pr[0] * Math.sin(sp), dir[1] * Math.cos(sp) + pr[1] * Math.sin(sp) + 0.12, dir[2] * Math.cos(sp) + pr[2] * Math.sin(sp)]);
+      rec(e, nd, len * 0.74, w * 0.68, d + 1, id * 3 + k + 1);
+    }
+  };
+  if (trunk > 0) rec([0, 0, 0], [0, 1, 0], trunk, 2.2 + 4.2 * s, 0, 1); else items.push({ k: "seed", p: [0, 1, 0] });
+  const r = 2.6 + 2.6 * s, lr = 3 + 3 * s;
+  tips.forEach((t) => {
+    if (small) { leaf([t.p[0] - 3, t.p[1], t.p[2]], 5, t.id); leaf([t.p[0] + 3, t.p[1], t.p[2]], 5, t.id + 1); return; }
+    for (let i = 0; i < (s > 0.3 ? 4 : 3); i++) leaf([t.p[0] + (treeSeeded(t.id + i * 7) - 0.5) * 2 * r, t.p[1] + (treeSeeded(t.id + i * 5) - 0.3) * r, t.p[2] + (treeSeeded(t.id + i * 3) - 0.5) * 2 * r], lr, t.id + i);
+    if (fr > 0 && treeSeeded(t.id + 5) < fr * 0.7) items.push({ k: "fruit", p: [t.p[0], t.p[1] - 3, t.p[2]], c: treeSeeded(t.id + 6) > 0.7 ? "#F59E0B" : "#E5484D", r: 2.4 + 0.6 * fr });
+    else if (fl > 0 && treeSeeded(t.id + 7) < fl * 0.75) items.push({ k: "flower", p: [t.p[0], t.p[1] + 1, t.p[2]], c: treeSeeded(t.id) > 0.5 ? "#F6A5C0" : "#FFFFFF" });
+  });
+  if (s > 0.2) mids.forEach((m) => leaf([m.p[0] + 1.5, m.p[1], m.p[2] + 1.5], 2.6 + 1.6 * s, m.id));
+  let H = 20; items.forEach((it) => { const y = it.b ? it.b[1] : it.p[1]; if (y > H) H = y; });
+  return { items, H: H + 6 };
+}
+function Tree3DView({ info, onClose }) {
+  const { g, v } = info;
+  const canvasRef = useRef(null);
+  const st = useRef({ rot: 0.6, tilt: 0.28, zoom: 1, drag: false, pts: {}, last: 0, pinch: 0, idle: 0 });
+  const model = useMemo(() => tree3dBuild(g, v), [g, v]);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  useEffect(() => {
+    const cv = canvasRef.current; if (!cv) return undefined;
+    const ctx = cv.getContext("2d"); const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let raf = 0, t0 = performance.now();
+    const frame = (now) => {
+      const S = st.current, t = (now - t0) / 1000, dpr = Math.min(2, window.devicePixelRatio || 1);
+      const W = cv.clientWidth, Hh = cv.clientHeight;
+      if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(Hh * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr); }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, Hh);
+      if (!S.drag && !calm) S.rot += 0.0032;
+      const H = model.H, sc = (Hh * 0.52 / H) * S.zoom, cx = W / 2, cy = Hh * 0.5, ty = H * 0.42, D = H * 3.2;
+      const cr = Math.cos(S.rot), sr = Math.sin(S.rot), ct = Math.cos(S.tilt), stl = Math.sin(S.tilt);
+      const P = (p, sway) => { const x = p[0] + (sway && !calm ? Math.sin(t * 1.6 + sway) * 0.8 : 0), y = p[1] - ty, z = p[2]; const x1 = x * cr + z * sr, z1 = -x * sr + z * cr; const y2 = y * ct - z1 * stl, z2 = y * stl + z1 * ct; const k = D / (D + z2); return { x: cx + x1 * sc * k, y: cy - y2 * sc * k, z: z2, k }; };
+      // glow
+      const gc = P([0, H * 0.45, 0]), gr = Math.min(W, Hh) * 0.62, ga = Math.pow(v, 1.5) * 0.8;
+      const grd = ctx.createRadialGradient(gc.x, gc.y, 0, gc.x, gc.y, gr); grd.addColorStop(0, `rgba(255,233,166,${0.55 * ga})`); grd.addColorStop(0.6, `rgba(191,232,160,${0.18 * ga})`); grd.addColorStop(1, "rgba(191,232,160,0)");
+      ctx.fillStyle = grd; ctx.fillRect(0, 0, W, Hh);
+      // ground disc
+      ctx.beginPath();
+      for (let i = 0; i <= 40; i++) { const a = (i / 40) * 6.283, q = P([Math.cos(a) * 46, 0, Math.sin(a) * 46]); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); }
+      ctx.fillStyle = "rgba(90,62,39,0.55)"; ctx.fill();
+      ctx.beginPath();
+      for (let i = 0; i <= 40; i++) { const a = (i / 40) * 6.283, q = P([Math.cos(a) * 30, 0.2, Math.sin(a) * 30]); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); }
+      ctx.fillStyle = "#5E7D3A"; ctx.globalAlpha = 0.55 + 0.3 * v; ctx.fill(); ctx.globalAlpha = 1;
+      // depth-sorted items
+      const list = model.items.map((it) => {
+        if (it.k === "seg") { const a = P(it.a), b = P(it.b); return { it, a, b, z: (a.z + b.z) / 2 }; }
+        const q = P(it.p, it.k === "leaf" ? it.ph + 1 : 0); return { it, q, z: q.z };
+      }).sort((x, y) => y.z - x.z);
+      ctx.lineCap = "round";
+      list.forEach(({ it, a, b, q }) => {
+        if (it.k === "seg") { ctx.strokeStyle = it.w > 4 ? "#5A3E27" : "#6B4A2F"; ctx.lineWidth = Math.max(1, it.w * sc * (a.k + b.k) / 2); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+        else if (it.k === "leaf") { ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(it.rot + S.rot * 0.3); ctx.fillStyle = it.c; ctx.globalAlpha = 0.95; ctx.beginPath(); ctx.ellipse(0, 0, it.r * sc * q.k, it.r * 0.52 * sc * q.k, 0, 0, 6.283); ctx.fill(); ctx.restore(); }
+        else if (it.k === "fruit") { const R = it.r * sc * q.k; ctx.fillStyle = it.c; ctx.beginPath(); ctx.arc(q.x, q.y, R, 0, 6.283); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.beginPath(); ctx.arc(q.x - R * 0.3, q.y - R * 0.3, R * 0.25, 0, 6.283); ctx.fill(); }
+        else if (it.k === "flower") { const R = 1.7 * sc * q.k; ctx.fillStyle = it.c; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(q.x + Math.cos(i * 1.2566) * R * 1.25, q.y + Math.sin(i * 1.2566) * R * 1.25, R, 0, 6.283); ctx.fill(); } ctx.fillStyle = "#FFD166"; ctx.beginPath(); ctx.arc(q.x, q.y, R * 0.75, 0, 6.283); ctx.fill(); }
+        else if (it.k === "seed") { ctx.fillStyle = "#8A5A34"; ctx.beginPath(); ctx.ellipse(q.x, q.y, 5 * sc * q.k, 3.2 * sc * q.k, 0, 0, 6.283); ctx.fill(); }
+      });
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [model, v]);
+  const S = st.current;
+  const down = (e) => { S.pts[e.pointerId] = { x: e.clientX, y: e.clientY }; S.drag = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} };
+  const move = (e) => {
+    const p = S.pts[e.pointerId]; if (!p) return;
+    const ids = Object.keys(S.pts);
+    if (ids.length >= 2) { S.pts[e.pointerId] = { x: e.clientX, y: e.clientY }; const a = S.pts[ids[0]], b = S.pts[ids[1]]; const d = Math.hypot(a.x - b.x, a.y - b.y); if (S.pinch) S.zoom = Math.max(0.6, Math.min(2.6, S.zoom * (d / S.pinch))); S.pinch = d; return; }
+    S.rot += (e.clientX - p.x) * 0.01; S.tilt = Math.max(-0.15, Math.min(0.6, S.tilt + (e.clientY - p.y) * 0.004));
+    S.pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+  };
+  const up = (e) => { delete S.pts[e.pointerId]; S.pinch = 0; if (!Object.keys(S.pts).length) S.drag = false; };
+  const sheet = { color: "#fff", background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", borderRadius: 22 };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 10050, background: "radial-gradient(120% 80% at 50% 38%, #1E4D3A 0%, #0E2420 55%, #07120F 100%)", color: "#fff", fontFamily: disp, touchAction: "none" }}>
+      <canvas ref={canvasRef} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onWheel={(e) => { S.zoom = Math.max(0.6, Math.min(2.6, S.zoom * (e.deltaY < 0 ? 1.08 : 0.93))); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: "grab", filter: `saturate(${0.5 + 0.5 * v}) brightness(${0.9 + 0.1 * v}) sepia(${(1 - v) * 0.25})` }} />
+      <div style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 18, right: 18, display: "flex", alignItems: "center", justifyContent: "space-between", pointerEvents: "none" }}>
+        <div><div style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", opacity: 0.7, fontWeight: 700 }}>Your life tree</div><div style={{ fontSize: 22, fontWeight: 800, marginTop: 2 }}>{info.stage}</div></div>
+        <button onClick={onClose} aria-label="Close" style={{ pointerEvents: "auto", width: 42, height: 42, borderRadius: 21, ...sheet, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}>×</button>
+      </div>
+      <div style={{ position: "absolute", left: 14, right: 14, bottom: "calc(16px + env(safe-area-inset-bottom))", padding: "14px 16px", ...sheet }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+          <span style={{ fontSize: 19, fontWeight: 800 }}>Lvl {info.level} <span style={{ fontWeight: 600, opacity: 0.75 }}>· {info.title}</span></span>
+          <span style={{ fontSize: 12.5, fontFamily: mono, fontWeight: 700, opacity: 0.85 }}>{info.xp}/{info.next} XP</span>
+        </div>
+        <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.18)", marginTop: 8, overflow: "hidden" }}><div style={{ width: `${info.pct}%`, height: "100%", borderRadius: 3, background: "linear-gradient(90deg,#7BC96B,#FFE08A)" }} /></div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12, opacity: 0.8 }}>
+          <span>{info.toNext} XP to level {info.level + 1}</span>
+          <span style={{ fontWeight: 700, color: v >= 0.6 ? "#9BE59B" : "#FFB4A8" }}>{v >= 0.85 ? "Thriving" : v >= 0.6 ? "Fresh" : v >= 0.4 ? "Thirsty" : "Wilting"} · {Math.round(v * 100)}%</span>
+        </div>
+        <div style={{ marginTop: 8, textAlign: "center", fontSize: 11, opacity: 0.55 }}>Drag to rotate · pinch to zoom</div>
+      </div>
+    </div>
+  );
+}
 // Compact "Today" banner: tree + today's progress + level, in one slim card.
-function ProgressXPCard({ pct, done, total, dailyLogs, dailyItems, today }) {
+function ProgressXPCard({ pct, done, total, dailyLogs, dailyItems, today, onOpenTree }) {
   const [ts, setTs] = useState(() => {
     let s = readPersistedSync("treeState", null);
     if (!s || typeof s.baseXp !== "number") {
@@ -1322,7 +1446,7 @@ function ProgressXPCard({ pct, done, total, dailyLogs, dailyItems, today }) {
     <Card style={{ marginBottom: 12, padding: 0, overflow: "hidden", borderRadius: 22, border: `1px solid ${LINE}`, background: `linear-gradient(135deg, ${hexA(TEAL, 0.07)} 0%, ${PANEL} 55%)` }}>
       <style>{`@keyframes ltTreeSway{0%,100%{transform:rotate(-1deg)}50%{transform:rotate(1.2deg)}}@keyframes ltTreeGlow{0%,100%{opacity:.8}50%{opacity:1}}.lt-tree-sway{animation:ltTreeSway 6s ease-in-out infinite}.lt-tree-glow{animation:ltTreeGlow 4s ease-in-out infinite}@media (prefers-reduced-motion: reduce){.lt-tree-sway,.lt-tree-glow{animation:none}}`}</style>
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px 8px 10px" }}>
-        <div style={{ position: "relative", width: 96, height: 90, flexShrink: 0, borderRadius: 16, background: `linear-gradient(180deg, ${hexA(TEAL, 0.14)} 0%, ${hexA(TEAL, 0.03)} 100%)`, overflow: "hidden" }}>
+        <div role="button" aria-label="Open your life tree in full screen" onClick={() => onOpenTree && onOpenTree({ g, v, level: xp.level, title: xp.title, stage: treeStage(g), toNext: xp.toNext, pct: xp.pct, xp: xp.xp, next: xp.next })} style={{ position: "relative", cursor: "pointer", width: 96, height: 90, flexShrink: 0, borderRadius: 16, background: `linear-gradient(180deg, ${hexA(TEAL, 0.14)} 0%, ${hexA(TEAL, 0.03)} 100%)`, overflow: "hidden" }}>
           <div style={{ position: "absolute", inset: "2px 0 8px" }}><TreeArt g={g} v={v} /></div>
           <span style={{ position: "absolute", left: 5, right: 5, bottom: 3, textAlign: "center", fontSize: 9, fontWeight: 750, letterSpacing: ".03em", color: v >= 0.6 ? TEAL : CORAL, whiteSpace: "nowrap" }}>{vLabel} · {Math.round(v * 100)}%</span>
         </div>
@@ -2463,9 +2587,9 @@ function AreaBarRow({ icon: Icon, accent, label, pct, isLast }) {
 // badge (count pill or % ring) + chevron. Shared by the Home page's attention list.
 function AttentionRow({ icon: Icon, accent, title, subtitle, badge, onClick, isLast }) {
   return (
-    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 2px", background: "transparent", border: "none", borderBottom: isLast ? "none" : `1px solid ${LINE}`, cursor: "pointer", textAlign: "left", width: "100%" }}>
-      <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 11, background: hexA(accent, 0.14), display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Icon size={18} color={accent} strokeWidth={2.2} />
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", background: "transparent", border: "none", borderBottom: isLast ? "none" : `1px solid ${LINE}`, cursor: "pointer", textAlign: "left", width: "100%" }}>
+      <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 10, background: hexA(accent, 0.14), display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon size={17} color={accent} strokeWidth={2.2} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
@@ -2474,6 +2598,17 @@ function AttentionRow({ icon: Icon, accent, title, subtitle, badge, onClick, isL
       {badge}
       <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
     </button>
+  );
+}
+function HomeSectionHead({ icon: Icon, label, count, action, onAction }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "0 4px 7px" }}>
+      <Icon size={14} color={BRASS} strokeWidth={2.3} />
+      <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_DIM }}>{label}</span>
+      {count > 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: BRASS, background: hexA(BRASS, 0.12), borderRadius: 99, padding: "1px 7px" }}>{count}</span>}
+      <span style={{ flex: 1 }} />
+      {action && <button onClick={onAction} style={{ background: "transparent", border: "none", padding: 0, fontSize: 12.5, fontWeight: 700, color: BRASS, cursor: "pointer" }}>{action}</button>}
+    </div>
   );
 }
 function SectionLabel({ children, style }) { return <div style={{ fontSize: 15, letterSpacing: "-0.01em", color: INK, marginBottom: 10, fontWeight: 800, fontFamily: disp, ...style }}>{children}</div>; }
@@ -2648,11 +2783,11 @@ function ProgressBar({ pct, color = BRASS }) { return <div style={{ height: 8, b
 function ActionButton({ onClick, label, icon: Icon, tone = BRASS, big, spinning }) {
   return <button onClick={onClick} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, background: tone, border: "none", color: "#FFFFFF", borderRadius: 980, padding: big ? "13px 24px" : "10px 17px", fontSize: big ? 16 : 14, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}><Icon size={big ? 17 : 15} className={spinning ? "spin-icon" : undefined} /> {label}</button>;
 }
-function ChipButton({ onClick, label, active, icon: Icon }) {
+function ChipButton({ onClick, label, active, icon: Icon, block }) {
   return (
-    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 6, background: active ? BRASS : PANEL_2, border: "none", color: active ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-      {Icon && <Icon size={14} strokeWidth={2.3} />}
-      {label}
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 6, background: active ? BRASS : PANEL_2, border: "none", color: active ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", ...(block ? { width: "100%", minWidth: 0, justifyContent: "center", whiteSpace: "nowrap" } : null) }}>
+      {Icon && <Icon size={14} strokeWidth={2.3} style={{ flexShrink: 0 }} />}
+      {block ? <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span> : label}
     </button>
   );
 }
@@ -2763,11 +2898,8 @@ function LifeTracker() {
   const undoTimerRef = useRef(null);
   const [celebration, setCelebration] = useState(null);
   const celebrationTimerRef = useRef(null);
-  const celebrate = (message) => {
-    if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current);
-    setCelebration({ message: message || "Nice work!", key: Date.now() });
-    celebrationTimerRef.current = setTimeout(() => setCelebration(null), 1400);
-  };
+  // Every completion (plans, goals, bills, trips...) now uses the same green "done" popup as routines.
+  const celebrate = () => { showDailyCompletion(null); };
   useEffect(() => () => { if (celebrationTimerRef.current) clearTimeout(celebrationTimerRef.current); }, []);
   // Full-screen "Task Completed!" modal shown specifically when a Daily Activity on the Today tab
   // is finished (instant, duration-stop, or logged-time items). Distinct from the small inline
@@ -2856,6 +2988,7 @@ function LifeTracker() {
   const [reminderStyle, setReminderStyle] = useState(() => ({ daily: "alarm", plans: "alarm", trips: "notification", ...(readPersistedSync("reminderStyle", {}) || {}) }));
   useEffect(() => { if (loaded) window.storage.set("reminderStyle", JSON.stringify(reminderStyle), false).catch(() => {}); }, [reminderStyle, loaded]);
   const [alarmScreen, setAlarmScreen] = useState(null);
+  const [tree3d, setTree3d] = useState(null); // full-screen 3D tree (opened by tapping the tree on Home)
   const alarmDoneRef = useRef(null); // set below: tells the alarm listener if a task is already finished
   useEffect(() => { if (loaded) window.storage.set("darkMode", JSON.stringify(darkMode), false).catch(() => {}); }, [darkMode, loaded]);
   // Keeps the real <html>/<body> background (and the browser's theme-color chrome) in sync with dark
@@ -4020,22 +4153,49 @@ function LifeTracker() {
         if (reg) { await reg.update(); await new Promise((r) => setTimeout(r, 2500)); }
       }
     } catch (e) {}
-    if (window.__appUpdateReady) { setWebUpdateReady(true); setUpdateMsg(""); setCheckingUpdate(false); return; }
+    let found = false;
+    if (window.__appUpdateReady || (await pageChanged())) { setWebUpdateReady(true); found = true; }
     if (updateRepo) {
       try {
         const u = await fetchLatestApk(updateRepo);
-        if (u) { setApkUpdate(u); setUpdateMsg(""); setCheckingUpdate(false); return; }
-      } catch (e) { setUpdateMsg("Could not check for updates. Check your internet and the update source name."); setCheckingUpdate(false); return; }
+        if (u) { setApkUpdate(u); found = true; }
+      } catch (e) { if (!found) { setUpdateMsg("Could not check for updates. Check your internet and the update source name."); setCheckingUpdate(false); return; } }
     }
+    if (found) { setUpdateMsg(""); setCheckingUpdate(false); return; }
     setUpdateMsg("You have the latest version.");
     setCheckingUpdate(false);
   };
+  // True when the hosted index.html differs from the copy this app is running (covers a release where the
+  // service worker file itself was not changed).
+  const pageChanged = async () => {
+    try {
+      if (!window.caches) return false;
+      const cached = await caches.match("index.html"); if (!cached) return false;
+      const fresh = await fetch("index.html?t=" + Date.now(), { cache: "no-store" }); if (!fresh.ok) return false;
+      const [a, b] = await Promise.all([cached.clone().text(), fresh.text()]);
+      return a !== b;
+    } catch (e) { return false; }
+  };
+  useEffect(() => {
+    const t = setTimeout(() => { pageChanged().then((c) => { if (c) setWebUpdateReady(true); }); }, 6000);
+    return () => clearTimeout(t);
+  }, []);
   const applyWebUpdate = async () => {
     try {
+      // Store the newest page in the cache first, then let the waiting version take over, then reload.
+      const fresh = await fetch("index.html?t=" + Date.now(), { cache: "no-store" });
+      if (fresh.ok && window.caches) {
+        const keys = (await caches.keys()).filter((k) => k.startsWith("life-tracker-cache"));
+        await Promise.all(keys.map(async (k) => (await caches.open(k)).put("index.html", fresh.clone())));
+      }
       const reg = await navigator.serviceWorker.getRegistration();
-      if (reg && reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
-      if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map((k) => caches.delete(k))); }
-      if (reg) await reg.unregister();
+      if (reg && reg.waiting) {
+        await new Promise((res) => {
+          const t = setTimeout(res, 3000);
+          navigator.serviceWorker.addEventListener("controllerchange", () => { clearTimeout(t); res(); }, { once: true });
+          reg.waiting.postMessage({ type: "SKIP_WAITING" });
+        });
+      }
     } catch (e) {}
     window.location.reload(); // your saved data stays; only the app files are refreshed
   };
@@ -4402,7 +4562,7 @@ function LifeTracker() {
         if (perm.display !== "granted") return;
         try {
           const ex = LN.checkExactNotificationSetting ? await LN.checkExactNotificationSetting() : null;
-          if (ex && ex.exact_alarm !== "granted" && !localStorage.getItem("exactAlarmAsked")) { localStorage.setItem("exactAlarmAsked", "1"); await LN.changeExactNotificationSetting(); }
+          if (ex && ex.exact_alarm !== "granted" && localStorage.getItem("exactAlarmAsked") !== today) { localStorage.setItem("exactAlarmAsked", today); await LN.changeExactNotificationSetting(); }
         } catch (e) {}
         const pending = await LN.getPending();
         if (pending.notifications && pending.notifications.length) await LN.cancel({ notifications: pending.notifications });
@@ -4447,18 +4607,31 @@ function LifeTracker() {
             add(i.name, "Time for your daily activity", d, "daily", i);
           }
         });
-        // My Day plans: one-off plans fire reminderMinutes before; repeating plans fire at their time on each repeat day.
-        myDayEvents.filter((e) => !e.completed && !e.dismissed && e.eventDate && e.eventTime && e.reminderEnabled !== false).forEach((e) => {
-          const [hh, mm] = e.eventTime.split(":").map(Number); if (Number.isNaN(hh) || Number.isNaN(mm)) return;
-          if (AR) {
-            const rdays = e.repeatDays || [];
-            if (rdays.length) addRepeatingAlarms(e.title || "Plan", e.location || "My Day plan", hh, mm, rdays);
-            else addAlarm(e.title || "Plan", `${fmtTimeString12(e.eventTime)}${e.location ? " \u00b7 " + e.location : ""}`, new Date(new Date(`${e.eventDate}T${e.eventTime}:00`).getTime() - (parseInt(e.reminderMinutes, 10) || 0) * 60000));
-            return;
-          }
+        // My Day plans: the chosen alarm/notification at the plan time, an early reminder (reminderMinutes before),
+        // and every "days before" reminder picked in the form. Repeating plans fire weekly on their days.
+        const shiftWd = (wd, h, m, minus) => { const t = (((wd - 1) * 1440 + h * 60 + m - minus) % 10080 + 10080) % 10080; return { weekday: Math.floor(t / 1440) + 1, hour: Math.floor((t % 1440) / 60), minute: t % 60 }; };
+        myDayEvents.filter((e) => !e.completed && !e.dismissed && e.eventDate).forEach((e) => {
+          const title = e.title || "Plan";
+          const [hh, mm] = String(e.eventTime || "").split(":").map(Number);
+          const hasTime = !!e.eventTime && !Number.isNaN(hh) && !Number.isNaN(mm);
+          const body = `${hasTime ? fmtTimeString12(e.eventTime) : "Today"}${e.location ? " \u00b7 " + e.location : ""}`;
+          const early = e.reminderEnabled !== false ? (parseInt(e.reminderMinutes, 10) || 0) : 0;
           const rd = (e.repeatDays || []).filter((d) => NATIVE_WD[d]);
-          if (rd.length) rd.forEach((d) => list.push({ id: nid++, title: e.title || "Plan", body: e.location || "My Day plan", schedule: { on: { weekday: NATIVE_WD[d], hour: hh, minute: mm }, repeats: true, allowWhileIdle: true }, ...decor("plans", e) }));
-          else add(e.title || "Plan", `${fmtTimeString12(e.eventTime)}${e.location ? " \u00b7 " + e.location : ""}`, new Date(new Date(`${e.eventDate}T${e.eventTime}:00`).getTime() - (parseInt(e.reminderMinutes, 10) || 0) * 60000), "plans", e);
+          if (hasTime && rd.length) {
+            rd.forEach((d) => {
+              list.push({ id: nid++, title, body, schedule: { on: { weekday: NATIVE_WD[d], hour: hh, minute: mm }, repeats: true, allowWhileIdle: true }, ...decor("plans", e) });
+              if (early > 0) list.push({ id: nid++, title: `${title} in ${early} min`, body, schedule: { on: shiftWd(NATIVE_WD[d], hh, mm, early), repeats: true, allowWhileIdle: true }, ...decor("plans", e) });
+            });
+          } else if (hasTime) {
+            const at = new Date(`${e.eventDate}T${e.eventTime}:00`);
+            add(title, body, at, "plans", e);
+            if (early > 0) add(`${title} in ${early} min`, body, new Date(at.getTime() - early * 60000), "plans", e);
+          }
+          if (!rd.length) (e.reminderOffsets || []).forEach((o) => {
+            const opt = REMINDER_OPTIONS.find((x) => x.value === o); if (!opt || !opt.days) return;
+            const d = new Date(`${e.eventDate}T09:00:00`); d.setDate(d.getDate() - opt.days);
+            add(`Upcoming: ${title}`, `${formatDMY(e.eventDate)}${hasTime ? " at " + fmtTimeString12(e.eventTime) : ""} \u2014 ${opt.label.toLowerCase()}`, d, "plans", e);
+          });
         });
         // High-importance channel: pops up on screen with sound + vibration, and shows on the lock screen.
         try { if (LN.createChannel) { await LN.createChannel({ id: "reminders_normal", name: "Reminders (notification)", description: "Quiet reminders in the notification panel", importance: 3, visibility: 1, vibration: true }); await LN.createChannel({ id: "alarms_full", name: "Alarms", description: "Loud alarms. Tap to open the full-screen alarm.", importance: 5, visibility: 1, vibration: true, lights: true }); } } catch (e) {}
@@ -4514,6 +4687,52 @@ function LifeTracker() {
     if (kind === "plans") { const e = myDayEvents.find((x) => x.id === id); return !e || e.completed || e.dismissed; }
     return false;
   };
+
+  // ---- In-app alarms: when the app is open (browser/PWA, or the APK in the foreground) the system can't pop a
+  // notification, so open the full-screen alarm ourselves at the chosen time for plans, daily activities and trips.
+  useEffect(() => {
+    if (alarmScreen) return;
+    const fire = (key, title, body, kind, itemId, at) => {
+      const diff = now.getTime() - at.getTime();
+      if (diff < 0 || diff > 120000 || notifiedRef.current[key]) return false;
+      notifiedRef.current[key] = true;
+      if (alarmDoneRef.current && alarmDoneRef.current(kind, itemId)) return false;
+      setAlarmScreen({ title, body, kind, itemId });
+      return true;
+    };
+    const atToday = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); if (Number.isNaN(h) || Number.isNaN(m)) return null; const d = new Date(now); d.setHours(h, m, 0, 0); return d; };
+    for (const e of myDayEvents) {
+      if (e.completed || e.dismissed || !e.eventTime || (e.reminderType || reminderStyle.plans) !== "alarm" || !myDayEventOccursOn(e, today)) continue;
+      const at = atToday(e.eventTime); if (!at) continue;
+      if (fire(`alarm:plans:${e.id}:${today}:${e.eventTime}`, e.title || "Plan", `${fmtTimeString12(e.eventTime)}${e.location ? " \u00b7 " + e.location : ""}`, "plans", e.id, at)) return;
+      const early = e.reminderEnabled !== false ? (parseInt(e.reminderMinutes, 10) || 0) : 0;
+      if (early > 0 && fire(`alarm:plans-early:${e.id}:${today}:${e.eventTime}`, `${e.title || "Plan"} in ${early} min`, fmtTimeString12(e.eventTime), "plans", e.id, new Date(at.getTime() - early * 60000))) return;
+    }
+    for (const i of validItems) {
+      const t = effectiveScheduledTime(i);
+      if (i.type === "interval" || !t || (i.reminderType || reminderStyle.daily) !== "alarm") continue;
+      const at = atToday(t); if (!at) continue;
+      if (fire(`alarm:daily:${i.id}:${today}:${t}`, i.name, "Time for your daily activity", "daily", i.id, at)) return;
+    }
+    for (const tp of travelPlans) {
+      if (tp.completed || tp.dismissed || tp.travelDate !== today || !tp.travelTime || (tp.reminderType || reminderStyle.trips) !== "alarm") continue;
+      const dep = atToday(tp.travelTime); if (!dep) continue;
+      if (fire(`alarm:trips:${tp.id}:${today}`, `Trip in 1 hour: ${tp.fromLocation} \u2192 ${tp.toLocation}`, `${tp.mode} at ${fmtTimeString12(tp.travelTime)}`, "trips", tp.id, new Date(dep.getTime() - 3600000))) return;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, myDayEvents, dailyItems, dailyLogs, travelPlans, reminderStyle, today, alarmScreen]);
+  // Ring + vibrate while the full-screen alarm is showing.
+  useEffect(() => {
+    if (!alarmScreen) return undefined;
+    let ctx = null;
+    const beep = () => {
+      try { if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) ctx = new AC(); } if (ctx) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = 880; g.gain.value = 0.2; o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.35); } } catch (e) {}
+      try { if (navigator.vibrate) navigator.vibrate([300, 150, 300]); } catch (e) {}
+    };
+    beep();
+    const t = setInterval(beep, 1500);
+    return () => { clearInterval(t); try { if (ctx) ctx.close(); } catch (e) {} };
+  }, [alarmScreen]);
 
   // ---- Evening nudge: one notification per day, only after 8pm, only if there's something
   // that would actually be lost or left undone. Best-effort via the Notification API while the
@@ -6056,88 +6275,33 @@ function LifeTracker() {
               ...(atRiskStreaks.length > 0 ? [{ key: "streak", icon: Flame, fg: "#F59E0B", label: `${atRiskStreaks.length} ${atRiskStreaks.length > 1 ? "streaks" : "streak"} end tonight if not done`, sub: atRiskStreaks.slice(0, 2).map((i) => i.name).join(", "), onClick: openItem(atRiskStreaks[0]) }] : []),
             ];
             const quickLogRows = quickPendingHome.map((i) => ({ key: "q" + i.id, icon: ICON_MAP[i.icon] || Activity, fg: TODAY_CARD_ACCENT[i.category] || BRASS_HEX, label: i.name, sub: "Pending \u00b7 log now", onClick: openItem(i) }));
-            const focusItems = pendingItemsToday.filter((i) => field(i.id).status !== "skipped").slice(0, 3).map((i) => ({ key: "f" + i.id, label: i.name, time: fmtTimeString12(effectiveScheduledTime(i)), onClick: openItem(i) }));
-            return <HomeSlides stats={homeSlides} focus={focusItems} />;
+            return <HomeSlides stats={homeSlides} focus={[]} />;
           })()}
 
-          <ProgressXPCard pct={progressPercent} done={completedActivities} total={totalActivities} dailyLogs={dailyLogs} dailyItems={dailyItems} today={today} />
-
-
-          {overdueToday.length > 0 && (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-                <SectionLabel style={{ marginBottom: 0, color: CORAL }}>Missed Today ({overdueToday.length})</SectionLabel>
-              </div>
-              <Card style={{ marginBottom: 16, padding: "4px 14px", borderLeft: `3px solid ${CORAL}` }}>
-                {overdueToday.map((act, idx) => {
-                  const ActIcon = ICON_MAP[act.icon] || Clock;
-                  const isRescheduling = reschedulingId === act.id;
-                  return (
-                    <div key={act.id} style={{ padding: "12px 0", borderTop: idx > 0 ? `1px solid ${LINE}` : "none" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 10, background: hexA(CORAL, 0.13), display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <ActIcon size={18} color={CORAL} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14.5, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.name}</div>
-                          <div style={{ fontSize: 12, color: CORAL, marginTop: 2 }}>Missed · was due {fmtTimeString12(effectiveScheduledTime(act))}</div>
-                        </div>
-                      </div>
-                      {isRescheduling ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-                          <Time12Input value={rescheduleDraft} onChange={setRescheduleDraft} style={{ fontFamily: mono }} />
-                          <button onClick={() => { rescheduleItemToday(act.id, rescheduleDraft); setReschedulingId(null); }} style={{ flexShrink: 0, background: TEAL, border: "none", borderRadius: 8, padding: "8px 12px", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save</button>
-                          <button onClick={() => setReschedulingId(null)} style={{ flexShrink: 0, background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "8px 10px", color: INK_DIM, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Cancel</button>
-                        </div>
-                      ) : (
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginTop: 10 }}>
-                          <button onClick={() => { setExpandedDailyCategory(act.category); setActiveTab(act.id); setPage("daily"); }} style={{ padding: "8px 4px", borderRadius: 8, border: `1.5px solid ${TEAL}`, background: hexA(TEAL, 0.1), color: TEAL, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: disp }}>Do Now</button>
-                          <button onClick={() => { setRescheduleDraft(effectiveScheduledTime(act) || "09:00"); setReschedulingId(act.id); }} style={{ padding: "8px 4px", borderRadius: 8, border: `1.5px solid ${BRASS}`, background: hexA(BRASS, 0.1), color: BRASS, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: disp }}>Reschedule</button>
-                          <button onClick={() => skipItemToday(act.id)} style={{ padding: "8px 4px", borderRadius: 8, border: `1.5px solid ${LINE}`, background: "transparent", color: INK_DIM, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: disp }}>Skip Today</button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </Card>
-            </>
-          )}
-
           {nextActivities.length > 0 && (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-                <SectionLabel style={{ marginBottom: 0 }}>Next Up</SectionLabel>
-                <button onClick={() => setPage("daily")} style={{ background: "transparent", border: "none", padding: 0, fontSize: 13, fontWeight: 700, color: BRASS, cursor: "pointer" }}>View all</button>
-              </div>
-              <Card style={{ marginBottom: 16, padding: "4px 14px" }}>
-                {nextActivities.map((act, idx) => {
-                  const catTone = (act.category === "career" || act.category === "trip") ? { fg: "#5A20B8", bg: "rgba(90,32,184,0.12)" }
-                    : (act.category === "activity" || act.category === "health") ? { fg: "#159957", bg: "rgba(21,153,87,0.12)" }
-                    : { fg: BRASS, bg: "rgba(0,113,227,0.10)" };
+            <div style={{ marginBottom: 12 }}>
+              <HomeSectionHead icon={Clock} label="Next up" count={nextActivities.length} action="View all" onAction={() => setPage("daily")} />
+              <div className="homeSlides" style={{ display: "flex", gap: 8, overflowX: "auto", scrollSnapType: "x proximity", margin: "0 -2px", padding: "2px 2px 4px", WebkitOverflowScrolling: "touch" }}>
+                {nextActivities.map((act) => {
+                  const accent = TODAY_CARD_ACCENT[act.category] || BRASS_HEX;
                   const ActIcon = ICON_MAP[act.icon] || Clock;
-                  const overdue = String(act.scheduledTime) < nowHHMM;
+                  const eff = effectiveScheduledTime(act);
+                  const overdue = String(eff) < nowHHMM;
                   return (
-                    <button
-                      key={act.id}
-                      onClick={() => { setExpandedDailyCategory(act.category); setActiveTab(act.id); setPage("daily"); }}
-                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", background: "transparent", border: "none", borderTop: idx > 0 ? `1px solid ${LINE}` : "none", color: INK, textAlign: "left", cursor: "pointer", width: "100%" }}
-                    >
-                      <div style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 10, background: catTone.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <ActIcon size={19} color={catTone.fg} />
+                    <button key={act.id} onClick={() => { setExpandedDailyCategory(act.category); setActiveTab(act.id); setPage("daily"); }}
+                      style={{ flex: "0 0 auto", width: 152, scrollSnapAlign: "start", textAlign: "left", cursor: "pointer", color: INK, fontFamily: "inherit", padding: "10px 12px", borderRadius: 18, border: `1px solid ${overdue ? hexA(CORAL, 0.35) : LINE}`, background: `linear-gradient(145deg, ${hexA(overdue ? CORAL : accent, 0.09)} 0%, ${PANEL} 70%)`, boxShadow: CARD_SHADOW }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                        <span style={{ width: 28, height: 28, borderRadius: 9, background: hexA(overdue ? CORAL : accent, 0.16), display: "flex", alignItems: "center", justifyContent: "center" }}><ActIcon size={15} color={overdue ? CORAL : accent} strokeWidth={2.2} /></span>
+                        <span style={{ fontSize: 12, fontFamily: mono, fontWeight: 800, color: overdue ? CORAL : BRASS }}>{eff ? fmtTimeString12(eff) : ""}</span>
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 15, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.name}</div>
-                        <div style={{ fontSize: 12, color: overdue ? CORAL : INK_DIM, marginTop: 2 }}>{overdue ? "Overdue \u00b7 tap to open" : "Tap to open in Today"}</div>
-                      </div>
-                      <div style={{ flexShrink: 0, fontSize: 14, color: overdue ? CORAL : BRASS, fontFamily: mono, fontWeight: 700 }}>{fmtTimeString12(act.scheduledTime)}</div>
-                      <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
+                      <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.name}</div>
+                      <div style={{ fontSize: 11, marginTop: 1, color: overdue ? CORAL : INK_FAINT, fontWeight: overdue ? 700 : 500 }}>{overdue ? "Overdue" : "Coming up"}</div>
                     </button>
                   );
                 })}
-              </Card>
-            </>
+              </div>
+            </div>
           )}
-
 
           {(() => {
             // Urgency-ordered attention rows. Each row carries a rank (lower = more urgent) and the
@@ -6199,24 +6363,22 @@ function LifeTracker() {
                 onClick: () => { setPage("categories"); setCatTab(tomorrowMyDay.length ? "myday" : "shopping"); },
               }] : []),
             ].sort((x, y) => x.rank - y.rank);
+            if (attentionItems.length === 0) return null;
             return (
-              <>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-                  <SectionLabel style={{ marginBottom: 0 }}>Upcoming Attention</SectionLabel>
-                  {attentionItems.length > 0 && <button onClick={() => setPage("daily")} style={{ background: "transparent", border: "none", padding: 0, fontSize: 13, fontWeight: 700, color: BRASS, cursor: "pointer" }}>View all</button>}
-                </div>
-                {attentionItems.length === 0 ? (
-                  <Card><div style={{ color: TEAL, fontSize: 14 }}>✓ Everything looks clear for now.</div></Card>
-                ) : (
-                  <Card style={{ padding: "2px 14px" }}>
-                    {attentionItems.map((it, idx) => (
-                      <AttentionRow key={it.key} icon={it.icon} accent={it.accent} title={it.title} subtitle={it.subtitle} badge={it.badge} onClick={it.onClick} isLast={idx === attentionItems.length - 1} />
-                    ))}
-                  </Card>
-                )}
-              </>
+              <div style={{ marginBottom: 12 }}>
+                <HomeSectionHead icon={Bell} label="Upcoming attention" count={attentionItems.length} action="View all" onAction={() => setPage("daily")} />
+                <Card style={{ padding: "2px 12px", borderRadius: 20, border: `1px solid ${LINE}`, background: `linear-gradient(135deg, ${hexA(BRASS, 0.05)} 0%, ${PANEL} 60%)` }}>
+                  {attentionItems.slice(0, 4).map((it, idx, arr) => (
+                    <AttentionRow key={it.key} icon={it.icon} accent={it.accent} title={it.title} subtitle={it.subtitle} badge={it.badge} onClick={it.onClick} isLast={idx === arr.length - 1} />
+                  ))}
+                </Card>
+              </div>
             );
           })()}
+
+          <ProgressXPCard pct={progressPercent} done={completedActivities} total={totalActivities} dailyLogs={dailyLogs} dailyItems={dailyItems} today={today} onOpenTree={setTree3d} />
+
+
 
         </div>;
       })()}
@@ -6969,9 +7131,9 @@ function LifeTracker() {
                               </div>
 
                               {subOptions.length > 0 && (
-                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 16 }}>
                                   {subOptions.map((s) => (
-                                    <ChipButton key={s} label={s} icon={SUBCATEGORY_ICON[s]} active={activeSub === s} onClick={() => setFlow("dailyExpense", { sub: s })} />
+                                    <ChipButton block key={s} label={s} icon={SUBCATEGORY_ICON[s]} active={activeSub === s} onClick={() => setFlow("dailyExpense", { sub: s })} />
                                   ))}
                                 </div>
                               )}
@@ -7078,12 +7240,57 @@ function LifeTracker() {
                 // button right) so the Done/Start/Log control is always in the same clear spot,
                 // instead of needing to tap a pill to reveal it.
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {visiblePendingItemsForCat.length === 0 ? (
-                    <Card style={{ textAlign: "center", padding: "22px 16px", borderRadius: 20 }}>
+                  {(() => {
+                    // Missed routines (past their due time, not done/skipped): Done / Reschedule / Skip Today.
+                    const nowHHMMr = buildHHMM(now.getHours(), now.getMinutes());
+                    const missed = pendingItemsForCat.filter((i) => i.type !== "interval" && field(i.id).status !== "skipped" && effectiveScheduledTime(i) && String(effectiveScheduledTime(i)) < nowHHMMr);
+                    if (missed.length === 0) return null;
+                    const btn = (c, bg) => ({ padding: "8px 4px", borderRadius: 8, border: `1.5px solid ${c}`, background: bg, color: c, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: disp });
+                    return (
+                      <div>
+                        <SectionLabel style={{ color: CORAL, marginBottom: 8 }}>Missed Today ({missed.length})</SectionLabel>
+                        <Card style={{ padding: "4px 14px", borderLeft: `3px solid ${CORAL}` }}>
+                          {missed.map((act, mi) => {
+                            const ActIcon = ICON_MAP[act.icon] || Clock;
+                            const isRes = reschedulingId === act.id;
+                            return (
+                              <div key={act.id} style={{ padding: "12px 0", borderTop: mi > 0 ? `1px solid ${LINE}` : "none" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                  <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 10, background: hexA(CORAL, 0.13), display: "flex", alignItems: "center", justifyContent: "center" }}><ActIcon size={18} color={CORAL} /></div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 14.5, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.name}</div>
+                                    <div style={{ fontSize: 12, color: CORAL, marginTop: 2 }}>Missed · was due {fmtTimeString12(effectiveScheduledTime(act))}</div>
+                                  </div>
+                                </div>
+                                {isRes ? (
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                                    <Time12Input value={rescheduleDraft} onChange={setRescheduleDraft} style={{ fontFamily: mono }} />
+                                    <button onClick={() => { rescheduleItemToday(act.id, rescheduleDraft); setReschedulingId(null); }} style={{ flexShrink: 0, background: TEAL, border: "none", borderRadius: 8, padding: "8px 12px", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save</button>
+                                    <button onClick={() => setReschedulingId(null)} style={{ flexShrink: 0, background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "8px 10px", color: INK_DIM, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                                  </div>
+                                ) : (
+                                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginTop: 10 }}>
+                                    <button onClick={() => {
+                                      if (act.type === "instant") { const prev = field(act.id); updateField(act.id, { status: "done", time: new Date().toISOString() }); showUndo("Marked done", () => updateField(act.id, { status: prev.status, time: prev.time })); }
+                                      else { setActiveTab(act.id); showToast("Log it from its card below"); }
+                                    }} style={btn(TEAL, hexA(TEAL, 0.1))}>Done</button>
+                                    <button onClick={() => { setRescheduleDraft(effectiveScheduledTime(act) || "09:00"); setReschedulingId(act.id); }} style={btn(BRASS, hexA(BRASS, 0.1))}>Reschedule</button>
+                                    <button onClick={() => skipItemToday(act.id)} style={btn(INK_DIM, "transparent")}>Skip Today</button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </Card>
+                      </div>
+                    );
+                  })()}
+                  {visiblePendingItemsForCat.filter((i) => !(i.type === "instant" && field(i.id).status !== "skipped" && effectiveScheduledTime(i) && String(effectiveScheduledTime(i)) < buildHHMM(now.getHours(), now.getMinutes()))).length === 0 ? (
+                    pendingItemsForCat.some((i) => (i.type === "instant" && field(i.id).status !== "skipped" && effectiveScheduledTime(i) && String(effectiveScheduledTime(i)) < buildHHMM(now.getHours(), now.getMinutes()))) ? null : <Card style={{ textAlign: "center", padding: "22px 16px", borderRadius: 20 }}>
                       <div style={{ fontSize: 13.5, color: INK_FAINT }}>Nothing due right now &mdash; scheduled items appear 30 minutes before their time.</div>
                     </Card>
                   ) : (
-                    visiblePendingItemsForCat.map((item) => renderTrackItemCard(item, accent, true))
+                    visiblePendingItemsForCat.filter((i) => !(i.type === "instant" && field(i.id).status !== "skipped" && effectiveScheduledTime(i) && String(effectiveScheduledTime(i)) < buildHHMM(now.getHours(), now.getMinutes()))).map((item) => renderTrackItemCard(item, accent, true))
                   )}
                 </div>
               ) : (
@@ -9085,17 +9292,30 @@ function LifeTracker() {
               <div style={{ fontSize: 15, fontWeight: 700, color: (webUpdateReady || apkUpdate) ? BRASS : INK }}>{(webUpdateReady || apkUpdate) ? "Update available" : "App update"}</div>
               <div style={{ fontSize: 12, color: INK_FAINT, fontFamily: mono }}>Version {APP_VERSION}</div>
             </div>
-            <div style={{ fontSize: 13, color: INK_FAINT, margin: "4px 0 10px", lineHeight: 1.4 }}>
-              {apkUpdate ? `A new app version (${apkUpdate.version}) is ready. Download and install it. Your data stays on the phone.` : webUpdateReady ? "A new version of the app is ready. Tap update to refresh. Your data stays safe." : (updateMsg || "Tap the button to look for a new version.")}
-            </div>
             {(webUpdateReady || apkUpdate) ? (
-              <button onClick={apkUpdate ? openApkUpdate : applyWebUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                <Download size={14} /> {apkUpdate ? "Download new app" : "Update now"}
-              </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+                {apkUpdate && (
+                  <div style={{ border: `1px solid ${LINE}`, borderRadius: 12, padding: "10px 12px" }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>New app (APK) {apkUpdate.version}</div>
+                    <div style={{ fontSize: 12.5, color: INK_FAINT, margin: "3px 0 9px", lineHeight: 1.4 }}>A full app upgrade is ready. Download and install it yourself. Your data stays on the phone.</div>
+                    <button onClick={openApkUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}><Download size={14} /> Download new app</button>
+                  </div>
+                )}
+                {webUpdateReady && (
+                  <div style={{ border: `1px solid ${LINE}`, borderRadius: 12, padding: "10px 12px" }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>App files update</div>
+                    <div style={{ fontSize: 12.5, color: INK_FAINT, margin: "3px 0 9px", lineHeight: 1.4 }}>New app files are ready. Tap to refresh. Your data stays safe.</div>
+                    <button onClick={applyWebUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: apkUpdate ? "transparent" : BRASS, border: `1px solid ${BRASS}`, color: apkUpdate ? BRASS : "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}><Download size={14} /> Update now</button>
+                  </div>
+                )}
+              </div>
             ) : (
-              <button onClick={checkForUpdates} disabled={checkingUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: `1px solid ${BRASS}`, color: BRASS, borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: checkingUpdate ? 0.6 : 1 }}>
-                {checkingUpdate ? "Checking..." : "Check for update"}
-              </button>
+              <>
+                <div style={{ fontSize: 13, color: INK_FAINT, margin: "4px 0 10px", lineHeight: 1.4 }}>{updateMsg || "Tap the button to look for a new version or a new APK."}</div>
+                <button onClick={checkForUpdates} disabled={checkingUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: `1px solid ${BRASS}`, color: BRASS, borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: checkingUpdate ? 0.6 : 1 }}>
+                  {checkingUpdate ? "Checking..." : "Check for update"}
+                </button>
+              </>
             )}
           </Card>
           <SectionLabel>Default reminder style</SectionLabel>
@@ -9243,24 +9463,6 @@ function doPost(e) {
               </Card>
             </>
           )}
-        </div>
-      )}
-
-      {celebration && (
-        <div key={celebration.key} style={{ position: "fixed", top: "14%", left: "50%", transform: "translateX(-50%)", zIndex: 10002, pointerEvents: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, background: "#FFFFFF", border: `1px solid ${LINE}`, borderRadius: 16, padding: "18px 24px", boxShadow: CARD_SHADOW, animation: "celebrationPop 1.4s cubic-bezier(.22,.8,.25,1) both", overflow: "visible" }}>
-          <div style={{ position: "relative", width: 64, height: 64 }}>
-            {CONFETTI_PIECES.map((p, i) => (
-              <span key={i} style={{
-                position: "absolute", top: "50%", left: "50%", width: p.size, height: p.size,
-                background: p.color, borderRadius: p.shape === "circle" ? "50%" : p.shape === "rect" ? 2 : 0,
-                clipPath: p.shape === "star" ? CONFETTI_STAR_CLIP : undefined,
-                "--tx": `${p.tx}px`, "--ty": `${p.ty}px`, "--rot": `${p.rot}deg`,
-                animation: `confettiBurst 1.1s cubic-bezier(.22,.8,.25,1) ${p.delay}ms both`,
-              }} />
-            ))}
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", fontSize: 32, lineHeight: 1 }}>🎉</div>
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: INK, fontFamily: disp, whiteSpace: "nowrap" }}>{celebration.message}</div>
         </div>
       )}
 
@@ -9420,6 +9622,8 @@ function doPost(e) {
           })}
         </div>
       </div>
+      {tree3d && <Tree3DView info={tree3d} onClose={() => setTree3d(null)} />}
+
       {alarmScreen && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "linear-gradient(160deg, #0B1B4A 0%, #1E4FCB 100%)", color: "#FFFFFF", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "env(safe-area-inset-top) 28px env(safe-area-inset-bottom)", textAlign: "center" }}>
           <Bell size={46} strokeWidth={1.6} />

@@ -7,7 +7,7 @@
 // icons, manifest.json, or index.html itself. Changing this string is what makes the
 // activate handler below actually throw away old cached bytes and pull fresh ones.
 // If you forget to bump this, updated files can keep serving stale from cache indefinitely.
-const CACHE_NAME = "life-tracker-cache-v8";
+const CACHE_NAME = "life-tracker-cache-v9";
 
 // Core files that make up the app shell — cached immediately on install.
 const APP_SHELL = [
@@ -22,32 +22,43 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
-  self.skipWaiting();
+  // NO skipWaiting() here: a new version only waits. The app shows "Update available" on the More page and the
+  // new version is switched on only when you tap Update now (that sends the SKIP_WAITING message handled below).
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) =>
-      // { cache: "reload" } forces this past the browser's normal HTTP cache, so we
-      // store what's actually on the server right now, not whatever was last fetched.
-      // addAll would fail entirely if even one file 404s — cache each individually
-      // instead so the rest still get stored.
-      Promise.all(
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // { cache: "reload" } forces this past the browser's normal HTTP cache. Each file is cached on its own so
+      // one missing file doesn't stop the rest.
+      await Promise.all(
         APP_SHELL.map((url) =>
           fetch(new Request(url, { cache: "reload" }))
             .then((res) => cache.put(url, res))
             .catch(() => {})
         )
-      )
-    )
+      );
+      // Carry over the libraries (React, icons, Babel...) already cached by the previous version so the app
+      // still opens offline right after an update.
+      try {
+        const names = (await caches.keys()).filter((n) => n !== CACHE_NAME);
+        for (const n of names) {
+          const old = await caches.open(n);
+          for (const r of await old.keys()) {
+            if (!(await cache.match(r))) { const res = await old.match(r); if (res) await cache.put(r, res); }
+          }
+        }
+      } catch (e) {}
+    })
   );
+});
+
+// The app's "Update now" button sends this. Only then does the waiting version take over.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((names) =>
-      Promise.all(
-        names
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      )
+      Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)))
     ).then(() => self.clients.claim())
   );
 });
@@ -60,40 +71,35 @@ self.addEventListener("fetch", (event) => {
   // do not store it in the cache.
   if (req.url.includes("index.html?t=")) return;
 
-  // Page navigations: try the network first so you get the latest version
-  // when online, but fall back to the cached app so it still opens offline.
+  // Page navigations: open the version you have installed (works offline too). A newer version is only
+  // picked up when you tap Update now on the More page. Network is used only if nothing is cached yet.
   if (req.mode === "navigate") {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
+      caches.match("index.html").then((cached) =>
+        cached ||
+        fetch(req).then((res) => {
           const copy = res.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put("index.html", copy));
           return res;
         })
-        .catch(() =>
-          caches.match("index.html").then((cached) => cached || caches.match(req))
-        )
+      )
     );
     return;
   }
 
-  // Everything else (scripts, styles, fonts, CDN libraries, icons): serve from
-  // cache when available for instant + offline loading, and in the background
-  // refresh the cache from the network (bypassing HTTP cache) so updates still
-  // get picked up for next time.
+  // Everything else (scripts, styles, fonts, CDN libraries, icons): cache first, network only when missing.
+  // Nothing is refreshed silently in the background any more.
   event.respondWith(
-    caches.match(req).then((cached) => {
-      const networkFetch = fetch(new Request(req.url, { cache: "reload" }))
-        .then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || networkFetch;
-    })
+    caches.match(req).then((cached) =>
+      cached ||
+      fetch(req).then((res) => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+        }
+        return res;
+      })
+    )
   );
 });
 
