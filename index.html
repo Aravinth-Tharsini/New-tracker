@@ -2873,6 +2873,7 @@ function LifeTracker() {
   const TEAL_HEX = darkMode ? "#30D158" : "#34C759";
   const CORAL_HEX = darkMode ? "#FF453A" : "#FF3B30";
   const [showHolidays, setShowHolidays] = useState(false);
+  const [moreSection, setMoreSection] = useState(null); // More page: null = category list, otherwise the open option
   const upcomingHolidays = useMemo(() => {
     return INDIA_GOVT_HOLIDAYS
       .map((h) => ({ ...h, daysAway: daysUntil(h.date) }))
@@ -4441,7 +4442,8 @@ function LifeTracker() {
   // opened My Day plan / edit form, shopping/goal forms, expanded Today card) so coming back
   // always lands on that section's main page instead of the previously opened activity.
   const switchSection = (target) => {
-    if (target === page) return;
+    if (target === page) { if (target === "datalink") setMoreSection(null); return; }
+    if (target === "datalink") setMoreSection(null);
     setCatTab(null);
     setExpandedDailyCategory(null);
     setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm());
@@ -6031,7 +6033,7 @@ function LifeTracker() {
             );
           })()}
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
-            {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "Data Link" : "Progress"}
+            {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "More" : "Progress"}
           </span>
         </span>
         <div className="app-header-icons" style={{ display: "flex", alignItems: "center", position: "relative" }}>
@@ -9286,7 +9288,62 @@ function LifeTracker() {
 
       {page === "datalink" && (
         <div key="datalink-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
-          <SectionLabel>App update</SectionLabel>
+          {moreSection === null ? (() => {
+            const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+            const upAvail = !!(webUpdateReady || apkUpdate);
+            const groups = [
+              { label: "App", items: [
+                { id: "update", icon: Download, color: "#2F6FED", title: "App update", sub: upAvail ? "Update available" : `Version ${APP_VERSION}`, dot: upAvail },
+              ] },
+              { label: "Notifications", items: [
+                { id: "reminders", icon: Bell, color: "#F59E0B", title: "Reminders & alarms", sub: notifBlocked ? "Notifications are blocked" : `Daily: ${reminderStyle.daily} \u00b7 Plans: ${reminderStyle.plans} \u00b7 Trips: ${reminderStyle.trips}`, dot: !!notifBlocked },
+                ...(isNative ? [] : [{ id: "push", icon: Smartphone, color: "#8B5CF6", title: "Push notifications", sub: pushSubscription ? "This device is registered" : "Not set up" }]),
+              ] },
+              { label: "Data", items: [
+                { id: "storage", icon: dataMode === "offline" ? HardDrive : Cloud, color: "#22C55E", title: "Storage mode", sub: dataMode === "offline" ? "Offline \u00b7 saved on this device" : "Online \u00b7 Google Sheet" },
+                ...(dataMode === "offline"
+                  ? [{ id: "backup", icon: FileJson, color: "#0EA5E9", title: "Backup & restore", sub: autoExportEnabled ? "Daily auto-backup is on" : "Export or import your data" }]
+                  : [{ id: "sheet", icon: RefreshCw, color: "#EF4444", title: "Google Sheet sync", sub: syncStatus === "error" ? "Sync failed" : syncStatus === "syncing" ? "Syncing\u2026" : lastSyncedAt ? `Last synced ${fmtTime(lastSyncedAt)}` : "Not synced yet" }]),
+              ] },
+            ];
+            return (
+              <div>
+                {groups.map((gr) => (
+                  <div key={gr.label} style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, margin: "0 6px 7px" }}>{gr.label}</div>
+                    <Card style={{ padding: "2px 14px", borderRadius: 20 }}>
+                      {gr.items.map((it, i) => {
+                        const RIcon = it.icon;
+                        return (
+                          <button key={it.id} onClick={() => setMoreSection(it.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "11px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit", color: INK }}>
+                            <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: it.color, display: "flex", alignItems: "center", justifyContent: "center" }}><RIcon size={18} color="#fff" strokeWidth={2.2} /></span>
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ display: "block", fontSize: 15, fontWeight: 650 }}>{it.title}</span>
+                              <span style={{ display: "block", fontSize: 12.5, color: it.dot ? CORAL : INK_FAINT, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.sub}</span>
+                            </span>
+                            {it.dot && <span style={{ width: 9, height: 9, borderRadius: 5, background: CORAL, flexShrink: 0 }} />}
+                            <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
+                          </button>
+                        );
+                      })}
+                    </Card>
+                  </div>
+                ))}
+                <div style={{ textAlign: "center", fontSize: 12, color: INK_FAINT, marginTop: 4 }}>Life Tracker {"\u00b7"} Version {APP_VERSION}</div>
+              </div>
+            );
+          })() : (
+            <>
+              {(() => {
+                const TITLES = { update: "App update", reminders: "Reminders & alarms", push: "Push notifications", storage: "Storage mode", backup: "Backup & restore", sheet: "Google Sheet sync" };
+                return (
+                  <button onClick={() => setMoreSection(null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: "2px 0 12px", cursor: "pointer", color: BRASS, fontFamily: "inherit" }}>
+                    <ChevronLeft size={22} strokeWidth={2.4} />
+                    <span style={{ fontSize: 19, fontWeight: 800, color: INK, letterSpacing: "-.01em" }}>{TITLES[moreSection] || "More"}</span>
+                  </button>
+                );
+              })()}
+              {moreSection === "update" && (<>
           <Card style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: (webUpdateReady || apkUpdate) ? BRASS : INK }}>{(webUpdateReady || apkUpdate) ? "Update available" : "App update"}</div>
@@ -9318,7 +9375,8 @@ function LifeTracker() {
               </>
             )}
           </Card>
-          <SectionLabel>Default reminder style</SectionLabel>
+              </>)}
+              {moreSection === "reminders" && (<>
           <Card style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 10, lineHeight: 1.4 }}>Default for new reminders. You can also choose Notification or Alarm on each reminder, next to its time. An alarm is loud, and when you tap it in the notification panel, it opens in full screen.</div>
             {[{ k: "daily", label: "Daily activities" }, { k: "plans", label: "My Day plans" }, { k: "trips", label: "Trips" }].map((row) => (
@@ -9338,7 +9396,8 @@ function LifeTracker() {
               <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 4, lineHeight: 1.4 }}>Reminders cannot ring. Open phone Settings, Apps, Life Tracker, Notifications and turn them on.</div>
             </Card>
           )}
-          <SectionLabel>Storage mode</SectionLabel>
+              </>)}
+              {moreSection === "storage" && (<>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
             <button onClick={() => setDataMode("offline")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "11px 8px", borderRadius: 10, background: dataMode === "offline" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "offline" ? BRASS : LINE}`, cursor: "pointer" }}>
               <HardDrive size={17} color={dataMode === "offline" ? BRASS : INK_FAINT} />
@@ -9350,6 +9409,8 @@ function LifeTracker() {
             </button>
           </div>
 
+              </>)}
+              {moreSection === "push" && (<>
           {window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() ? null : (
           <Card style={{ marginBottom: 9 }}>
             <SectionLabel>Push notifications</SectionLabel>
@@ -9377,6 +9438,8 @@ function LifeTracker() {
           </Card>
           )}
 
+              </>)}
+              {moreSection === "backup" && (<>
           {dataMode === "offline" && (
             <Card style={{ marginBottom: 9 }}>
               <SectionLabel>Backup &amp; restore</SectionLabel>
@@ -9404,6 +9467,8 @@ function LifeTracker() {
             </Card>
           )}
 
+              </>)}
+              {moreSection === "sheet" && (<>
           {dataMode === "online" && (
             <>
               <Card style={{ marginBottom: 9 }}>
@@ -9461,6 +9526,9 @@ function doPost(e) {
                 </div>
                 <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 8 }}>This only happens once, inside Google's own site — there's no login step inside this app. Your data is stored as one JSON block in a "LifeTrackerData" tab, not as separate spreadsheet columns.</div>
               </Card>
+            </>
+          )}
+              </>)}
             </>
           )}
         </div>
