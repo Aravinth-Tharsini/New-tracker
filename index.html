@@ -2883,6 +2883,7 @@ function LifeTracker() {
   }, []);
   const nextHoliday = upcomingHolidays[0] || null;
   const [dataMode, setDataMode] = useState(() => readPersistedSync("dataMode", "offline"));
+  useEffect(() => { if (dataMode !== "offline") setDataMode("offline"); }, [dataMode]); // Google Sheet / online mode removed: always offline
   const [sheetUrl, setSheetUrl] = useState(() => readPersistedSync("sheetUrl", ""));
   const [sheetUrlDraft, setSheetUrlDraft] = useState("");
   const [syncStatus, setSyncStatus] = useState("idle");
@@ -9300,10 +9301,7 @@ function LifeTracker() {
                 ...(isNative ? [] : [{ id: "push", icon: Smartphone, color: "#8B5CF6", title: "Push notifications", sub: pushSubscription ? "This device is registered" : "Not set up" }]),
               ] },
               { label: "Data", items: [
-                { id: "storage", icon: dataMode === "offline" ? HardDrive : Cloud, color: "#22C55E", title: "Storage mode", sub: dataMode === "offline" ? "Offline \u00b7 saved on this device" : "Online \u00b7 Google Sheet" },
-                ...(dataMode === "offline"
-                  ? [{ id: "backup", icon: FileJson, color: "#0EA5E9", title: "Backup & restore", sub: autoExportEnabled ? "Daily auto-backup is on" : "Export or import your data" }]
-                  : [{ id: "sheet", icon: RefreshCw, color: "#EF4444", title: "Google Sheet sync", sub: syncStatus === "error" ? "Sync failed" : syncStatus === "syncing" ? "Syncing\u2026" : lastSyncedAt ? `Last synced ${fmtTime(lastSyncedAt)}` : "Not synced yet" }]),
+                { id: "storage", icon: HardDrive, color: "#22C55E", title: "Storage & backup", sub: autoExportEnabled ? "Offline \u00b7 daily auto-download is on" : "Offline \u00b7 saved on this device" },
               ] },
             ];
             return (
@@ -9335,7 +9333,7 @@ function LifeTracker() {
           })() : (
             <>
               {(() => {
-                const TITLES = { update: "App update", reminders: "Reminders & alarms", push: "Push notifications", storage: "Storage mode", backup: "Backup & restore", sheet: "Google Sheet sync" };
+                const TITLES = { update: "App update", reminders: "Reminders & alarms", push: "Push notifications", storage: "Storage & backup" };
                 return (
                   <button onClick={() => setMoreSection(null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: "2px 0 12px", cursor: "pointer", color: BRASS, fontFamily: "inherit" }}>
                     <ChevronLeft size={22} strokeWidth={2.4} />
@@ -9398,17 +9396,38 @@ function LifeTracker() {
           )}
               </>)}
               {moreSection === "storage" && (<>
-          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-            <button onClick={() => setDataMode("offline")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "11px 8px", borderRadius: 10, background: dataMode === "offline" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "offline" ? BRASS : LINE}`, cursor: "pointer" }}>
-              <HardDrive size={17} color={dataMode === "offline" ? BRASS : INK_FAINT} />
-              <span style={{ fontSize: 15, fontWeight: 600, color: dataMode === "offline" ? BRASS : INK_DIM }}>Offline mode</span>
-            </button>
-            <button onClick={() => setDataMode("online")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "11px 8px", borderRadius: 10, background: dataMode === "online" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "online" ? BRASS : LINE}`, cursor: "pointer" }}>
-              <Cloud size={17} color={dataMode === "online" ? BRASS : INK_FAINT} />
-              <span style={{ fontSize: 15, fontWeight: 600, color: dataMode === "online" ? BRASS : INK_DIM }}>Online mode</span>
-            </button>
-          </div>
-
+                <Card style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 12, background: hexA(BRASS, 0.14), display: "flex", alignItems: "center", justifyContent: "center" }}><HardDrive size={19} color={BRASS} /></span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Offline mode</div>
+                      <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 2, lineHeight: 1.4 }}>Your data is saved only on this device. No account or internet needed.</div>
+                    </div>
+                    <Check size={18} color={TEAL} strokeWidth={2.6} />
+                  </div>
+                </Card>
+                <Card style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                    <div style={{ paddingRight: 6 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Auto-download backup daily</div>
+                      <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 2, lineHeight: 1.4 }}>Works on any device, including phones. Saves one backup file (Documents/LifeTracker on the app, Downloads in a browser) the first time you make a change each day.</div>
+                    </div>
+                    <button onClick={() => setAutoExportEnabled((v) => !v)} aria-label="Auto-download backup daily" style={{ flexShrink: 0, width: 44, height: 26, borderRadius: 999, border: "none", cursor: "pointer", background: autoExportEnabled ? BRASS : LINE, position: "relative", padding: 0 }}>
+                      <span style={{ position: "absolute", top: 2, left: autoExportEnabled ? 20 : 2, width: 22, height: 22, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "left .18s ease" }} />
+                    </button>
+                  </div>
+                  {autoExportEnabled && <div style={{ fontSize: 13, color: TEAL, marginTop: 8 }}>{lastAutoExportAt === today ? `Already backed up today (${lastAutoExportAt}).` : "On \u2014 will download on your next change today."}</div>}
+                </Card>
+                <Card style={{ marginBottom: 12 }}>
+                  <SectionLabel>Backup &amp; restore</SectionLabel>
+                  <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Export a backup file any time, and import it to restore your data on a new device or browser.</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={exportData} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}><Download size={15} /> Export backup</button>
+                    <button onClick={() => fileInputRef.current && fileInputRef.current.click()} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}><Upload size={15} /> Import backup</button>
+                    <input ref={fileInputRef} type="file" accept="*/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) importDataFile(f); e.target.value = ""; }} />
+                  </div>
+                  {importMessage && <div style={{ fontSize: 14, color: TEAL, marginTop: 8 }}>{importMessage}</div>}
+                </Card>
               </>)}
               {moreSection === "push" && (<>
           {window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() ? null : (
@@ -9438,96 +9457,6 @@ function LifeTracker() {
           </Card>
           )}
 
-              </>)}
-              {moreSection === "backup" && (<>
-          {dataMode === "offline" && (
-            <Card style={{ marginBottom: 9 }}>
-              <SectionLabel>Backup &amp; restore</SectionLabel>
-              <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Your data is saved only on this device. Export a backup file regularly, and import it to restore your data on a new device or browser.</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={exportData} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}>
-                  <Download size={15} /> Export backup
-                </button>
-                <button onClick={() => fileInputRef.current && fileInputRef.current.click()} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: `1.5px solid ${BRASS}`, color: BRASS, borderRadius: 8, padding: "9px 10px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 700 }}>
-                  <Upload size={15} /> Import backup
-                </button>
-                <input ref={fileInputRef} type="file" accept="*/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) importDataFile(f); e.target.value = ""; }} />
-              </div>
-              {importMessage && <div style={{ fontSize: 14, color: TEAL, marginTop: 8 }}>{importMessage}</div>}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${LINE}` }}>
-                <div style={{ paddingRight: 10 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>Auto-download backup daily</div>
-                  <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 2 }}>Works on any device, including phones. Saves one backup file (Documents/LifeTracker on the app, Downloads in a browser) the first time you make a change each day.</div>
-                </div>
-                <button onClick={() => setAutoExportEnabled((v) => !v)} style={{ flexShrink: 0, width: 44, height: 26, borderRadius: 999, border: "none", cursor: "pointer", background: autoExportEnabled ? BRASS : LINE, position: "relative", padding: 0 }}>
-                  <span style={{ position: "absolute", top: 2, left: autoExportEnabled ? 20 : 2, width: 22, height: 22, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "left 0.15s" }} />
-                </button>
-              </div>
-              {autoExportEnabled && <div style={{ fontSize: 13, color: TEAL, marginTop: 6 }}>{lastAutoExportAt === today ? `Already backed up today (${lastAutoExportAt}).` : "On \u2014 will download on your next change today."}</div>}
-            </Card>
-          )}
-
-              </>)}
-              {moreSection === "sheet" && (<>
-          {dataMode === "online" && (
-            <>
-              <Card style={{ marginBottom: 9 }}>
-                <SectionLabel>Google Sheet sync</SectionLabel>
-                <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 8 }}>Paste your Google Apps Script Web App URL below (see setup guide). Your data auto-saves to it a couple seconds after any change, and auto-loads from it once when you switch on Online mode.</div>
-                <div style={{ display: "flex", gap: 5, marginBottom: 8 }}>
-                  <TextField value={sheetUrlDraft || sheetUrl} onChange={(e) => setSheetUrlDraft(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec" style={{ flex: 1, fontSize: 14 }} />
-                  <IconBtn onClick={() => { setSheetUrl(sheetUrlDraft.trim()); didInitialPull.current = false; pullSettledRef.current = false; }} title="Confirm sheet URL"><Check size={15} /></IconBtn>
-                </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-                  <ActionButton onClick={pushToSheet} label="Sync now" icon={RefreshCw} tone={BRASS} spinning={syncStatus === "syncing"} />
-                  <button onClick={pullFromSheet} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>
-                    <Cloud size={15} /> Load from sheet
-                  </button>
-                </div>
-                <div style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 5, color: syncStatus === "error" ? CORAL : syncStatus === "syncing" ? BRASS : TEAL }}>
-                  {syncStatus === "error" ? <CloudOff size={14} /> : <Cloud size={14} />}
-                  {syncStatus === "syncing" && "Syncing\u2026"}
-                  {syncStatus === "success" && lastSyncedAt && `Last synced ${fmtTime(lastSyncedAt)}`}
-                  {syncStatus === "error" && "Sync failed \u2014 check the URL and your connection, or tap Sync now to retry."}
-                  {syncStatus === "idle" && !lastSyncedAt && "Not synced yet."}
-                </div>
-              </Card>
-
-              <Card>
-                <SectionLabel>One-time setup (in your Google account, not this app)</SectionLabel>
-                <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.6 }}>
-                  1. Open your Google Sheet.<br />
-                  2. Extensions &rarr; Apps Script.<br />
-                  3. Delete the placeholder code and paste this:
-                </div>
-                <pre style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 7, padding: 10, fontSize: 11, overflowX: "auto", color: INK_DIM, marginTop: 6, marginBottom: 6 }}>
-{`function doGet(e) {
-  var sh = SpreadsheetApp.getActive()
-    .getSheetByName("LifeTrackerData")
-    || SpreadsheetApp.getActive().insertSheet("LifeTrackerData");
-  var data = sh.getRange(1,1).getValue();
-  return ContentService.createTextOutput(data || "{}")
-    .setMimeType(ContentService.MimeType.JSON);
-}
-function doPost(e) {
-  var sh = SpreadsheetApp.getActive()
-    .getSheetByName("LifeTrackerData")
-    || SpreadsheetApp.getActive().insertSheet("LifeTrackerData");
-  sh.getRange(1,1).setValue(e.postData.contents);
-  return ContentService.createTextOutput('{"status":"ok"}')
-    .setMimeType(ContentService.MimeType.JSON);
-}`}
-                </pre>
-                <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.6 }}>
-                  4. Deploy &rarr; New deployment &rarr; type: Web app.<br />
-                  5. Execute as: <b>Me</b>. Who has access: <b>Anyone</b>.<br />
-                  6. Deploy, then copy the Web App URL it gives you.<br />
-                  7. Paste that URL above and tap the checkmark.
-                </div>
-                <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 8 }}>This only happens once, inside Google's own site — there's no login step inside this app. Your data is stored as one JSON block in a "LifeTrackerData" tab, not as separate spreadsheet columns.</div>
-              </Card>
-            </>
-          )}
               </>)}
             </>
           )}
