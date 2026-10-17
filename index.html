@@ -2842,6 +2842,7 @@ function LifeTracker() {
     </button>
   ) : null;
   const [editingHistoryExpense, setEditingHistoryExpense] = useState(null);
+  const [showExpenseHistory, setShowExpenseHistory] = useState(false);
   // Hydrate straight from localStorage on the very first render (lazy initializer), instead of
   // starting empty and filling in via an async effect after mount. The async version rendered an
   // almost-empty page on first paint, then swelled to full height a moment later once real data
@@ -2883,7 +2884,6 @@ function LifeTracker() {
   }, []);
   const nextHoliday = upcomingHolidays[0] || null;
   const [dataMode, setDataMode] = useState(() => readPersistedSync("dataMode", "offline"));
-  useEffect(() => { if (dataMode !== "offline") setDataMode("offline"); }, [dataMode]); // Google Sheet / online mode removed: always offline
   const [sheetUrl, setSheetUrl] = useState(() => readPersistedSync("sheetUrl", ""));
   const [sheetUrlDraft, setSheetUrlDraft] = useState("");
   const [syncStatus, setSyncStatus] = useState("idle");
@@ -3534,6 +3534,53 @@ function LifeTracker() {
       return { ...prev, [date]: { ...log, expenses: (log.expenses || []).map((e) => e.id === expenseId ? { ...e, ...patch } : e) } };
     });
   };
+  // One expense-history row, used on the Finance history and on the Expense screen. Editing is limited to
+  // vendor, remark and mode of payment; amount, category, date and time cannot be changed here.
+  const renderExpenseHistoryRow = (e) => {
+    const editing = editingHistoryExpense && editingHistoryExpense.id === e.id && editingHistoryExpense.date === e.date;
+    const Icon = EXPENSE_GROUP_ICON[e.group] || Receipt;
+    return (
+      <div key={`expense-history-${e.date}-${e.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
+        {editing ? (
+          <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>{e.subcategory || e.group || "Expense"}</span>
+              <span style={{ fontFamily: mono, fontWeight: 700, color: CORAL }}>{inr(e.amount || 0)}</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: INK_FAINT }}>Only vendor, remark and payment mode can be edited.</div>
+            <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Vendor</div><TextField value={editing.vendor || ""} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, vendor: ev.target.value }))} /></div>
+            <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Remark</div><TextField value={editing.remarks || ""} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, remarks: ev.target.value }))} /></div>
+            <div>
+              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Paid via</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[{ key: "online", label: "Online / Account" }, { key: "cash", label: "Physical / Cash" }].map((opt) => {
+                  const sel = (editing.paymentMethod || "online") === opt.key;
+                  return <button key={opt.key} onClick={() => setEditingHistoryExpense((x) => ({ ...x, paymentMethod: opt.key }))} style={{ flex: 1, background: sel ? hexA(BRASS_HEX, 0.13) : "transparent", border: sel ? `1.5px solid ${BRASS}` : `1px solid ${LINE}`, borderRadius: 7, padding: "7px 4px", color: sel ? BRASS : INK_DIM, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>{opt.label}</button>;
+                })}
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+              <button onClick={() => setEditingHistoryExpense(null)} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>Cancel</button>
+              <button onClick={() => { updateHistoryExpense(e.date, e.id, { vendor: (editing.vendor || "").trim(), remarks: (editing.remarks || "").trim(), paymentMethod: editing.paymentMethod || "online" }); setEditingHistoryExpense(null); showToast("Expense updated"); }} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "7px 14px", color: "#fff", cursor: "pointer", fontSize: 14, fontWeight: 700, fontFamily: "inherit" }}>Save</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ width: "100%", display: "flex", alignItems: "flex-start", gap: 9 }}>
+            <Icon size={18} color={BRASS} style={{ marginTop: 2, flexShrink: 0 }} />
+            <div className="history-main" style={{ flex: 1, minWidth: 0 }}>
+              <div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{e.subcategory || e.group || "Expense"}</div>
+              <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>{formatDMY(e.date)} · {fmtTime(e.time)} · {(e.paymentMethod || "online") === "cash" ? "Cash" : "Online"}</div>
+              {e.vendor && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 3 }}>Vendor: {e.vendor}</div>}
+              {e.remarks && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Remark: {e.remarks}</div>}
+            </div>
+            <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(e.amount || 0)}</div>
+            <IconAction onClick={() => setEditingHistoryExpense({ ...e })} title="Edit vendor, remark and payment mode"><Pencil size={15} /></IconAction>
+            <IconAction className="history-delete-btn" onClick={() => deleteHistoryExpense(e.date, e.id)} title="Delete history"><Trash2 size={16} /></IconAction>
+          </div>
+        )}
+      </div>
+    );
+  };
   // Permanent history deletion helpers. No undo and no changes to unrelated data.
   const deleteHistoryExpense = (date, expenseId) => {
     setDailyLogs((prev) => {
@@ -3933,6 +3980,21 @@ function LifeTracker() {
 
   const [showAddTravel, setShowAddTravel] = useState(false);
   const [showTravelHistory, setShowTravelHistory] = useState(false);
+  // Trip history edit: only start time, reach time and amount can change (From / To stay locked).
+  const [historyTripEdit, setHistoryTripEdit] = useState(null);
+  const saveHistoryTripEdit = () => {
+    const e = historyTripEdit; if (!e) return;
+    setTravelPlans((prev) => prev.map((t) => {
+      if (t.id !== e.id) return t;
+      const n = { ...t, travelTime: e.travelTime || "", arrivalTime: e.arrivalTime || "", amount: parseFloat(e.amount) || 0 };
+      if (Array.isArray(t.legs) && t.legs.length > 0) {
+        n.legs = t.legs.map((l, i) => ({ ...l, ...(i === 0 ? { departTime: e.travelTime || "" } : null), ...(i === t.legs.length - 1 ? { arriveTime: e.arrivalTime || "" } : null) }));
+      }
+      return n;
+    }));
+    setHistoryTripEdit(null);
+    showToast("Trip updated");
+  };
   const [editingTravelId, setEditingTravelId] = useState(null);
   const [travelTimeInputMode, setTravelTimeInputMode] = useState("24h");
   const travelFormRef = useRef(null);
@@ -4678,9 +4740,20 @@ function LifeTracker() {
         if (di) { kind = "daily"; id = di.id; } else if (tp) { kind = "trips"; id = tp.id; } else if (me) { kind = "plans"; id = me.id; }
       }
       if (!id) return;
-      if (kind === "daily") updateField(id, { status: "done", time: new Date().toISOString() });
+      if (kind === "daily") {
+        const it = dailyItems.find((i) => i.id === id), rec = field(id);
+        if (rec.status === "done") return;
+        if (it && it.type === "interval") logInterval(it);
+        else if (it && it.type === "duration") {
+          if (rec.status === "in_progress") stopDuration(id);
+          else { const nowIso = new Date().toISOString(); updateField(id, { status: "done", startTime: nowIso, endTime: nowIso, durationMin: 0 }); showDailyCompletion(it); }
+        } else pressInstant(id); // marks done at this moment, shows the green done popup
+      }
       else if (kind === "trips") completeTravelPlan(id);
-      else if (kind === "plans") setMyDayEvents((prev) => prev.map((e) => (e.id !== id ? e : { ...e, completed: true, completedAt: new Date().toISOString() })));
+      else if (kind === "plans") {
+        const e0 = myDayEvents.find((e) => e.id === id);
+        if (e0 && !e0.completed) { celebrate(); setMyDayEvents((prev) => prev.map((e) => (e.id !== id ? e : { ...e, completed: true, completedAt: new Date().toISOString() }))); }
+      }
     } catch (err) {}
   };
   alarmDoneRef.current = (kind, id) => {
@@ -6112,10 +6185,10 @@ function LifeTracker() {
 
       {page === "dashboard" && (() => {
         const pendingActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status !== "done").length;
-        const pendingItemsToday = validItems.filter((i) => i.type !== "interval" && field(i.id).status !== "done").slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
+        const pendingItemsToday = validItems.filter((i) => i.type !== "interval" && field(i.id).status !== "done" && field(i.id).status !== "skipped").slice().sort((a, b) => scheduledMinutes(a) - scheduledMinutes(b));
         const dueRepayments = todaysRepaymentReminders.length;
         const completedActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status === "done").length;
-        const totalActivities = validItems.filter((i) => i.type !== "interval").length;
+        const totalActivities = validItems.filter((i) => i.type !== "interval" && field(i.id).status !== "skipped").length; // skipped-today items leave the count
         const todayExpenses = todayLog.expenses.reduce((sum, e) => sum + e.amount, 0);
         // Timing-aware credit for a single completed activity, in [0, 1]:
         //  - Not done yet -> 0 credit.
@@ -6397,7 +6470,8 @@ function LifeTracker() {
           // Only remaining (not-yet-done) routines are shown in today's list; completed instant/duration
           // items drop off once marked done, and interval items drop off once their repeat count for
           // the day has been logged in full.
-          const pendingItemsForCat = itemsForCat.filter((i) => i.type === "interval" ? !isIntervalComplete(i, todayLog) : field(i.id).status !== "done");
+          const pendingItemsForCat = itemsForCat.filter((i) => i.type === "interval" ? !isIntervalComplete(i, todayLog) : field(i.id).status !== "done" && field(i.id).status !== "skipped");
+          const skippedItemsForCat = itemsForCat.filter((i) => i.type !== "interval" && field(i.id).status === "skipped");
           // Routine tab only: items with a scheduledTime stay out of the visible pill strip until
           // within 30 minutes of that time. Counts/progress above still use the unfiltered
           // pendingItemsForCat, so this only affects which items are shown, not completion logic.
@@ -7211,6 +7285,20 @@ function LifeTracker() {
                               })}
                             </div>
                           </Card>
+                          {financeHistoryExpenses.length > 0 && (
+                            <Card style={{ borderRadius: 20 }}>
+                              <button onClick={() => setShowExpenseHistory((v) => !v)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "transparent", border: "none", padding: 0, cursor: "pointer", color: INK, fontFamily: "inherit" }}>
+                                <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 700 }}><History size={17} color={BRASS} /> Expense history</span>
+                                <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: INK_FAINT }}>{financeHistoryExpenses.length}{showExpenseHistory ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
+                              </button>
+                              {showExpenseHistory && (
+                                <div className="history-panel-enter" style={{ marginTop: 8 }}>
+                                  {financeHistoryExpenses.slice(0, historyVisibleCount).map(renderExpenseHistoryRow)}
+                                  <LoadMoreHistory total={financeHistoryExpenses.length} />
+                                </div>
+                              )}
+                            </Card>
+                          )}
                         </div>
                       );
                     })()}
@@ -7288,6 +7376,18 @@ function LifeTracker() {
                       </div>
                     );
                   })()}
+                  {cat.id === "activity" && skippedItemsForCat.length > 0 && (
+                    <Card style={{ padding: "8px 14px", borderRadius: 16 }}>
+                      <SectionLabel style={{ marginBottom: 4 }}>Skipped today ({skippedItemsForCat.length})</SectionLabel>
+                      {skippedItemsForCat.map((it, si) => (
+                        <div key={it.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 0", borderTop: si > 0 ? `1px solid ${LINE}` : "none" }}>
+                          <span style={{ fontSize: 14, color: INK_DIM, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</span>
+                          <button onClick={() => updateField(it.id, { status: undefined, skippedAt: undefined })} style={{ flexShrink: 0, background: "transparent", border: `1px solid ${BRASS}`, color: BRASS, borderRadius: 8, padding: "5px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Restore</button>
+                        </div>
+                      ))}
+                      <div style={{ fontSize: 11.5, color: INK_FAINT, paddingBottom: 4 }}>Hidden for today only. It comes back tomorrow as usual.</div>
+                    </Card>
+                  )}
                   {visiblePendingItemsForCat.filter((i) => !(i.type === "instant" && field(i.id).status !== "skipped" && effectiveScheduledTime(i) && String(effectiveScheduledTime(i)) < buildHHMM(now.getHours(), now.getMinutes()))).length === 0 ? (
                     pendingItemsForCat.some((i) => (i.type === "instant" && field(i.id).status !== "skipped" && effectiveScheduledTime(i) && String(effectiveScheduledTime(i)) < buildHHMM(now.getHours(), now.getMinutes()))) ? null : <Card style={{ textAlign: "center", padding: "22px 16px", borderRadius: 20 }}>
                       <div style={{ fontSize: 13.5, color: INK_FAINT }}>Nothing due right now &mdash; scheduled items appear 30 minutes before their time.</div>
@@ -7524,11 +7624,32 @@ function LifeTracker() {
                             <TravelModeIcon mode={t.mode} size={18} color={statusColor} style={{ marginTop: 2, flexShrink: 0 }} />
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 15, fontWeight: 600, color: INK }}><TravelModeIcon mode={t.mode} size={18} color={BRASS} style={{ flexShrink: 0 }} /><span>{t.mode} &middot; {t.fromLocation} &rarr; {t.toLocation}</span></div>
-                              <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3 }}>{formatDMY(t.travelDate)}{t.travelTime ? ` · ${fmtTimeString12(t.travelTime)}` : ""}{t.amount ? ` · ${inr(t.amount)}` : ""}</div>
+                              {historyTripEdit && historyTripEdit.id === t.id ? (
+                                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                                  <div style={{ fontSize: 12, color: INK_FAINT }}>From and To can't be changed. You can edit the start time, reach time and amount.</div>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: INK_DIM }}>Start time</div>
+                                  {travelTimeInputMode === "24h"
+                                    ? <Time24Input value={historyTripEdit.travelTime} onChange={(v) => setHistoryTripEdit({ ...historyTripEdit, travelTime: v })} style={{ fontFamily: mono }} />
+                                    : <Time12Input value={historyTripEdit.travelTime} onChange={(v) => setHistoryTripEdit({ ...historyTripEdit, travelTime: v })} style={{ fontFamily: mono }} />}
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: INK_DIM }}>Reach time</div>
+                                  {travelTimeInputMode === "24h"
+                                    ? <Time24Input value={historyTripEdit.arrivalTime} onChange={(v) => setHistoryTripEdit({ ...historyTripEdit, arrivalTime: v })} style={{ fontFamily: mono }} />
+                                    : <Time12Input value={historyTripEdit.arrivalTime} onChange={(v) => setHistoryTripEdit({ ...historyTripEdit, arrivalTime: v })} style={{ fontFamily: mono }} />}
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: INK_DIM }}>Amount</div>
+                                  <input type="number" inputMode="decimal" value={historyTripEdit.amount} onChange={(ev) => setHistoryTripEdit({ ...historyTripEdit, amount: ev.target.value })} placeholder="0" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${LINE}`, background: PANEL_2, color: INK, fontSize: 15, fontFamily: mono }} />
+                                  <div style={{ display: "flex", gap: 8 }}>
+                                    <button onClick={saveHistoryTripEdit} style={{ flex: 1, background: TEAL, border: "none", color: "#fff", borderRadius: 8, padding: "9px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Save</button>
+                                    <button onClick={() => setHistoryTripEdit(null)} style={{ flex: 1, background: "transparent", border: `1px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "9px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3 }}>{formatDMY(t.travelDate)}{t.travelTime ? ` · Start ${fmtTimeString12(t.travelTime)}` : ""}{t.arrivalTime ? ` · Reach ${fmtTimeString12(t.arrivalTime)}` : ""}{t.amount ? ` · ${inr(t.amount)}` : ""}</div>
+                              )}
                               <div style={{ fontSize: 13, color: statusColor, fontWeight: 700, marginTop: 5 }}>Status: {status}</div>
                               {statusAt && <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>{status} on {formatDMY(statusAt)} · {fmtTime(statusAt)}</div>}
                               {t.amount > 0 && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Payment: {t.paymentStatus === "Already Paid" ? "Already Paid" : "Not Paid"}</div>}
                             </div>
+                            {!(historyTripEdit && historyTripEdit.id === t.id) && <IconAction onClick={() => setHistoryTripEdit({ id: t.id, travelTime: t.travelTime || "", arrivalTime: t.arrivalTime || "", amount: t.amount ? String(t.amount) : "" })} title="Edit start time, reach time and amount"><Pencil size={15} /></IconAction>}
                             <IconAction onClick={() => { deleteHistoryTrip(t.id); if (travelHistoryPlans.length === 1) setShowTravelHistory(false); }} title="Delete permanently"><Trash2 size={15} /></IconAction>
                           </Card>
                         );
@@ -8305,45 +8426,7 @@ function LifeTracker() {
                     </>}
 
                     {catTab === "finance" && <>
-                      {financeHistoryExpenses.slice(0, historyVisibleCount).map((e) => {
-                        const editing = editingHistoryExpense && editingHistoryExpense.id === e.id && editingHistoryExpense.date === e.date;
-                        return (
-                          <div key={`expense-history-${e.date}-${e.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
-                            {editing ? (
-                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "end" }}>
-                                <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Amount</div><TextField type="number" value={editing.amount} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, amount: ev.target.value }))} /></div>
-                                <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Vendor</div><TextField value={editing.vendor || ""} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, vendor: ev.target.value }))} /></div>
-                                <div style={{ gridColumn: "1 / -1" }}><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Remark</div><TextField value={editing.remarks || ""} onChange={(ev) => setEditingHistoryExpense((x) => ({ ...x, remarks: ev.target.value }))} /></div>
-                                <div style={{ gridColumn: "1 / -1" }}>
-                                  <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Paid via</div>
-                                  <div style={{ display: "flex", gap: 6 }}>
-                                    {[{ key: "online", label: "Online / Account" }, { key: "cash", label: "Physical / Cash" }].map((opt) => {
-                                      const sel = (editing.paymentMethod || "online") === opt.key;
-                                      return <button key={opt.key} onClick={() => setEditingHistoryExpense((x) => ({ ...x, paymentMethod: opt.key }))} style={{ flex: 1, background: sel ? hexA(BRASS_HEX, 0.13) : "transparent", border: sel ? `1.5px solid ${BRASS}` : `1px solid ${LINE}`, borderRadius: 7, padding: "6px 4px", color: sel ? BRASS : INK_DIM, cursor: "pointer", fontSize: 12.5, fontWeight: sel ? 700 : 500 }}>{opt.label}</button>;
-                                    })}
-                                  </div>
-                                </div>
-                                <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 6 }}>
-                                  <button onClick={() => setEditingHistoryExpense(null)} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                                  <button onClick={() => { updateHistoryExpense(e.date, e.id, { amount: Number(editing.amount) || 0, vendor: (editing.vendor || "").trim(), remarks: (editing.remarks || "").trim(), paymentMethod: editing.paymentMethod || "online" }); setEditingHistoryExpense(null); }} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>Save</button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-                                {(() => { const Icon = EXPENSE_GROUP_ICON[e.group] || Receipt; return <Icon size={18} color={BRASS} />; })()}
-                                <div className="history-main" style={{ flex: 1, minWidth: 0 }}>
-                                  <div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{e.subcategory || e.group || "Expense"}</div>
-                                  <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 2 }}>{formatDMY(e.date)} · {fmtTime(e.time)} · {(e.paymentMethod || "online") === "cash" ? "Cash" : "Online"}</div>
-                                  {e.vendor && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 3 }}>Vendor: {e.vendor}</div>}
-                                  {e.remarks && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Remark: {e.remarks}</div>}
-                                </div>
-                                <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(e.amount || 0)}</div>
-                                <IconAction onClick={() => setEditingHistoryExpense({ ...e })} title="Edit expense"><Pencil size={15} /></IconAction><IconAction className="history-delete-btn" onClick={() => deleteHistoryExpense(e.date, e.id)} title="Delete history"><Trash2 size={16} /></IconAction>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                      {financeHistoryExpenses.slice(0, historyVisibleCount).map(renderExpenseHistoryRow)}
                     <LoadMoreHistory total={financeHistoryExpenses.length} />
                     </>}
 
@@ -9301,7 +9384,8 @@ function LifeTracker() {
                 ...(isNative ? [] : [{ id: "push", icon: Smartphone, color: "#8B5CF6", title: "Push notifications", sub: pushSubscription ? "This device is registered" : "Not set up" }]),
               ] },
               { label: "Data", items: [
-                { id: "storage", icon: HardDrive, color: "#22C55E", title: "Storage & backup", sub: autoExportEnabled ? "Offline \u00b7 daily auto-download is on" : "Offline \u00b7 saved on this device" },
+                { id: "storage", icon: dataMode === "offline" ? HardDrive : Cloud, color: "#22C55E", title: "Storage & backup", sub: dataMode === "offline" ? (autoExportEnabled ? "Offline \u00b7 daily auto-download is on" : "Offline \u00b7 saved on this device") : "Online \u00b7 Google Sheet" },
+                { id: "sheet", icon: RefreshCw, color: "#EF4444", title: "Google Sheet sync", sub: dataMode !== "online" ? "Off \u00b7 switch to Online mode" : syncStatus === "error" ? "Sync failed" : syncStatus === "syncing" ? "Syncing\u2026" : lastSyncedAt ? `Last synced ${fmtTime(lastSyncedAt)}` : "Not synced yet" },
               ] },
             ];
             return (
@@ -9333,7 +9417,7 @@ function LifeTracker() {
           })() : (
             <>
               {(() => {
-                const TITLES = { update: "App update", reminders: "Reminders & alarms", push: "Push notifications", storage: "Storage & backup" };
+                const TITLES = { update: "App update", reminders: "Reminders & alarms", push: "Push notifications", storage: "Storage & backup", sheet: "Google Sheet sync" };
                 return (
                   <button onClick={() => setMoreSection(null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: "2px 0 12px", cursor: "pointer", color: BRASS, fontFamily: "inherit" }}>
                     <ChevronLeft size={22} strokeWidth={2.4} />
@@ -9396,6 +9480,18 @@ function LifeTracker() {
           )}
               </>)}
               {moreSection === "storage" && (<>
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            <button onClick={() => setDataMode("offline")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "11px 8px", borderRadius: 10, background: dataMode === "offline" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "offline" ? BRASS : LINE}`, cursor: "pointer" }}>
+              <HardDrive size={17} color={dataMode === "offline" ? BRASS : INK_FAINT} />
+              <span style={{ fontSize: 15, fontWeight: 600, color: dataMode === "offline" ? BRASS : INK_DIM }}>Offline mode</span>
+            </button>
+            <button onClick={() => setDataMode("online")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "11px 8px", borderRadius: 10, background: dataMode === "online" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "online" ? BRASS : LINE}`, cursor: "pointer" }}>
+              <Cloud size={17} color={dataMode === "online" ? BRASS : INK_FAINT} />
+              <span style={{ fontSize: 15, fontWeight: 600, color: dataMode === "online" ? BRASS : INK_DIM }}>Online mode</span>
+            </button>
+          </div>
+
+                {dataMode === "offline" && (<>
                 <Card style={{ marginBottom: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <span style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 12, background: hexA(BRASS, 0.14), display: "flex", alignItems: "center", justifyContent: "center" }}><HardDrive size={19} color={BRASS} /></span>
@@ -9428,6 +9524,13 @@ function LifeTracker() {
                   </div>
                   {importMessage && <div style={{ fontSize: 14, color: TEAL, marginTop: 8 }}>{importMessage}</div>}
                 </Card>
+                </>)}
+                {dataMode === "online" && (
+                  <Card style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 14, color: INK_FAINT, lineHeight: 1.45, marginBottom: 10 }}>Online mode: your data auto-saves to your linked Google Sheet and follows you across devices.</div>
+                    <button onClick={() => setMoreSection("sheet")} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}><RefreshCw size={15} /> Open Google Sheet sync</button>
+                  </Card>
+                )}
               </>)}
               {moreSection === "push" && (<>
           {window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() ? null : (
@@ -9457,6 +9560,73 @@ function LifeTracker() {
           </Card>
           )}
 
+              </>)}
+              {moreSection === "sheet" && (<>
+                {dataMode !== "online" && (
+                  <Card style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 14, color: INK_FAINT, lineHeight: 1.45, marginBottom: 10 }}>Google Sheet sync is off because the app is in Offline mode. Switch to Online mode to link a Google Sheet that auto-saves your data and follows you across devices.</div>
+                    <button onClick={() => setDataMode("online")} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}><Cloud size={15} /> Switch to Online mode</button>
+                  </Card>
+                )}
+          {dataMode === "online" && (
+            <>
+              <Card style={{ marginBottom: 9 }}>
+                <SectionLabel>Google Sheet sync</SectionLabel>
+                <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 8 }}>Paste your Google Apps Script Web App URL below (see setup guide). Your data auto-saves to it a couple seconds after any change, and auto-loads from it once when you switch on Online mode.</div>
+                <div style={{ display: "flex", gap: 5, marginBottom: 8 }}>
+                  <TextField value={sheetUrlDraft || sheetUrl} onChange={(e) => setSheetUrlDraft(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec" style={{ flex: 1, fontSize: 14 }} />
+                  <IconBtn onClick={() => { setSheetUrl(sheetUrlDraft.trim()); didInitialPull.current = false; pullSettledRef.current = false; }} title="Confirm sheet URL"><Check size={15} /></IconBtn>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                  <ActionButton onClick={pushToSheet} label="Sync now" icon={RefreshCw} tone={BRASS} spinning={syncStatus === "syncing"} />
+                  <button onClick={pullFromSheet} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1.5px solid ${LINE}`, color: INK_DIM, borderRadius: 8, padding: "6px 12px", fontSize: 15, cursor: "pointer", fontFamily: disp, fontWeight: 600 }}>
+                    <Cloud size={15} /> Load from sheet
+                  </button>
+                </div>
+                <div style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 5, color: syncStatus === "error" ? CORAL : syncStatus === "syncing" ? BRASS : TEAL }}>
+                  {syncStatus === "error" ? <CloudOff size={14} /> : <Cloud size={14} />}
+                  {syncStatus === "syncing" && "Syncing\u2026"}
+                  {syncStatus === "success" && lastSyncedAt && `Last synced ${fmtTime(lastSyncedAt)}`}
+                  {syncStatus === "error" && "Sync failed \u2014 check the URL and your connection, or tap Sync now to retry."}
+                  {syncStatus === "idle" && !lastSyncedAt && "Not synced yet."}
+                </div>
+              </Card>
+
+              <Card>
+                <SectionLabel>One-time setup (in your Google account, not this app)</SectionLabel>
+                <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.6 }}>
+                  1. Open your Google Sheet.<br />
+                  2. Extensions &rarr; Apps Script.<br />
+                  3. Delete the placeholder code and paste this:
+                </div>
+                <pre style={{ background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 7, padding: 10, fontSize: 11, overflowX: "auto", color: INK_DIM, marginTop: 6, marginBottom: 6 }}>
+{`function doGet(e) {
+  var sh = SpreadsheetApp.getActive()
+    .getSheetByName("LifeTrackerData")
+    || SpreadsheetApp.getActive().insertSheet("LifeTrackerData");
+  var data = sh.getRange(1,1).getValue();
+  return ContentService.createTextOutput(data || "{}")
+    .setMimeType(ContentService.MimeType.JSON);
+}
+function doPost(e) {
+  var sh = SpreadsheetApp.getActive()
+    .getSheetByName("LifeTrackerData")
+    || SpreadsheetApp.getActive().insertSheet("LifeTrackerData");
+  sh.getRange(1,1).setValue(e.postData.contents);
+  return ContentService.createTextOutput('{"status":"ok"}')
+    .setMimeType(ContentService.MimeType.JSON);
+}`}
+                </pre>
+                <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.6 }}>
+                  4. Deploy &rarr; New deployment &rarr; type: Web app.<br />
+                  5. Execute as: <b>Me</b>. Who has access: <b>Anyone</b>.<br />
+                  6. Deploy, then copy the Web App URL it gives you.<br />
+                  7. Paste that URL above and tap the checkmark.
+                </div>
+                <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 8 }}>This only happens once, inside Google's own site — there's no login step inside this app. Your data is stored as one JSON block in a "LifeTrackerData" tab, not as separate spreadsheet columns.</div>
+              </Card>
+            </>
+          )}
               </>)}
             </>
           )}
