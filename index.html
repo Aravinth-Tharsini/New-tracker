@@ -1315,7 +1315,7 @@ function tree3dBuild(g, v) {
   const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   let n = 0; const col = () => { n++; return treeSeeded(n + 50) > v + 0.12 ? DRY[n % 3] : GREENS[n % 4]; };
-  const leaf = (p, r, id) => items.push({ k: "leaf", p, r, rot: treeSeeded(id) * 6.28, ph: treeSeeded(id + 2) * 6.28, c: col() });
+  const leaf = (p, r, id) => items.push({ k: "leaf", p, r, rot: treeSeeded(id) * 6.28, ph: treeSeeded(id + 2) * 6.28, lt: treeSeeded(id + 9), c: col() });
   const tips = [], mids = [];
   const rec = (p, dir, len, w, d, id) => {
     const e = [p[0] + dir[0] * len, p[1] + dir[1] * len, p[2] + dir[2] * len];
@@ -1336,16 +1336,30 @@ function tree3dBuild(g, v) {
     rec([0, y0, 0], [0, 1, 0], trunk, 2.2 + 4.2 * s, 0, 1);
     if (!small) for (let i = 0; i < 5; i++) { const a = i * 1.2566 + treeSeeded(i + 40) * 0.5, L = 5 + 3 * s + treeSeeded(i + 60) * 2; items.push({ k: "seg", a: [0, y0 + 1.6, 0], b: [Math.cos(a) * L, moundH(L) + 0.2, Math.sin(a) * L], w: (1.6 + 2.4 * s) }); }
   } else items.push({ k: "seed", p: [0, MOUND_H, 0] });
-  const r = 2.6 + 2.6 * s, lr = 3 + 3 * s;
+  const r = 2.6 + 2.6 * s, lr = 3.4 + 3.6 * s;
   tips.forEach((t) => {
     if (small) { leaf([t.p[0] - 3, t.p[1], t.p[2]], 5, t.id); leaf([t.p[0] + 3, t.p[1], t.p[2]], 5, t.id + 1); return; }
-    for (let i = 0; i < (s > 0.3 ? 4 : 3); i++) leaf([t.p[0] + (treeSeeded(t.id + i * 7) - 0.5) * 2 * r, t.p[1] + (treeSeeded(t.id + i * 5) - 0.3) * r, t.p[2] + (treeSeeded(t.id + i * 3) - 0.5) * 2 * r], lr, t.id + i);
+    for (let i = 0; i < (s > 0.3 ? 7 : 4); i++) leaf([t.p[0] + (treeSeeded(t.id + i * 7) - 0.5) * 2 * r, t.p[1] + (treeSeeded(t.id + i * 5) - 0.3) * r, t.p[2] + (treeSeeded(t.id + i * 3) - 0.5) * 2 * r], lr, t.id + i);
     if (fr > 0 && treeSeeded(t.id + 5) < fr * 0.7) items.push({ k: "fruit", p: [t.p[0], t.p[1] - 3, t.p[2]], c: treeSeeded(t.id + 6) > 0.7 ? "#F59E0B" : "#E5484D", r: 2.4 + 0.6 * fr });
     else if (fl > 0 && treeSeeded(t.id + 7) < fl * 0.75) items.push({ k: "flower", p: [t.p[0], t.p[1] + 1, t.p[2]], c: treeSeeded(t.id) > 0.5 ? "#F6A5C0" : "#FFFFFF" });
   });
   if (s > 0.2) mids.forEach((m) => leaf([m.p[0] + 1.5, m.p[1], m.p[2] + 1.5], 2.6 + 1.6 * s, m.id));
   let H = 20; items.forEach((it) => { const y = it.b ? it.b[1] : it.p[1]; if (y > H) H = y; });
   return { items, H: H + 6 };
+}
+// Small illustrated icons for the stage timeline in the full-screen tree view.
+function LtStageIcon({ n }) {
+  const L = (x, y, r, c) => <ellipse cx={x} cy={y} rx={r} ry={r * 0.5} fill={c} transform={`rotate(${x < 20 ? -30 : 30} ${x} ${y})`} />;
+  return (
+    <svg viewBox="0 0 40 40" width="100%" height="100%" style={{ display: "block" }}>
+      <ellipse cx="20" cy="33" rx="14" ry="4.5" fill="#3A2A1C" /><ellipse cx="20" cy="32" rx="11" ry="3" fill="#5A4129" />
+      {n === 1 && <ellipse cx="20" cy="30" rx="4.2" ry="3" fill="#8A5A34" />}
+      {n === 2 && <g><path d="M20 31 V22" stroke="#4E9A3F" strokeWidth="1.6" />{L(15, 21, 5, "#6FD25A")}{L(25, 20, 5, "#58B45A")}</g>}
+      {n === 3 && <g><path d="M20 31 V14" stroke="#5A8F3A" strokeWidth="1.8" />{L(14, 24, 5, "#58B45A")}{L(26, 20, 5, "#6FD25A")}{L(15, 15, 5, "#7BC96B")}{L(25, 12, 4.5, "#58B45A")}</g>}
+      {n === 4 && <g><path d="M20 31 V19" stroke="#6B4A2F" strokeWidth="2.4" /><circle cx="20" cy="14" r="7.5" fill="#3F9B4A" /><circle cx="15" cy="17" r="5" fill="#58B45A" /><circle cx="25" cy="16" r="5" fill="#7BC96B" /></g>}
+      {n === 5 && <g><path d="M20 31 V18" stroke="#6B4A2F" strokeWidth="3" /><circle cx="20" cy="12" r="9" fill="#2E7D3A" /><circle cx="13" cy="16" r="6.5" fill="#3F9B4A" /><circle cx="27" cy="16" r="6.5" fill="#58B45A" /><circle cx="19" cy="9" r="5.5" fill="#7BC96B" /></g>}
+    </svg>
+  );
 }
 function Tree3DView({ info, onClose }) {
   const { g, v } = info;
@@ -1368,7 +1382,7 @@ function Tree3DView({ info, onClose }) {
       if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(Hh * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr); }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, Hh);
       if (!S.drag && !calm) S.rot += 0.0032;
-      const H = model.H, sc = (Hh * 0.52 / H) * S.zoom, cx = W / 2, cy = Hh * 0.5, ty = H * 0.42, D = H * 3.2;
+      const H = model.H, sc = (Hh * 0.58 / H) * S.zoom, cx = W * (W > 700 ? 0.46 : 0.4), cy = Hh * 0.47, ty = H * 0.42, D = H * 3.2;
       const cr = Math.cos(S.rot), sr = Math.sin(S.rot), ct = Math.cos(S.tilt), stl = Math.sin(S.tilt);
       const P = (p, sway) => { const x = p[0] + (sway && !calm ? Math.sin(t * 1.6 + sway) * 0.8 : 0), y = p[1] - ty, z = p[2]; const x1 = x * cr + z * sr, z1 = -x * sr + z * cr; const y2 = y * ct - z1 * stl, z2 = y * stl + z1 * ct; const k = D / (D + z2); return { x: cx + x1 * sc * k, y: cy - y2 * sc * k, z: z2, k }; };
       // glow
@@ -1400,8 +1414,8 @@ function Tree3DView({ info, onClose }) {
       }).sort((x, y) => y.z - x.z);
       ctx.lineCap = "round";
       list.forEach(({ it, a, b, q }) => {
-        if (it.k === "seg") { ctx.strokeStyle = it.w > 4 ? "#5A3E27" : "#6B4A2F"; ctx.lineWidth = Math.max(1, it.w * sc * (a.k + b.k) / 2); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
-        else if (it.k === "leaf") { ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(it.rot + S.rot * 0.3); ctx.fillStyle = it.c; ctx.globalAlpha = 0.95; ctx.beginPath(); ctx.ellipse(0, 0, it.r * sc * q.k, it.r * 0.52 * sc * q.k, 0, 0, 6.283); ctx.fill(); ctx.restore(); }
+        if (it.k === "seg") { const bw = Math.max(1, it.w * sc * (a.k + b.k) / 2); ctx.strokeStyle = it.w > 4 ? "#5E3F28" : "#6F4C31"; ctx.lineWidth = bw; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); if (bw > 3) { ctx.strokeStyle = "rgba(214,168,116,0.38)"; ctx.lineWidth = bw * 0.28; ctx.beginPath(); ctx.moveTo(a.x - bw * 0.22, a.y); ctx.lineTo(b.x - bw * 0.22, b.y); ctx.stroke(); ctx.strokeStyle = "rgba(30,18,10,0.35)"; ctx.beginPath(); ctx.moveTo(a.x + bw * 0.3, a.y); ctx.lineTo(b.x + bw * 0.3, b.y); ctx.stroke(); } }
+        else if (it.k === "leaf") { const L = it.r * sc * q.k, Wd = L * 0.5; ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(it.rot + S.rot * 0.3); ctx.globalAlpha = 0.97; ctx.fillStyle = it.c; ctx.beginPath(); ctx.moveTo(-L, 0); ctx.bezierCurveTo(-L * 0.4, -Wd * 1.15, L * 0.5, -Wd * 0.9, L, 0); ctx.bezierCurveTo(L * 0.5, Wd * 0.9, -L * 0.4, Wd * 1.15, -L, 0); ctx.fill(); ctx.fillStyle = `rgba(255,250,170,${0.08 + 0.3 * it.lt * Math.min(1, it.p[1] / model.H + 0.2)})`; ctx.beginPath(); ctx.moveTo(-L, 0); ctx.bezierCurveTo(-L * 0.4, -Wd * 1.15, L * 0.5, -Wd * 0.9, L, 0); ctx.closePath(); ctx.fill(); ctx.strokeStyle = "rgba(20,60,20,0.45)"; ctx.lineWidth = Math.max(0.5, L * 0.06); ctx.beginPath(); ctx.moveTo(-L * 0.9, 0); ctx.lineTo(L * 0.85, 0); ctx.stroke(); ctx.restore(); }
         else if (it.k === "fruit") { const R = it.r * sc * q.k; ctx.fillStyle = it.c; ctx.beginPath(); ctx.arc(q.x, q.y, R, 0, 6.283); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.beginPath(); ctx.arc(q.x - R * 0.3, q.y - R * 0.3, R * 0.25, 0, 6.283); ctx.fill(); }
         else if (it.k === "flower") { const R = 1.7 * sc * q.k; ctx.fillStyle = it.c; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(q.x + Math.cos(i * 1.2566) * R * 1.25, q.y + Math.sin(i * 1.2566) * R * 1.25, R, 0, 6.283); ctx.fill(); } ctx.fillStyle = "#FFD166"; ctx.beginPath(); ctx.arc(q.x, q.y, R * 0.75, 0, 6.283); ctx.fill(); }
         else if (it.k === "seed") { ctx.fillStyle = "#8A5A34"; ctx.beginPath(); ctx.ellipse(q.x, q.y, 5 * sc * q.k, 3.2 * sc * q.k, 0, 0, 6.283); ctx.fill(); }
@@ -1424,25 +1438,38 @@ function Tree3DView({ info, onClose }) {
     S.pts[e.pointerId] = { x: e.clientX, y: e.clientY };
   };
   const up = (e) => { delete S.pts[e.pointerId]; S.pinch = 0; if (!Object.keys(S.pts).length) S.drag = false; };
-  const sheet = { color: "#fff", background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", borderRadius: 22 };
+  const status = v >= 0.85 ? "Thriving" : v >= 0.6 ? "Fresh" : v >= 0.4 ? "Thirsty" : "Wilting";
+  const bokeh = useMemo(() => Array.from({ length: 16 }, (_, i) => ({ l: treeSeeded(i * 4 + 1) * 100, t: treeSeeded(i * 4 + 2) * 85, r: 14 + treeSeeded(i * 4 + 3) * 46, o: 0.05 + treeSeeded(i * 4 + 4) * 0.13 })), []);
+  const STAGES = [[5, "Mature Tree"], [4, "Small Tree"], [3, "Young Sapling"], [2, "Sprout"], [1, "Seed"]];
+  const glass = { background: "linear-gradient(180deg, rgba(34,78,56,0.55), rgba(12,36,26,0.72))", border: "1px solid rgba(255,255,255,0.14)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" };
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 10050, background: "radial-gradient(120% 80% at 50% 38%, #1E4D3A 0%, #0E2420 55%, #07120F 100%)", color: "#fff", fontFamily: disp, touchAction: "none" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 10050, overflow: "hidden", background: "radial-gradient(120% 90% at 45% 45%, #1B4A30 0%, #0C2A1C 55%, #061510 100%)", color: "#fff", fontFamily: disp, touchAction: "none" }}>
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(70% 50% at 10% 0%, rgba(170,190,60,0.45) 0%, rgba(60,100,40,0) 70%)" }} />
+      <div style={{ position: "absolute", top: -30, left: -40, width: "100%", height: "75%", pointerEvents: "none", filter: "blur(12px)", opacity: 0.35 + 0.65 * v, background: "conic-gradient(from 90deg at 6% 0%, transparent 0deg, rgba(255,240,150,0.30) 9deg, transparent 18deg, rgba(255,240,150,0.18) 27deg, transparent 38deg, rgba(255,240,150,0.22) 46deg, transparent 58deg, rgba(255,240,150,0.12) 68deg, transparent 80deg)" }} />
+      {bokeh.map((b, i) => <div key={i} style={{ position: "absolute", left: `${b.l}%`, top: `${b.t}%`, width: b.r, height: b.r, borderRadius: "50%", pointerEvents: "none", background: `radial-gradient(circle, rgba(200,240,150,${b.o}) 0%, rgba(200,240,150,0) 70%)` }} />)}
       <canvas ref={canvasRef} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onWheel={(e) => { S.zoom = Math.max(0.6, Math.min(2.6, S.zoom * (e.deltaY < 0 ? 1.08 : 0.93))); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: "grab", filter: `saturate(${0.5 + 0.5 * v}) brightness(${0.9 + 0.1 * v}) sepia(${(1 - v) * 0.25})` }} />
-      <div style={{ position: "absolute", top: "calc(14px + env(safe-area-inset-top))", left: 18, right: 18, display: "flex", alignItems: "center", justifyContent: "space-between", pointerEvents: "none" }}>
-        <div><div style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", opacity: 0.7, fontWeight: 700 }}>Your life tree</div><div style={{ fontSize: 22, fontWeight: 800, marginTop: 2 }}>{info.stage}</div></div>
-        <button onClick={onClose} aria-label="Close" style={{ pointerEvents: "auto", width: 42, height: 42, borderRadius: 21, ...sheet, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 0 }}>×</button>
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(110% 80% at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.5) 100%)" }} />
+      <div style={{ position: "absolute", top: "calc(18px + env(safe-area-inset-top))", left: 22, right: 22, display: "flex", alignItems: "flex-start", justifyContent: "space-between", pointerEvents: "none" }}>
+        <div><div style={{ fontSize: 13, letterSpacing: ".24em", textTransform: "uppercase", color: "#7FD18B", fontWeight: 600 }}>Your life tree</div><div style={{ fontSize: 32, fontWeight: 700, marginTop: 4, lineHeight: 1.1 }}>{info.stage}</div></div>
+        <button onClick={onClose} aria-label="Close" style={{ pointerEvents: "auto", width: 50, height: 50, borderRadius: 25, ...glass, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 26, lineHeight: 1, padding: 0 }}>×</button>
       </div>
-      <div style={{ position: "absolute", left: 14, right: 14, bottom: "calc(16px + env(safe-area-inset-bottom))", padding: "14px 16px", ...sheet }}>
+      <div style={{ position: "absolute", right: 12, top: "17%", display: "flex", flexDirection: "column", alignItems: "flex-start", pointerEvents: "none" }}>
+        {STAGES.map(([n, name], i) => { const on = info.level >= n; return (
+          <div key={n} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", opacity: on ? 1 : 0.4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 54, height: 54, borderRadius: 27, overflow: "hidden", border: "2px solid rgba(200,235,130,0.7)", boxShadow: on ? "0 0 14px rgba(190,230,110,0.35)" : "none", background: "radial-gradient(circle at 50% 35%, #2E6B45, #0E2A1C)" }}><LtStageIcon n={n} /></div>
+              <div style={{ lineHeight: 1.25 }}><div style={{ fontSize: 14, fontWeight: 600, color: "#9BE59B" }}>Level {n}</div><div style={{ fontSize: 12, opacity: 0.85 }}>{name}</div></div>
+            </div>
+            {i < STAGES.length - 1 && <div style={{ width: 2, height: 34, marginLeft: 26, background: "linear-gradient(180deg, rgba(240,230,120,0.9), rgba(240,230,120,0.15))", borderRadius: 1 }} />}
+          </div>); })}
+      </div>
+      <div style={{ position: "absolute", left: 16, right: 16, bottom: "calc(18px + env(safe-area-inset-bottom))", padding: "20px 22px", borderRadius: 28, ...glass }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-          <span style={{ fontSize: 19, fontWeight: 800 }}>Lvl {info.level} <span style={{ fontWeight: 600, opacity: 0.75 }}>· {info.title}</span></span>
-          <span style={{ fontSize: 12.5, fontFamily: mono, fontWeight: 700, opacity: 0.85 }}>{info.xp}/{info.next} XP</span>
+          <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase" }}>Lvl {info.level} <span style={{ color: "#86E3A0" }}>· {status}</span></span>
+          <span style={{ fontSize: 17, fontWeight: 600 }}>{info.xp} / {info.next} XP</span>
         </div>
-        <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.18)", marginTop: 8, overflow: "hidden" }}><div style={{ width: `${info.pct}%`, height: "100%", borderRadius: 3, background: "linear-gradient(90deg,#7BC96B,#FFE08A)" }} /></div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-          <span>{info.toNext} XP to level {info.level + 1}</span>
-          <span style={{ fontWeight: 700, color: v >= 0.6 ? "#9BE59B" : "#FFB4A8" }}>{v >= 0.85 ? "Thriving" : v >= 0.6 ? "Fresh" : v >= 0.4 ? "Thirsty" : "Wilting"} · {Math.round(v * 100)}%</span>
-        </div>
-        <div style={{ marginTop: 8, textAlign: "center", fontSize: 11, opacity: 0.55 }}>Drag to rotate · pinch to zoom</div>
+        <div style={{ height: 10, borderRadius: 5, background: "rgba(255,255,255,0.12)", marginTop: 12, overflow: "hidden" }}><div style={{ width: `${info.pct}%`, height: "100%", borderRadius: 5, background: "linear-gradient(90deg,#7FE0A5,#F5E27A)" }} /></div>
+        <div style={{ marginTop: 12, fontSize: 15, opacity: 0.75 }}>{info.toNext} XP to next level</div>
       </div>
     </div>
   );
