@@ -1300,7 +1300,7 @@ function buildGround() {
   const sd = treeSeeded, polar = (r, a) => [Math.cos(a) * r, Math.sin(a) * r];
   const speck = [], stones = [], tufts = [];
   for (let i = 0; i < 160; i++) { const r = 2 + sd(i * 3 + 1) * 23, [x, z] = polar(r, sd(i * 3 + 2) * 6.283); speck.push({ x, z, y: moundH(r) + 0.05, s: 0.35 + sd(i * 3 + 3) * 0.75, c: SOIL_COLS[i % 5] }); }
-  for (let i = 0; i < 10; i++) { const r = 7 + sd(i * 7 + 500) * 16, [x, z] = polar(r, sd(i * 7 + 501) * 6.283); stones.push({ x, z, y: moundH(r) + 0.3, s: 0.9 + sd(i * 7 + 502) * 1.6, c: ["#8D8A80", "#A39F93", "#77736A"][i % 3] }); }
+  for (let i = 0; i < 10; i++) { const r = 7 + sd(i * 7 + 500) * 16, [x, z] = polar(r, sd(i * 7 + 501) * 6.283); stones.push({ x, z, y: moundH(r) + 0.3, s: 0.6 + sd(i * 7 + 502) * 1.0, c: ["#8D8A80", "#A39F93", "#77736A"][i % 3] }); }
   for (let i = 0; i < 52; i++) { const r = 15 + sd(i * 5 + 900) * 12, [x, z] = polar(r, sd(i * 5 + 901) * 6.283); tufts.push({ x, z, y: moundH(r), h: 2.4 + sd(i * 5 + 902) * 2.8, lean: (sd(i * 5 + 903) - 0.5) * 1.6, c: ["#3F8F3F", "#58B45A", "#2E7D3A", "#6FB84F"][i % 4] }); }
   for (let i = 0; i < 12; i++) { const r = 3.6 + sd(i * 5 + 1300) * 3, [x, z] = polar(r, sd(i * 5 + 1301) * 6.283); tufts.push({ x, z, y: moundH(r), h: 1.6 + sd(i * 5 + 1302) * 1.6, lean: (sd(i * 5 + 1303) - 0.5) * 1.2, c: ["#58B45A", "#6FB84F", "#3F8F3F"][i % 3], collar: true }); }
   return { speck, stones, tufts };
@@ -1315,7 +1315,7 @@ function tree3dBuild(g, v) {
   const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   let n = 0; const col = () => { n++; return treeSeeded(n + 50) > v + 0.12 ? DRY[n % 3] : GREENS[n % 4]; };
-  const leaf = (p, r, id) => items.push({ k: "leaf", p, r, rot: treeSeeded(id) * 6.28, ph: treeSeeded(id + 2) * 6.28, lt: treeSeeded(id + 9), dry: (n++, treeSeeded(n + 50) > v + 0.12) });
+  const leaf = (p, r, id) => items.push({ k: "leaf", p, r, rot: treeSeeded(id) * 6.28, dir: (() => { const az = treeSeeded(id + 4) * 6.283, el = (treeSeeded(id + 6) - 0.62) * 1.5; return [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)]; })(), ph: treeSeeded(id + 2) * 6.28, lt: treeSeeded(id + 9), dry: (n++, treeSeeded(n + 50) > v + 0.12) });
   const tips = [], mids = [];
   const rec = (p, dir, len, w, d, id) => {
     const e = [p[0] + dir[0] * len, p[1] + dir[1] * len, p[2] + dir[2] * len];
@@ -1336,19 +1336,20 @@ function tree3dBuild(g, v) {
     rec([0, y0, 0], [0, 1, 0], trunk, 2.2 + 4.2 * s, 0, 1);
     if (!small) for (let i = 0; i < 5; i++) { const a = i * 1.2566 + treeSeeded(i + 40) * 0.5, L = 5 + 3 * s + treeSeeded(i + 60) * 2; items.push({ k: "seg", a: [0, y0 + 1.6, 0], b: [Math.cos(a) * L, moundH(L) + 0.2, Math.sin(a) * L], w: (1.6 + 2.4 * s) }); }
   } else items.push({ k: "seed", p: [0, MOUND_H, 0] });
-  const r = 3.4 + 3.4 * s, lr = 3 + 2.6 * s;
+  const r = 3.4 + 3.4 * s, lr = 2.4 + 1.6 * s;
   tips.forEach((t) => {
     if (small) { leaf([t.p[0] - 3, t.p[1], t.p[2]], 5, t.id); leaf([t.p[0] + 3, t.p[1], t.p[2]], 5, t.id + 1); return; }
-    for (let i = 0; i < (s > 0.3 ? 10 : 5); i++) leaf([t.p[0] + (treeSeeded(t.id + i * 7) - 0.5) * 2 * r, t.p[1] + (treeSeeded(t.id + i * 5) - 0.3) * r, t.p[2] + (treeSeeded(t.id + i * 3) - 0.5) * 2 * r], lr, t.id + i);
+    for (let i = 0; i < (s > 0.3 ? 18 : 7); i++) leaf([t.p[0] + (treeSeeded(t.id + i * 7) - 0.5) * 2 * r, t.p[1] + (treeSeeded(t.id + i * 5) - 0.3) * r, t.p[2] + (treeSeeded(t.id + i * 3) - 0.5) * 2 * r], lr, t.id + i);
     if (fr > 0 && treeSeeded(t.id + 5) < fr * 0.7) items.push({ k: "fruit", p: [t.p[0], t.p[1] - 3, t.p[2]], c: treeSeeded(t.id + 6) > 0.7 ? "#F59E0B" : "#E5484D", r: 2.4 + 0.6 * fr });
     else if (fl > 0 && treeSeeded(t.id + 7) < fl * 0.75) items.push({ k: "flower", p: [t.p[0], t.p[1] + 1, t.p[2]], c: treeSeeded(t.id) > 0.5 ? "#F6A5C0" : "#FFFFFF" });
   });
-  if (s > 0.2) mids.forEach((m) => { leaf([m.p[0] + 1.5, m.p[1], m.p[2] + 1.5], 2.4 + 1.4 * s, m.id); leaf([m.p[0] - 1.5, m.p[1] + 0.5, m.p[2] - 1], 2.4 + 1.4 * s, m.id + 77); });
+  if (s > 0.2) mids.forEach((m) => { leaf([m.p[0] + 1.5, m.p[1], m.p[2] + 1.5], 2 + 1.2 * s, m.id); leaf([m.p[0] - 1.5, m.p[1] + 0.5, m.p[2] - 1], 2 + 1.2 * s, m.id + 77); });
   let H = 20; items.forEach((it) => { const y = it.b ? it.b[1] : it.p[1]; if (y > H) H = y; });
   const lv = items.filter((i) => i.k === "leaf"), nL = Math.max(1, lv.length), cc = [0, 0, 0];
   lv.forEach((l) => { cc[0] += l.p[0] / nL; cc[1] += l.p[1] / nL; cc[2] += l.p[2] / nL; });
   let rr = 0; lv.forEach((l) => { rr += Math.hypot(l.p[0] - cc[0], l.p[1] - cc[1], l.p[2] - cc[2]) / nL; });
-  return { items, H: H + 6, cc, cr: Math.max(8, rr * 1.6) };
+  let R = MOUND_R + 2; items.forEach((it) => { (it.b ? [it.a, it.b] : [it.p]).forEach((q) => { R = Math.max(R, Math.hypot(q[0], q[2]) + 2); }); });
+  return { items, H: H + 6, R, perches: tips.map((t) => t.p).filter((q) => q[1] > H * 0.35), cc, cr: Math.max(8, rr * 1.6) };
 }
 // Pre-rendered leaf sprites: veined, pointed leaves in 6 light levels (green and dry) so thousands can be drawn smoothly.
 let LT_LEAF = null;
@@ -1369,19 +1370,78 @@ function ltLeafSprites() {
   LT_LEAF = { g: six.map((i) => mk(100 - i * 1.5, 48 + i * 3, 13 + i * 6.5)), d: six.map((i) => mk(46 - i, 55, 20 + i * 5.5)) };
   return LT_LEAF;
 }
-// Small illustrated icons for the stage timeline in the full-screen tree view.
-function LtStageIcon({ n }) {
-  const L = (x, y, r, c) => <ellipse cx={x} cy={y} rx={r} ry={r * 0.5} fill={c} transform={`rotate(${x < 20 ? -30 : 30} ${x} ${y})`} />;
-  return (
-    <svg viewBox="0 0 40 40" width="100%" height="100%" style={{ display: "block" }}>
-      <ellipse cx="20" cy="33" rx="14" ry="4.5" fill="#3A2A1C" /><ellipse cx="20" cy="32" rx="11" ry="3" fill="#5A4129" />
-      {n === 1 && <ellipse cx="20" cy="30" rx="4.2" ry="3" fill="#8A5A34" />}
-      {n === 2 && <g><path d="M20 31 V22" stroke="#4E9A3F" strokeWidth="1.6" />{L(15, 21, 5, "#6FD25A")}{L(25, 20, 5, "#58B45A")}</g>}
-      {n === 3 && <g><path d="M20 31 V14" stroke="#5A8F3A" strokeWidth="1.8" />{L(14, 24, 5, "#58B45A")}{L(26, 20, 5, "#6FD25A")}{L(15, 15, 5, "#7BC96B")}{L(25, 12, 4.5, "#58B45A")}</g>}
-      {n === 4 && <g><path d="M20 31 V19" stroke="#6B4A2F" strokeWidth="2.4" /><circle cx="20" cy="14" r="7.5" fill="#3F9B4A" /><circle cx="15" cy="17" r="5" fill="#58B45A" /><circle cx="25" cy="16" r="5" fill="#7BC96B" /></g>}
-      {n === 5 && <g><path d="M20 31 V18" stroke="#6B4A2F" strokeWidth="3" /><circle cx="20" cy="12" r="9" fill="#2E7D3A" /><circle cx="13" cy="16" r="6.5" fill="#3F9B4A" /><circle cx="27" cy="16" r="6.5" fill="#58B45A" /><circle cx="19" cy="9" r="5.5" fill="#7BC96B" /></g>}
-    </svg>
-  );
+// Wildlife and weather on the tree: bees/butterflies/falling petals when in bloom, birds from the leafy stage, fireflies at night, dry leaves drifting down when vitality is low.
+function ltDrawLife(ctx, o) {
+  const { t, P, sc, W, Hh, SK, model, g, v, spr, flowers, drys } = o, sd = treeSeeded, ss = (x) => x * x * (3 - 2 * x), cl = (x) => Math.max(0, Math.min(1, x));
+  const fl = cl((g - 6.2) / 1.5), day = SK.day > 0.25, cc = model.cc, cr = model.cr;
+  const perches = model.perches.length ? model.perches : [cc], tg = flowers.length ? flowers : perches.map((p) => ({ p }));
+  if (fl > 0 && day && flowers.length) for (let i = 0; i < 10; i++) {
+    const pr = 8 + (i % 4), x = (t + i * 2.3) / pr, k = Math.floor(x), u = x - k, f = flowers[Math.floor(sd(i * 5 + k) * flowers.length) % flowers.length];
+    const q = P([f.p[0] + Math.sin(u * 6 + i) * 3 + u * 5, Math.max(MOUND_H, f.p[1] - u * model.H * 0.75), f.p[2] + Math.cos(u * 5 + i) * 2], 0), R = 0.7 * sc * q.k;
+    ctx.save(); ctx.globalAlpha = cl(u * 12) * (1 - ss(cl((u - 0.8) / 0.2))); ctx.translate(q.x, q.y); ctx.rotate(u * 9 + i); ctx.fillStyle = f.c; ctx.beginPath(); ctx.ellipse(0, 0, R * 1.2, R * 0.65, 0, 0, 6.283); ctx.fill(); ctx.restore();
+  }
+  if (drys.length) for (let i = 0, n = Math.round((1 - v) * 8); i < n; i++) {
+    const pr = 11 + (i % 3), x = (t + i * 3.1) / pr, k = Math.floor(x), u = x - k, l = drys[Math.floor(sd(i * 7 + k) * drys.length) % drys.length];
+    const q = P([l.p[0] + Math.sin(u * 5 + i) * 4 + u * 6, Math.max(MOUND_H, l.p[1] * (1 - u * 0.95)), l.p[2] + Math.cos(u * 4 + i) * 3], 0), L = 1.5 * sc * q.k;
+    ctx.save(); ctx.globalAlpha = cl(u * 12) * (1 - ss(cl((u - 0.85) / 0.15))); ctx.translate(q.x, q.y); ctx.rotate(u * 7 + i); ctx.drawImage(spr.d[2], -L, -L / 2, 2 * L, L); ctx.restore();
+  }
+  if (fl > 0 && day) for (let i = 0, n = 2 + Math.round(fl * 4); i < n; i++) {
+    const x = t / 5 + i * 0.37, k = Math.floor(x), f = x - k, pk = (kk) => tg[Math.floor(sd(i * 13 + kk) * tg.length) % tg.length].p, A = pk(k - 1), B = pk(k), m = ss(cl(f / 0.3)), w = t * 3 + i * 2;
+    const q = P([A[0] + (B[0] - A[0]) * m + Math.cos(w) * 1.3, A[1] + (B[1] - A[1]) * m + Math.sin(m * Math.PI) * 4 + Math.sin(w * 1.7) * 0.8 + 1, A[2] + (B[2] - A[2]) * m + Math.sin(w) * 1.3], 0), R = 1.2 * sc * q.k, fw = 0.35 + 0.65 * Math.abs(Math.sin(t * 70 + i));
+    ctx.save(); ctx.translate(q.x, q.y); ctx.scale(B[0] >= A[0] ? 1 : -1, 1);
+    ctx.fillStyle = "rgba(235,245,255,0.6)"; [[-0.1, -0.75, -0.4], [0.2, -0.75, 0.3]].forEach(([ox, oy, rot]) => { ctx.beginPath(); ctx.ellipse(R * ox, R * oy, R * 0.55, R * 0.3 * fw, rot, 0, 6.283); ctx.fill(); });
+    ctx.fillStyle = "#F2B705"; ctx.beginPath(); ctx.ellipse(0, 0, R, R * 0.62, 0, 0, 6.283); ctx.fill();
+    ctx.fillStyle = "#2A1B08"; ctx.fillRect(-R * 0.35, -R * 0.52, R * 0.2, R * 1.04); ctx.fillRect(R * 0.05, -R * 0.56, R * 0.2, R * 1.12); ctx.beginPath(); ctx.arc(R * 0.95, 0, R * 0.38, 0, 6.283); ctx.fill(); ctx.restore();
+  }
+  if (fl > 0 && day) for (let i = 0, n = 1 + Math.round(fl * 2); i < n; i++) {
+    const a = t * 0.3 + i * 2.1, q = P([cc[0] + Math.cos(a) * cr * 1.05, cc[1] + Math.sin(t * 0.5 + i) * cr * 0.4 + Math.sin(t * 3 + i) * 0.8, cc[2] + Math.sin(a * 1.3) * cr * 1.05], 0), R = 1.8 * sc * q.k, fw = Math.abs(Math.cos(t * 7 + i * 1.7));
+    ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(Math.sin(t * 0.8 + i) * 0.3); ctx.fillStyle = i % 2 ? "#F59E0B" : "#5B8DEF";
+    [-1, 1].forEach((sg) => { ctx.beginPath(); ctx.ellipse(sg * R * 0.55 * fw, -R * 0.25, R * 0.6 * fw + 0.5, R * 0.8, sg * 0.5, 0, 6.283); ctx.fill(); ctx.beginPath(); ctx.ellipse(sg * R * 0.4 * fw, R * 0.45, R * 0.4 * fw + 0.5, R * 0.5, -sg * 0.4, 0, 6.283); ctx.fill(); });
+    ctx.fillStyle = "#2A1B08"; ctx.fillRect(-R * 0.06, -R * 0.6, R * 0.12, R * 1.3); ctx.restore();
+  }
+  const nB = g >= 8.2 ? 3 : g >= 6.2 ? 2 : g >= 4 ? 1 : 0;
+  if (SK.night < 0.7) for (let i = 0; i < nB; i++) {
+    const T = 34 + i * 7, x = (t + i * 11) / T, c = Math.floor(x), u = x - c, side = (c + i) % 2 ? 1 : -1, face = i % 2 ? 1 : -1;
+    const pp = P(perches[(i * 2) % perches.length], 0), B = 2.4 * sc * pp.k, ex = side > 0 ? W + 80 : -80, nx = side > 0 ? -80 : W + 80, ey = pp.y - Hh * 0.22, arc = (m) => Math.sin(m * Math.PI) * Hh * 0.05;
+    let bx = pp.x, by = pp.y, flying = false, dir = face;
+    if (u >= 0.58 && u < 0.72) { const m = ss((u - 0.58) / 0.14); bx = pp.x + (ex - pp.x) * m; by = pp.y + (ey - pp.y) * m - arc(m); flying = true; dir = side; }
+    else if (u >= 0.72 && u < 0.86) continue;
+    else if (u >= 0.86) { const m = 1 - Math.pow(1 - (u - 0.86) / 0.14, 2); bx = nx + (pp.x - nx) * m; by = ey + (pp.y - ey) * m - arc(m); flying = u < 0.985; dir = flying ? (nx > 0 ? -1 : 1) : face; }
+    ctx.save(); ctx.translate(bx, by); ctx.scale(dir, 1);
+    if (flying) {
+      const a = Math.sin(t * 16 + i * 2);
+      ctx.fillStyle = "#6B4A2F"; ctx.beginPath(); ctx.ellipse(0, 0, B, B * 0.5, 0, 0, 6.283); ctx.fill(); ctx.beginPath(); ctx.moveTo(-B * 0.8, 0); ctx.lineTo(-B * 1.7, B * 0.2); ctx.lineTo(-B * 1.6, -B * 0.1); ctx.fill();
+      ctx.fillStyle = "#E0703A"; ctx.beginPath(); ctx.ellipse(B * 0.3, B * 0.15, B * 0.5, B * 0.3, 0, 0, 6.283); ctx.fill();
+      ctx.fillStyle = "#5A3A22"; ctx.beginPath(); ctx.arc(B * 0.95, -B * 0.15, B * 0.4, 0, 6.283); ctx.fill();
+      ctx.fillStyle = "#E8B03A"; ctx.beginPath(); ctx.moveTo(B * 1.3, -B * 0.2); ctx.lineTo(B * 1.75, -B * 0.1); ctx.lineTo(B * 1.3, 0); ctx.fill();
+      ctx.fillStyle = "#4A3220"; ctx.beginPath(); ctx.moveTo(B * 0.5, -B * 0.2); ctx.lineTo(-B * 0.5, -B * 0.2); ctx.lineTo(-B * 0.7, -B * (0.3 + 1.5 * a)); ctx.fill();
+    } else {
+      const pkb = Math.max(0, Math.sin(t * 2.2 + i * 3) - 0.8) / 0.2 * B * 0.45;
+      ctx.strokeStyle = "#3A2A1C"; ctx.lineWidth = Math.max(1, B * 0.08); ctx.beginPath(); ctx.moveTo(-B * 0.1, -B * 0.2); ctx.lineTo(-B * 0.1, 0); ctx.moveTo(B * 0.3, -B * 0.2); ctx.lineTo(B * 0.3, 0); ctx.stroke();
+      ctx.fillStyle = "#6B4A2F"; ctx.beginPath(); ctx.moveTo(-B * 0.8, -B * 0.75); ctx.lineTo(-B * 1.8, -B * 0.3); ctx.lineTo(-B * 1.6, -B * 0.05); ctx.lineTo(-B * 0.7, -B * 0.4); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0, -B * 0.65, B, B * 0.62, 0, 0, 6.283); ctx.fill();
+      ctx.fillStyle = "#E0703A"; ctx.beginPath(); ctx.ellipse(B * 0.35, -B * 0.5, B * 0.55, B * 0.4, 0, 0, 6.283); ctx.fill();
+      ctx.fillStyle = "#4A3220"; ctx.beginPath(); ctx.ellipse(-B * 0.2, -B * 0.72, B * 0.6, B * 0.3, 0.2, 0, 6.283); ctx.fill();
+      ctx.fillStyle = "#5A3A22"; ctx.beginPath(); ctx.arc(B * 0.85, -B * 1.15 + pkb, B * 0.42, 0, 6.283); ctx.fill();
+      ctx.fillStyle = "#E8B03A"; ctx.beginPath(); ctx.moveTo(B * 1.2, -B * 1.2 + pkb); ctx.lineTo(B * 1.65, -B * 1.1 + pkb); ctx.lineTo(B * 1.2, -B * 1.0 + pkb); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(B * 0.95, -B * 1.22 + pkb, B * 0.1, 0, 6.283); ctx.fill();
+    }
+    ctx.restore();
+  }
+  if (g >= 1 && SK.night > 0.3) for (let i = 0; i < 16; i++) {
+    const q = P([cc[0] + Math.cos(t * 0.25 + i * 1.7) * cr * 1.3, MOUND_H + 2 + (sd(i + 900) * 0.9 + 0.08 * Math.sin(t * 0.6 + i)) * model.H * 0.7, cc[2] + Math.sin(t * 0.3 + i * 2.3) * cr * 1.3], 0), a = Math.max(0, Math.sin(t * 1.3 + i * 2.1)) * SK.night;
+    if (a < 0.05) continue;
+    ctx.fillStyle = `rgba(210,255,120,${0.2 * a})`; ctx.beginPath(); ctx.arc(q.x, q.y, 7, 0, 6.283); ctx.fill(); ctx.fillStyle = `rgba(255,255,200,${0.9 * a})`; ctx.beginPath(); ctx.arc(q.x, q.y, 1.8, 0, 6.283); ctx.fill();
+  }
+}
+// Time-of-day lighting from the phone clock: sun rises left, crosses overhead, sets right; warm at dawn/dusk, moonlight at night.
+function ltSky(d) {
+  const hrs = d.getHours() + d.getMinutes() / 60, a = ((hrs - 6) / 12) * Math.PI, elev = Math.sin(a), cl = (x) => Math.max(0, Math.min(1, x));
+  const day = cl(elev * 3), warm = cl(1 - elev * 2.2) * (elev > -0.2 ? 1 : 0), night = cl(0.25 - elev * 3), up = elev > 0;
+  const mix = (p, q, k) => p.map((x, i) => Math.round(x + (q[i] - x) * k));
+  return { lx: up ? -Math.cos(a) : -0.4, ly: up ? Math.max(0.3, elev) : 0.7, day, warm, night, up, bright: 0.3 + 0.7 * day,
+    c: up ? mix([255, 160, 80], [255, 244, 205], cl(elev * 2.2)) : [150, 175, 255],
+    bgMid: mix(mix([27, 74, 48], [62, 70, 52], warm * 0.6), [14, 26, 46], night), bgEdge: mix(mix([6, 21, 16], [26, 20, 16], warm * 0.5), [4, 8, 20], night) };
 }
 function Tree3DView({ info, onClose }) {
   const { g, v } = info;
@@ -1389,6 +1449,9 @@ function Tree3DView({ info, onClose }) {
   const st = useRef({ rot: 0.6, tilt: 0.38, zoom: 1, drag: false, pts: {}, last: 0, pinch: 0, idle: 0 });
   const model = useMemo(() => tree3dBuild(g, v), [g, v]);
   const ground3d = useMemo(() => buildGround(), []);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const id = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(id); }, []);
+  const sky = ltSky(now); const skyRef = useRef(sky); skyRef.current = sky;
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -1398,18 +1461,21 @@ function Tree3DView({ info, onClose }) {
     const cv = canvasRef.current; if (!cv) return undefined;
     const ctx = cv.getContext("2d"); const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let raf = 0, t0 = performance.now();
+    const flowers = model.items.filter((i) => i.k === "flower"), drys = model.items.filter((i) => i.k === "leaf" && i.dry);
     const frame = (now) => {
       const S = st.current, t = (now - t0) / 1000, dpr = Math.min(2, window.devicePixelRatio || 1);
       const W = cv.clientWidth, Hh = cv.clientHeight;
       if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(Hh * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr); }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, Hh);
-      if (!S.drag && !calm) S.rot += 0.0032;
-      const H = model.H, sc = (Hh * 0.58 / H) * S.zoom, cx = W * (W > 700 ? 0.46 : 0.4), cy = Hh * 0.47, ty = H * 0.42, D = H * 3.2;
+      const SK = skyRef.current;
+      // Breeze: mostly a faint stir, with an occasional soft gust that rises and fades
+      const gn = Math.sin(t * 0.23) * 0.5 + Math.sin(t * 0.61 + 2) * 0.35 + Math.sin(t * 1.07 + 4) * 0.15, gx = Math.max(0, Math.min(1, (gn + 0.15) / 0.9)), gu = calm ? 0 : gx * gx * (3 - 2 * gx);
+      const H = model.H, sc = Math.min(Hh * 0.5 / H, W * 0.46 / model.R) * S.zoom, cx = W / 2, cy = Hh * 0.46, ty = H * 0.42, D = H * 3.2;
       const cr = Math.cos(S.rot), sr = Math.sin(S.rot), ct = Math.cos(S.tilt), stl = Math.sin(S.tilt);
-      const P = (p, sway) => { const wy = Math.max(0, (p[1] - MOUND_H) / H), x = p[0] + (calm ? 0 : (Math.sin(t * 1.1 + p[1] * 0.08) + 0.35 * Math.sin(t * 2.3 + (sway || 0))) * 2.4 * wy * wy), y = p[1] - ty, z = p[2]; const x1 = x * cr + z * sr, z1 = -x * sr + z * cr; const y2 = y * ct - z1 * stl, z2 = y * stl + z1 * ct; const k = D / (D + z2); return { x: cx + x1 * sc * k, y: cy - y2 * sc * k, z: z2, k }; };
+      const P = (p, sway) => { const wy = Math.max(0, (p[1] - MOUND_H) / H), x = p[0] + (calm ? 0 : (Math.sin(t * (0.9 + 0.8 * gu) + p[1] * 0.08) + 0.35 * Math.sin(t * (1.8 + 1.2 * gu) + (sway || 0))) * (0.5 + 2.4 * gu) * wy * wy + gu * 1.1 * wy * wy), y = p[1] - ty, z = p[2]; const x1 = x * cr + z * sr, z1 = -x * sr + z * cr; const y2 = y * ct - z1 * stl, z2 = y * stl + z1 * ct; const k = D / (D + z2); return { x: cx + x1 * sc * k, y: cy - y2 * sc * k, z: z2, k }; };
       // glow
-      const gc = P([0, H * 0.45, 0]), gr = Math.min(W, Hh) * 0.62, ga = Math.pow(v, 1.5) * 0.8;
-      const grd = ctx.createRadialGradient(gc.x, gc.y, 0, gc.x, gc.y, gr); grd.addColorStop(0, `rgba(255,233,166,${0.55 * ga})`); grd.addColorStop(0.6, `rgba(191,232,160,${0.18 * ga})`); grd.addColorStop(1, "rgba(191,232,160,0)");
+      const gc0 = P([0, H * 0.45, 0]), gc = { x: gc0.x + SK.lx * W * 0.18, y: gc0.y }, gr = Math.min(W, Hh) * 0.62, ga = Math.pow(v, 1.5) * 0.8 * (0.2 + 0.8 * SK.day);
+      const grd = ctx.createRadialGradient(gc.x, gc.y, 0, gc.x, gc.y, gr); grd.addColorStop(0, `rgba(${SK.c},${0.55 * ga})`); grd.addColorStop(0.6, `rgba(${SK.c},${0.16 * ga})`); grd.addColorStop(1, "rgba(191,232,160,0)");
       ctx.fillStyle = grd; ctx.fillRect(0, 0, W, Hh);
       // soil mound: soft contact shadow, shaded rings (dark rim -> lighter top), texture, stones, grass
       const zb = P([0, 0, 0]).z;
@@ -1426,10 +1492,10 @@ function Tree3DView({ info, onClose }) {
       const speck = (it) => { const q = P([it.x, it.y, it.z]); ctx.fillStyle = it.c; ctx.beginPath(); ctx.ellipse(q.x, q.y, it.s * sc * q.k, it.s * sc * q.k * Math.max(0.35, ct), 0, 0, 6.283); ctx.fill(); };
       gnd.speck.forEach(speck);
       const stone = (it) => { const q = P([it.x, it.y, it.z]), R = it.s * sc * q.k, fy = Math.max(0.4, ct); ctx.fillStyle = "rgba(0,0,0,0.28)"; ctx.beginPath(); ctx.ellipse(q.x + R * 0.15, q.y + R * 0.3 * fy, R * 1.05, R * 0.55 * fy, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = it.c; ctx.beginPath(); ctx.ellipse(q.x, q.y - R * 0.2 * fy, R, R * 0.75 * fy + R * 0.2, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,0.22)"; ctx.beginPath(); ctx.ellipse(q.x - R * 0.28, q.y - R * 0.45 * fy, R * 0.35, R * 0.2, 0, 0, 6.283); ctx.fill(); };
-      const tuft = (it) => { ctx.strokeStyle = it.c; ctx.lineCap = "round"; ctx.lineWidth = Math.max(1, 0.55 * sc); for (let j = -1; j <= 1; j++) { const a0 = P([it.x + j * 0.7, it.y, it.z]), a1 = P([it.x + j * 0.7 + it.lean * (1 + j * 0.3), it.y + it.h * (1 - Math.abs(j) * 0.2), it.z]); ctx.lineWidth = Math.max(1, 0.5 * sc * a0.k); ctx.beginPath(); ctx.moveTo(a0.x, a0.y); ctx.lineTo(a1.x, a1.y); ctx.stroke(); } };
+      const tuft = (it) => { ctx.strokeStyle = it.c; ctx.lineCap = "round"; for (let j = -2; j <= 2; j++) { const a0 = P([it.x + j * 0.45, it.y, it.z + (j % 2) * 0.3]), a1 = P([it.x + j * 0.45 + it.lean * (1 + j * 0.25), it.y + it.h * (1 - Math.abs(j) * 0.15), it.z]); ctx.lineWidth = Math.max(0.8, 0.2 * sc * a0.k); ctx.beginPath(); ctx.moveTo(a0.x, a0.y); ctx.quadraticCurveTo((a0.x + a1.x) / 2 + j * 0.2 * sc, (a0.y + a1.y) / 2, a1.x, a1.y); ctx.stroke(); } };
       const isBack = (it) => P([it.x, it.y, it.z]).z > zb;
       gnd.stones.filter(isBack).forEach(stone); gnd.tufts.filter(isBack).forEach(tuft);
-      const cq = P(model.cc), Rr = model.cr * sc, spr = ltLeafSprites();
+      const cq = P(model.cc), Rr = model.cr * sc, spr = ltLeafSprites(), lvn = Math.hypot(SK.lx, SK.ly, 0.4), LX = SK.lx / lvn, LY = SK.ly / lvn, LZ = 0.4 / lvn;
       // depth-sorted items
       const list = model.items.map((it) => {
         if (it.k === "seg") { const a = P(it.a), b = P(it.b); return { it, a, b, z: (a.z + b.z) / 2 }; }
@@ -1444,9 +1510,11 @@ function Tree3DView({ info, onClose }) {
           if (w0 > 3) { ctx.lineCap = "butt"; [[-0.28, "rgba(222,176,120,0.42)", 0.22], [0.22, "rgba(25,14,8,0.4)", 0.3], [0.02, "rgba(25,14,8,0.22)", 0.08], [-0.1, "rgba(222,176,120,0.2)", 0.1]].forEach(([o, c, wd]) => { ctx.strokeStyle = c; ctx.lineWidth = Math.max(0.6, w0 * wd); ctx.beginPath(); ctx.moveTo(a.x + nx * w0 * o, a.y + ny * w0 * o); ctx.lineTo(b.x + nx * w1 * o, b.y + ny * w1 * o); ctx.stroke(); }); ctx.lineCap = "round"; }
         }
         else if (it.k === "leaf") {
-          const L = it.r * sc * q.k * 1.15, dx = (q.x - cq.x) / Rr, dy = (cq.y - q.y) / Rr, dz = (cq.z - q.z) / model.cr;
-          let sh = 0.18 + 0.3 * Math.min(1.3, Math.hypot(dx, dy, dz * 0.8)) + 0.32 * (-0.55 * dx + 0.8 * dy + 0.35 * dz) + (it.lt - 0.5) * 0.3; sh = Math.max(0, Math.min(0.999, sh));
-          ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(it.rot + S.rot * 0.3 + (calm ? 0 : Math.sin(t * 2.1 + it.ph) * 0.22)); ctx.drawImage((it.dry ? spr.d : spr.g)[Math.floor(sh * 6)], -L, -L * 0.5, L * 2, L); ctx.restore();
+          const len = it.r, fl = calm ? 0 : Math.sin(t * (1.5 + 1.5 * gu) + it.ph) * 0.16 * (0.35 + 1.1 * gu), tp = P([it.p[0] + (it.dir[0] + fl) * len, it.p[1] + it.dir[1] * len, it.p[2] + (it.dir[2] + fl * 0.6) * len], it.ph + 1);
+          const vx = tp.x - q.x, vy = tp.y - q.y, vl = Math.hypot(vx, vy), full = len * sc * q.k, Lpx = Math.max(vl, full * 0.45), Wd = full * 0.5, ang = vl > 0.5 ? Math.atan2(vy, vx) : it.rot;
+          const ex = (q.x - cq.x) / Rr, ey = (cq.y - q.y) / Rr, ez = (cq.z - q.z) / model.cr;
+          let sh = 0.18 + 0.3 * Math.min(1.3, Math.hypot(ex, ey, ez * 0.8)) + 0.4 * (LX * ex + LY * ey + LZ * ez) + (it.lt - 0.5) * 0.3; sh = Math.max(0, Math.min(0.999, sh * (0.5 + 0.5 * SK.bright)));
+          ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(ang); ctx.drawImage((it.dry ? spr.d : spr.g)[Math.floor(sh * 6)], 0, -Wd / 2, Lpx, Wd); ctx.restore();
         }
         else if (it.k === "fruit") { const R = it.r * sc * q.k; ctx.fillStyle = it.c; ctx.beginPath(); ctx.arc(q.x, q.y, R, 0, 6.283); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.beginPath(); ctx.arc(q.x - R * 0.3, q.y - R * 0.3, R * 0.25, 0, 6.283); ctx.fill(); }
         else if (it.k === "flower") { const R = 1.7 * sc * q.k; ctx.fillStyle = it.c; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(q.x + Math.cos(i * 1.2566) * R * 1.25, q.y + Math.sin(i * 1.2566) * R * 1.25, R, 0, 6.283); ctx.fill(); } ctx.fillStyle = "#FFD166"; ctx.beginPath(); ctx.arc(q.x, q.y, R * 0.75, 0, 6.283); ctx.fill(); }
@@ -1455,12 +1523,13 @@ function Tree3DView({ info, onClose }) {
       // soil collar so the trunk grows out of the ground, then the front stones and grass
       for (let k = 0; k < 4; k++) { const r = 7.5 - k * 1.7; ring(r, moundH(r) + 0.55 + k * 0.25); const t = Math.min(1, (1 - r / MOUND_R) * NR / (NR - 1)) + 0.04; ctx.fillStyle = `rgb(${Math.round(46 + t * 76)},${Math.round(32 + t * 58)},${Math.round(21 + t * 37)})`; ctx.fill(); }
       gnd.stones.filter((it) => !isBack(it)).forEach(stone); gnd.tufts.filter((it) => !isBack(it)).forEach(tuft);
+      if (!calm) ltDrawLife(ctx, { t, P, sc, W, Hh, SK, model, g, v, spr, flowers, drys });
       if (!calm) for (let i = 0; i < 36; i++) { const px = (((treeSeeded(i * 3 + 700) * W + Math.sin(t * 0.3 + i) * 18 + t * (4 + i % 5)) % W) + W) % W, py = (((treeSeeded(i * 3 + 701) * Hh - t * (6 + i % 4)) % Hh) + Hh) % Hh; ctx.fillStyle = `rgba(255,248,190,${0.22 + 0.22 * Math.sin(t * 1.5 + i)})`; ctx.beginPath(); ctx.arc(px, py, 1 + (i % 3) * 0.7, 0, 6.283); ctx.fill(); }
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [model, v, ground3d]);
+  }, [model, v, g, ground3d]);
   const S = st.current;
   const down = (e) => { S.pts[e.pointerId] = { x: e.clientX, y: e.clientY }; S.drag = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} };
   const move = (e) => {
@@ -1473,34 +1542,26 @@ function Tree3DView({ info, onClose }) {
   const up = (e) => { delete S.pts[e.pointerId]; S.pinch = 0; if (!Object.keys(S.pts).length) S.drag = false; };
   const status = v >= 0.85 ? "Thriving" : v >= 0.6 ? "Fresh" : v >= 0.4 ? "Thirsty" : "Wilting";
   const bokeh = useMemo(() => Array.from({ length: 16 }, (_, i) => ({ l: treeSeeded(i * 4 + 1) * 100, t: treeSeeded(i * 4 + 2) * 85, r: 14 + treeSeeded(i * 4 + 3) * 46, o: 0.05 + treeSeeded(i * 4 + 4) * 0.13 })), []);
-  const STAGES = [[5, "Mature Tree"], [4, "Small Tree"], [3, "Young Sapling"], [2, "Sprout"], [1, "Seed"]];
+  const note = sky.night > 0.4 ? (g >= 1 ? "Fireflies are out tonight" : "") : g >= 8.2 ? "Fruit ripening · birds are feasting" : g >= 6.2 ? "In bloom · bees & butterflies are visiting" : g >= 4 ? "A bird has moved in" : "";
   const glass = { background: "linear-gradient(180deg, rgba(34,78,56,0.55), rgba(12,36,26,0.72))", border: "1px solid rgba(255,255,255,0.14)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" };
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 10050, overflow: "hidden", background: "radial-gradient(120% 90% at 45% 45%, #1B4A30 0%, #0C2A1C 55%, #061510 100%)", color: "#fff", fontFamily: disp, touchAction: "none" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 10050, overflow: "hidden", background: `radial-gradient(120% 90% at 50% 45%, rgb(${sky.bgMid}) 0%, rgb(${sky.bgEdge}) 100%)`, color: "#fff", fontFamily: disp, touchAction: "none" }}>
       <style>{`@keyframes ltRays{0%,100%{opacity:calc(var(--o)*.6);transform:translateX(-1%)}50%{opacity:var(--o);transform:translateX(2%)}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}`}</style>
-      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(70% 50% at 10% 0%, rgba(170,190,60,0.45) 0%, rgba(60,100,40,0) 70%)" }} />
-      <div style={{ position: "absolute", top: -30, left: -40, width: "100%", height: "75%", pointerEvents: "none", filter: "blur(12px)", animation: "ltRays 8s ease-in-out infinite", "--o": 0.35 + 0.65 * v, background: "conic-gradient(from 90deg at 6% 0%, transparent 0deg, rgba(255,240,150,0.30) 9deg, transparent 18deg, rgba(255,240,150,0.18) 27deg, transparent 38deg, rgba(255,240,150,0.22) 46deg, transparent 58deg, rgba(255,240,150,0.12) 68deg, transparent 80deg)" }} />
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: `radial-gradient(70% 50% at ${50 + sky.lx * 44}% 0%, rgba(${sky.c},${0.08 + 0.4 * sky.day}) 0%, rgba(60,100,40,0) 70%)` }} />
+      <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "78%", pointerEvents: "none", filter: "blur(12px)", animation: "ltRays 8s ease-in-out infinite", "--o": (0.12 + 0.88 * sky.day) * (0.35 + 0.65 * v), background: `conic-gradient(from ${140 - sky.lx * 28}deg at ${50 + sky.lx * 44}% 0%, transparent 0deg, rgba(${sky.c},0.30) 9deg, transparent 18deg, rgba(${sky.c},0.18) 27deg, transparent 38deg, rgba(${sky.c},0.22) 46deg, transparent 58deg, rgba(${sky.c},0.12) 68deg, transparent 80deg)` }} />
       {bokeh.map((b, i) => <div key={i} style={{ position: "absolute", left: `${b.l}%`, top: `${b.t}%`, width: b.r, height: b.r, borderRadius: "50%", pointerEvents: "none", background: `radial-gradient(circle, rgba(200,240,150,${b.o}) 0%, rgba(200,240,150,0) 70%)` }} />)}
       <canvas ref={canvasRef} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onWheel={(e) => { S.zoom = Math.max(0.6, Math.min(2.6, S.zoom * (e.deltaY < 0 ? 1.08 : 0.93))); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: "grab", filter: `saturate(${0.5 + 0.5 * v}) brightness(${0.9 + 0.1 * v}) sepia(${(1 - v) * 0.25})` }} />
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", mixBlendMode: "soft-light", background: `rgba(255,140,60,${0.32 * sky.warm})` }} />
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", mixBlendMode: "multiply", background: `rgba(45,65,140,${0.5 * sky.night})` }} />
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(110% 80% at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.5) 100%)" }} />
       <div style={{ position: "absolute", top: "calc(18px + env(safe-area-inset-top))", left: 22, right: 22, display: "flex", alignItems: "flex-start", justifyContent: "space-between", pointerEvents: "none" }}>
-        <div><div style={{ fontSize: 13, letterSpacing: ".24em", textTransform: "uppercase", color: "#7FD18B", fontWeight: 600 }}>Your life tree</div><div style={{ fontSize: 32, fontWeight: 700, marginTop: 4, lineHeight: 1.1 }}>{info.stage}</div></div>
+        <div><div style={{ fontSize: 13, letterSpacing: ".24em", textTransform: "uppercase", color: "#7FD18B", fontWeight: 600 }}>Your life tree</div><div style={{ fontSize: 32, fontWeight: 700, marginTop: 4, lineHeight: 1.1 }}>{info.stage}</div>{note && <div style={{ fontSize: 13, marginTop: 6, color: "#9BE59B", opacity: 0.9 }}>{note}</div>}</div>
         <button onClick={onClose} aria-label="Close" style={{ pointerEvents: "auto", width: 50, height: 50, borderRadius: 25, ...glass, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 26, lineHeight: 1, padding: 0 }}>×</button>
       </div>
-      <div style={{ position: "absolute", right: 12, top: "17%", display: "flex", flexDirection: "column", alignItems: "flex-start", pointerEvents: "none" }}>
-        {STAGES.map(([n, name], i) => { const on = info.level >= n; return (
-          <div key={n} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", opacity: on ? 1 : 0.4 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 54, height: 54, borderRadius: 27, overflow: "hidden", border: "2px solid rgba(200,235,130,0.7)", boxShadow: on ? "0 0 14px rgba(190,230,110,0.35)" : "none", background: "radial-gradient(circle at 50% 35%, #2E6B45, #0E2A1C)" }}><LtStageIcon n={n} /></div>
-              <div style={{ lineHeight: 1.25 }}><div style={{ fontSize: 14, fontWeight: 600, color: "#9BE59B" }}>Level {n}</div><div style={{ fontSize: 12, opacity: 0.85 }}>{name}</div></div>
-            </div>
-            {i < STAGES.length - 1 && <div style={{ width: 2, height: 34, marginLeft: 26, background: "linear-gradient(180deg, rgba(240,230,120,0.9), rgba(240,230,120,0.15))", borderRadius: 1 }} />}
-          </div>); })}
-      </div>
-      <div style={{ position: "absolute", left: 16, right: 16, bottom: "calc(18px + env(safe-area-inset-bottom))", padding: "20px 22px", borderRadius: 28, ...glass }}>
+      <div style={{ position: "absolute", left: 16, right: 16, bottom: "calc(18px + env(safe-area-inset-bottom))", padding: "18px 18px", borderRadius: 28, ...glass }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-          <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase" }}>Lvl {info.level} <span style={{ color: "#86E3A0" }}>· {status}</span></span>
-          <span style={{ fontSize: 17, fontWeight: 600 }}>{info.xp} / {info.next} XP</span>
+          <span style={{ fontSize: 19, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", whiteSpace: "nowrap" }}>Lvl {info.level} <span style={{ color: "#86E3A0" }}>· {status}</span></span>
+          <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap" }}>{info.xp} / {info.next} XP</span>
         </div>
         <div style={{ height: 10, borderRadius: 5, background: "rgba(255,255,255,0.12)", marginTop: 12, overflow: "hidden" }}><div style={{ width: `${info.pct}%`, height: "100%", borderRadius: 5, background: "linear-gradient(90deg,#7FE0A5,#F5E27A)" }} /></div>
         <div style={{ marginTop: 12, fontSize: 15, opacity: 0.75 }}>{info.toNext} XP to next level</div>
@@ -6383,8 +6444,10 @@ function LifeTracker() {
         const progressPercent = Math.round(progressPercentExact);
         const progressPercentLabel = totalActivities === 0 ? "0" : Number.isInteger(progressPercentExact) ? String(progressPercentExact) : progressPercentExact.toFixed(1);
         const currentHour = new Date().getHours();
-        const greeting = currentHour < 12 ? "Good morning" : currentHour < 18 ? "Good afternoon" : "Good evening";
-        const GreetingIcon = currentHour < 12 ? Sunrise : currentHour < 18 ? Sun : Moon;
+        // 5am-11:59 morning, 12-4:59pm afternoon, 5-8:59pm evening, 9pm-4:59am night
+        const greetPart = currentHour >= 5 && currentHour < 12 ? "morning" : currentHour >= 12 && currentHour < 17 ? "afternoon" : currentHour >= 17 && currentHour < 21 ? "evening" : "night";
+        const greeting = "Good " + greetPart;
+        const GreetingIcon = greetPart === "morning" ? Sunrise : greetPart === "afternoon" ? Sun : Moon;
         const dailyMotivation = dailyMotivationFor(now);
         const atmosphere = ribbonAtmosphereFor(now);
         const remainingActivities = Math.max(0, totalActivities - completedActivities);
