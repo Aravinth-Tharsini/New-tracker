@@ -987,7 +987,19 @@ function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // ---- App updates (shown on the More screen only) ----
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
 // repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
-const APP_VERSION = "2026.10.14";
+const APP_VERSION = "2026.10.17";
+// Shown on More > App update ("What's new"). Keep each line short and simple; add a new block for every release.
+const APP_CHANGELOG = {
+  date: "17 Oct 2026",
+  items: [
+    ["fixed", "Routine screen no longer shows \u201COops! Something went wrong\u201D. The Skipped today list works now."],
+    ["fixed", "Home greeting now matches the time, including \u201CGood night\u201D after 9 PM."],
+    ["new", "Life tree: real photo look for Leafy, In bloom and Fruiting, with wind gusts and light that follows the time of day."],
+    ["new", "Birds, a nest with chicks, butterflies, bees and fireflies now live on the tree. They change between day and night."],
+    ["better", "Seed to young tree now grow in the same forest scene."],
+    ["better", "The tree turns only when you drag it. The level list on the tree screen was removed."],
+  ],
+};
 const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
 function versionIsNewer(latest, current) {
   const a = String(latest || "").replace(/^[^0-9]*/, "").split(/[.\-]/).map((n) => parseInt(n, 10) || 0);
@@ -4536,7 +4548,7 @@ function LifeTracker() {
     const j = await r.json();
     if (!j || !j.tag_name || !versionIsNewer(j.tag_name, APP_VERSION)) return null;
     const asset = (j.assets || []).find((x) => /\.apk$/i.test(x.name || ""));
-    return { version: String(j.tag_name).replace(/^v/i, ""), url: asset ? asset.browser_download_url : j.html_url };
+    return { version: String(j.tag_name).replace(/^v/i, ""), url: asset ? asset.browser_download_url : j.html_url, notes: String(j.body || "").trim().slice(0, 500) };
   };
   useEffect(() => {
     const cap = window.Capacitor;
@@ -9766,7 +9778,7 @@ function LifeTracker() {
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
                 {apkUpdate && (
                   <div style={{ border: `1px solid ${LINE}`, borderRadius: 12, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>New app (APK) {apkUpdate.version}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>New app (APK) {apkUpdate.version}</div>{apkUpdate.notes ? <div style={{ fontSize: 12.5, color: INK_FAINT, margin: "4px 0 0", lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{apkUpdate.notes}</div> : null}
                     <div style={{ fontSize: 12.5, color: INK_FAINT, margin: "3px 0 9px", lineHeight: 1.4 }}>A full app upgrade is ready. Download and install it yourself. Your data stays on the phone.</div>
                     <button onClick={openApkUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}><Download size={14} /> Download new app</button>
                   </div>
@@ -9787,6 +9799,20 @@ function LifeTracker() {
                 </button>
               </>
             )}
+          </Card>
+          <Card style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>What's new</div>
+              <div style={{ fontSize: 12, color: INK_FAINT, fontFamily: mono, textAlign: "right" }}>Updated {APP_CHANGELOG.date} {"\u00b7"} v{APP_VERSION}</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 10 }}>
+              {APP_CHANGELOG.items.map(([kind, text], i) => (
+                <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
+                  <span style={{ flexShrink: 0, minWidth: 46, textAlign: "center", fontSize: 10.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", padding: "3px 7px", borderRadius: 6, color: kind === "fixed" ? TEAL : kind === "new" ? BRASS : INK_DIM, background: hexA(kind === "fixed" ? TEAL : kind === "new" ? BRASS : INK_DIM, 0.12) }}>{kind}</span>
+                  <span style={{ fontSize: 13.5, color: INK, lineHeight: 1.4 }}>{text}</span>
+                </div>
+              ))}
+            </div>
           </Card>
               </>)}
               {moreSection === "reminders" && (<>
