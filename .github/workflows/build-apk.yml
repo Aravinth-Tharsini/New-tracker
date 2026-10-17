@@ -35,6 +35,11 @@ jobs:
       - name: Add Android project
         run: npx cap add android
 
+      - name: Raise the version number on every build
+        run: |
+          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
+          grep -n "versionCode\|versionName" android/app/build.gradle
+
       - name: Use my app icon
         run: |
           sudo apt-get update -qq
@@ -59,6 +64,9 @@ jobs:
           else
             cp debug.keystore ~/.android/debug.keystore
           fi
+
+      - name: Show signing fingerprint (must be identical on every build)
+        run: keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android | grep -E "SHA1|SHA256" || echo "Could not read the fingerprint"
 
       - name: Allow notifications and exact alarms
         run: |
