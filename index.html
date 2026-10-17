@@ -9727,8 +9727,7 @@ function LifeTracker() {
                 ...(isNative ? [] : [{ id: "push", icon: Smartphone, color: "#8B5CF6", title: "Push notifications", sub: pushSubscription ? "This device is registered" : "Not set up" }]),
               ] },
               { label: "Data", items: [
-                { id: "storage", icon: dataMode === "offline" ? HardDrive : Cloud, color: "#22C55E", title: "Storage & backup", sub: dataMode === "offline" ? (autoExportEnabled ? "Offline \u00b7 daily auto-download is on" : "Offline \u00b7 saved on this device") : "Online \u00b7 Google Sheet" },
-                { id: "sheet", icon: RefreshCw, color: "#EF4444", title: "Google Sheet sync", sub: dataMode !== "online" ? "Off \u00b7 switch to Online mode" : syncStatus === "error" ? "Sync failed" : syncStatus === "syncing" ? "Syncing\u2026" : lastSyncedAt ? `Last synced ${fmtTime(lastSyncedAt)}` : "Not synced yet" },
+                { id: "storage", icon: dataMode === "offline" ? HardDrive : Cloud, color: "#22C55E", title: "Storage & backup", sub: dataMode === "offline" ? (autoExportEnabled ? "Offline \u00b7 daily auto-download is on" : "Offline \u00b7 saved on this device") : (syncStatus === "error" ? "Online \u00b7 Sync failed" : syncStatus === "syncing" ? "Online \u00b7 Syncing\u2026" : lastSyncedAt ? `Online \u00b7 Last synced ${fmtTime(lastSyncedAt)}` : "Online \u00b7 Google Sheet") , dot: dataMode === "online" && syncStatus === "error" },
               ] },
             ];
             return (
@@ -9762,7 +9761,7 @@ function LifeTracker() {
               {(() => {
                 const TITLES = { update: "App update", reminders: "Reminders & alarms", push: "Push notifications", storage: "Storage & backup", sheet: "Google Sheet sync" };
                 return (
-                  <button onClick={() => setMoreSection(null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: "2px 0 12px", cursor: "pointer", color: BRASS, fontFamily: "inherit" }}>
+                  <button onClick={() => setMoreSection(moreSection === "sheet" ? "storage" : null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: "2px 0 12px", cursor: "pointer", color: BRASS, fontFamily: "inherit" }}>
                     <ChevronLeft size={22} strokeWidth={2.4} />
                     <span style={{ fontSize: 19, fontWeight: 800, color: INK, letterSpacing: "-.01em" }}>{TITLES[moreSection] || "More"}</span>
                   </button>
