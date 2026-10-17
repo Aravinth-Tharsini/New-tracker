@@ -1292,6 +1292,19 @@ function TreeArt({ g, v }) {
   );
 }
 // ---- Full-screen 3D tree: real 3D branch geometry, perspective-projected on a canvas (drag to orbit, pinch/scroll to zoom).
+// Soil: a compact, fixed mound (radius 26) with texture, pebbles and grass tufts around the base.
+const MOUND_R = 24, MOUND_H = 5;
+const moundH = (r) => Math.max(0, MOUND_H * (1 - (r / MOUND_R) * (r / MOUND_R)));
+const SOIL_COLS = ["#2E2016", "#6B4D33", "#8A6A48", "#4A3524", "#3A2A1C"];
+function buildGround() {
+  const sd = treeSeeded, polar = (r, a) => [Math.cos(a) * r, Math.sin(a) * r];
+  const speck = [], stones = [], tufts = [];
+  for (let i = 0; i < 160; i++) { const r = 2 + sd(i * 3 + 1) * 23, [x, z] = polar(r, sd(i * 3 + 2) * 6.283); speck.push({ x, z, y: moundH(r) + 0.05, s: 0.35 + sd(i * 3 + 3) * 0.75, c: SOIL_COLS[i % 5] }); }
+  for (let i = 0; i < 10; i++) { const r = 7 + sd(i * 7 + 500) * 16, [x, z] = polar(r, sd(i * 7 + 501) * 6.283); stones.push({ x, z, y: moundH(r) + 0.3, s: 0.9 + sd(i * 7 + 502) * 1.6, c: ["#8D8A80", "#A39F93", "#77736A"][i % 3] }); }
+  for (let i = 0; i < 52; i++) { const r = 15 + sd(i * 5 + 900) * 12, [x, z] = polar(r, sd(i * 5 + 901) * 6.283); tufts.push({ x, z, y: moundH(r), h: 2.4 + sd(i * 5 + 902) * 2.8, lean: (sd(i * 5 + 903) - 0.5) * 1.6, c: ["#3F8F3F", "#58B45A", "#2E7D3A", "#6FB84F"][i % 4] }); }
+  for (let i = 0; i < 12; i++) { const r = 3.6 + sd(i * 5 + 1300) * 3, [x, z] = polar(r, sd(i * 5 + 1301) * 6.283); tufts.push({ x, z, y: moundH(r), h: 1.6 + sd(i * 5 + 1302) * 1.6, lean: (sd(i * 5 + 1303) - 0.5) * 1.2, c: ["#58B45A", "#6FB84F", "#3F8F3F"][i % 3], collar: true }); }
+  return { speck, stones, tufts };
+}
 function tree3dBuild(g, v) {
   const cl = (x) => Math.max(0, Math.min(1, x));
   const s = cl((g - 1) / 8), fl = cl((g - 6.2) / 1.5), fr = cl((g - 8.2) / 1.2);
@@ -1318,7 +1331,11 @@ function tree3dBuild(g, v) {
       rec(e, nd, len * 0.74, w * 0.68, d + 1, id * 3 + k + 1);
     }
   };
-  if (trunk > 0) rec([0, 0, 0], [0, 1, 0], trunk, 2.2 + 4.2 * s, 0, 1); else items.push({ k: "seed", p: [0, 1, 0] });
+  if (trunk > 0) {
+    const y0 = MOUND_H * 0.9; // the trunk starts at the top of the soil mound
+    rec([0, y0, 0], [0, 1, 0], trunk, 2.2 + 4.2 * s, 0, 1);
+    if (!small) for (let i = 0; i < 5; i++) { const a = i * 1.2566 + treeSeeded(i + 40) * 0.5, L = 5 + 3 * s + treeSeeded(i + 60) * 2; items.push({ k: "seg", a: [0, y0 + 1.6, 0], b: [Math.cos(a) * L, moundH(L) + 0.2, Math.sin(a) * L], w: (1.6 + 2.4 * s) }); }
+  } else items.push({ k: "seed", p: [0, MOUND_H, 0] });
   const r = 2.6 + 2.6 * s, lr = 3 + 3 * s;
   tips.forEach((t) => {
     if (small) { leaf([t.p[0] - 3, t.p[1], t.p[2]], 5, t.id); leaf([t.p[0] + 3, t.p[1], t.p[2]], 5, t.id + 1); return; }
@@ -1333,8 +1350,9 @@ function tree3dBuild(g, v) {
 function Tree3DView({ info, onClose }) {
   const { g, v } = info;
   const canvasRef = useRef(null);
-  const st = useRef({ rot: 0.6, tilt: 0.28, zoom: 1, drag: false, pts: {}, last: 0, pinch: 0, idle: 0 });
+  const st = useRef({ rot: 0.6, tilt: 0.38, zoom: 1, drag: false, pts: {}, last: 0, pinch: 0, idle: 0 });
   const model = useMemo(() => tree3dBuild(g, v), [g, v]);
+  const ground3d = useMemo(() => buildGround(), []);
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -1357,13 +1375,24 @@ function Tree3DView({ info, onClose }) {
       const gc = P([0, H * 0.45, 0]), gr = Math.min(W, Hh) * 0.62, ga = Math.pow(v, 1.5) * 0.8;
       const grd = ctx.createRadialGradient(gc.x, gc.y, 0, gc.x, gc.y, gr); grd.addColorStop(0, `rgba(255,233,166,${0.55 * ga})`); grd.addColorStop(0.6, `rgba(191,232,160,${0.18 * ga})`); grd.addColorStop(1, "rgba(191,232,160,0)");
       ctx.fillStyle = grd; ctx.fillRect(0, 0, W, Hh);
-      // ground disc
-      ctx.beginPath();
-      for (let i = 0; i <= 40; i++) { const a = (i / 40) * 6.283, q = P([Math.cos(a) * 46, 0, Math.sin(a) * 46]); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); }
-      ctx.fillStyle = "rgba(90,62,39,0.55)"; ctx.fill();
-      ctx.beginPath();
-      for (let i = 0; i <= 40; i++) { const a = (i / 40) * 6.283, q = P([Math.cos(a) * 30, 0.2, Math.sin(a) * 30]); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); }
-      ctx.fillStyle = "#5E7D3A"; ctx.globalAlpha = 0.55 + 0.3 * v; ctx.fill(); ctx.globalAlpha = 1;
+      // soil mound: soft contact shadow, shaded rings (dark rim -> lighter top), texture, stones, grass
+      const zb = P([0, 0, 0]).z;
+      const ring = (r, y) => { ctx.beginPath(); for (let i = 0; i <= 48; i++) { const a = (i / 48) * 6.283, q = P([Math.cos(a) * r, y, Math.sin(a) * r]); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); } ctx.closePath(); };
+      ring(MOUND_R + 5, -0.2); ctx.fillStyle = "rgba(10,6,3,0.35)"; ctx.fill();
+      ring(MOUND_R + 2, -0.1); ctx.fillStyle = "rgba(10,6,3,0.35)"; ctx.fill();
+      const NR = 12;
+      for (let k = 0; k < NR; k++) {
+        const r = MOUND_R * (1 - k / NR), t = k / (NR - 1);
+        const cr = Math.round(46 + t * 76), cg = Math.round(32 + t * 58), cb = Math.round(21 + t * 37);
+        ring(r, moundH(r)); ctx.fillStyle = `rgb(${cr},${cg},${cb})`; ctx.fill();
+      }
+      const gnd = ground3d;
+      const speck = (it) => { const q = P([it.x, it.y, it.z]); ctx.fillStyle = it.c; ctx.beginPath(); ctx.ellipse(q.x, q.y, it.s * sc * q.k, it.s * sc * q.k * Math.max(0.35, ct), 0, 0, 6.283); ctx.fill(); };
+      gnd.speck.forEach(speck);
+      const stone = (it) => { const q = P([it.x, it.y, it.z]), R = it.s * sc * q.k, fy = Math.max(0.4, ct); ctx.fillStyle = "rgba(0,0,0,0.28)"; ctx.beginPath(); ctx.ellipse(q.x + R * 0.15, q.y + R * 0.3 * fy, R * 1.05, R * 0.55 * fy, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = it.c; ctx.beginPath(); ctx.ellipse(q.x, q.y - R * 0.2 * fy, R, R * 0.75 * fy + R * 0.2, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,0.22)"; ctx.beginPath(); ctx.ellipse(q.x - R * 0.28, q.y - R * 0.45 * fy, R * 0.35, R * 0.2, 0, 0, 6.283); ctx.fill(); };
+      const tuft = (it) => { ctx.strokeStyle = it.c; ctx.lineCap = "round"; ctx.lineWidth = Math.max(1, 0.55 * sc); for (let j = -1; j <= 1; j++) { const a0 = P([it.x + j * 0.7, it.y, it.z]), a1 = P([it.x + j * 0.7 + it.lean * (1 + j * 0.3), it.y + it.h * (1 - Math.abs(j) * 0.2), it.z]); ctx.lineWidth = Math.max(1, 0.5 * sc * a0.k); ctx.beginPath(); ctx.moveTo(a0.x, a0.y); ctx.lineTo(a1.x, a1.y); ctx.stroke(); } };
+      const isBack = (it) => P([it.x, it.y, it.z]).z > zb;
+      gnd.stones.filter(isBack).forEach(stone); gnd.tufts.filter(isBack).forEach(tuft);
       // depth-sorted items
       const list = model.items.map((it) => {
         if (it.k === "seg") { const a = P(it.a), b = P(it.b); return { it, a, b, z: (a.z + b.z) / 2 }; }
@@ -1377,11 +1406,14 @@ function Tree3DView({ info, onClose }) {
         else if (it.k === "flower") { const R = 1.7 * sc * q.k; ctx.fillStyle = it.c; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(q.x + Math.cos(i * 1.2566) * R * 1.25, q.y + Math.sin(i * 1.2566) * R * 1.25, R, 0, 6.283); ctx.fill(); } ctx.fillStyle = "#FFD166"; ctx.beginPath(); ctx.arc(q.x, q.y, R * 0.75, 0, 6.283); ctx.fill(); }
         else if (it.k === "seed") { ctx.fillStyle = "#8A5A34"; ctx.beginPath(); ctx.ellipse(q.x, q.y, 5 * sc * q.k, 3.2 * sc * q.k, 0, 0, 6.283); ctx.fill(); }
       });
+      // soil collar so the trunk grows out of the ground, then the front stones and grass
+      for (let k = 0; k < 4; k++) { const r = 7.5 - k * 1.7; ring(r, moundH(r) + 0.55 + k * 0.25); const t = Math.min(1, (1 - r / MOUND_R) * NR / (NR - 1)) + 0.04; ctx.fillStyle = `rgb(${Math.round(46 + t * 76)},${Math.round(32 + t * 58)},${Math.round(21 + t * 37)})`; ctx.fill(); }
+      gnd.stones.filter((it) => !isBack(it)).forEach(stone); gnd.tufts.filter((it) => !isBack(it)).forEach(tuft);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [model, v]);
+  }, [model, v, ground3d]);
   const S = st.current;
   const down = (e) => { S.pts[e.pointerId] = { x: e.clientX, y: e.clientY }; S.drag = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} };
   const move = (e) => {
@@ -2843,6 +2875,7 @@ function LifeTracker() {
   ) : null;
   const [editingHistoryExpense, setEditingHistoryExpense] = useState(null);
   const [showExpenseHistory, setShowExpenseHistory] = useState(false);
+  const [editingHistoryRepay, setEditingHistoryRepay] = useState(null);
   // Hydrate straight from localStorage on the very first render (lazy initializer), instead of
   // starting empty and filling in via an async effect after mount. The async version rendered an
   // almost-empty page on first paint, then swelled to full height a moment later once real data
@@ -3576,6 +3609,68 @@ function LifeTracker() {
             <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(e.amount || 0)}</div>
             <IconAction onClick={() => setEditingHistoryExpense({ ...e })} title="Edit vendor, remark and payment mode"><Pencil size={15} /></IconAction>
             <IconAction className="history-delete-btn" onClick={() => deleteHistoryExpense(e.date, e.id)} title="Delete history"><Trash2 size={16} /></IconAction>
+          </div>
+        )}
+      </div>
+    );
+  };
+  // Finance history (paid bills / repayments): only vendor, remark and mode of payment can be edited. The change is
+  // also written to the expense that was logged when the bill was paid, so Expense history stays in sync.
+  const linkedExpenseFor = (r) => { for (const d of Object.keys(dailyLogs)) { const hit = ((dailyLogs[d] || {}).expenses || []).find((e) => e.linkedRepaymentId === r.id); if (hit) return hit; } return null; };
+  const saveRepaymentHistoryEdit = () => {
+    const ed = editingHistoryRepay; if (!ed) return;
+    const patch = { vendor: (ed.vendor || "").trim(), remarks: (ed.remarks || "").trim(), paymentMethod: ed.paymentMethod || "online" };
+    setRepayments((prev) => prev.map((x) => (x.id === ed.id ? { ...x, ...patch } : x)));
+    setDailyLogs((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((d) => { const log = next[d]; if (log && Array.isArray(log.expenses) && log.expenses.some((e) => e.linkedRepaymentId === ed.id)) next[d] = { ...log, expenses: log.expenses.map((e) => (e.linkedRepaymentId === ed.id ? { ...e, ...patch } : e)) }; });
+      return next;
+    });
+    setEditingHistoryRepay(null);
+    showToast("Updated");
+  };
+  const renderRepaymentHistoryRow = (r) => {
+    const editing = editingHistoryRepay && editingHistoryRepay.id === r.id;
+    const linked = linkedExpenseFor(r);
+    const vendor = r.vendor !== undefined ? r.vendor : (linked && linked.vendor) || "";
+    const pay = r.paymentMethod || (linked && linked.paymentMethod) || "online";
+    return (
+      <div key={`repay-history-${r.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
+        {editing ? (
+          <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>{r.name || r.category}</span>
+              <span style={{ fontFamily: mono, fontWeight: 700 }}>{inr(r.amount || 0)}</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: INK_FAINT }}>Only vendor, remark and payment mode can be edited.</div>
+            <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Vendor</div><TextField value={editingHistoryRepay.vendor || ""} onChange={(ev) => setEditingHistoryRepay((x) => ({ ...x, vendor: ev.target.value }))} /></div>
+            <div><div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Remark</div><TextField value={editingHistoryRepay.remarks || ""} onChange={(ev) => setEditingHistoryRepay((x) => ({ ...x, remarks: ev.target.value }))} /></div>
+            <div>
+              <div style={{ fontSize: 11, color: INK_FAINT, marginBottom: 4 }}>Paid via</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[{ key: "online", label: "Online / Account" }, { key: "cash", label: "Physical / Cash" }].map((opt) => {
+                  const sel = (editingHistoryRepay.paymentMethod || "online") === opt.key;
+                  return <button key={opt.key} onClick={() => setEditingHistoryRepay((x) => ({ ...x, paymentMethod: opt.key }))} style={{ flex: 1, background: sel ? hexA(BRASS_HEX, 0.13) : "transparent", border: sel ? `1.5px solid ${BRASS}` : `1px solid ${LINE}`, borderRadius: 7, padding: "7px 4px", color: sel ? BRASS : INK_DIM, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>{opt.label}</button>;
+                })}
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+              <button onClick={() => setEditingHistoryRepay(null)} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "7px 12px", color: INK_DIM, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>Cancel</button>
+              <button onClick={saveRepaymentHistoryEdit} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "7px 14px", color: "#fff", cursor: "pointer", fontSize: 14, fontWeight: 700, fontFamily: "inherit" }}>Save</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ width: "100%", display: "flex", alignItems: "flex-start", gap: 9 }}>
+            <Wallet size={18} color={BRASS} style={{ marginTop: 2, flexShrink: 0 }} />
+            <div className="history-main" style={{ flex: 1, minWidth: 0 }}>
+              <div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{r.name || r.category}</div>
+              <div style={{ fontSize: 12, color: INK_FAINT }}>{r.category} · Paid {formatDMY(r.paidAt || r.dueDate)} · {fmtTime(r.paidAt || r.dueDate)} · {pay === "cash" ? "Cash" : "Online"}</div>
+              {vendor && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 3 }}>Vendor: {vendor}</div>}
+              {r.remarks && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 2 }}>Remark: {r.remarks}</div>}
+            </div>
+            <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(r.amount || 0)}</div>
+            <IconAction onClick={() => setEditingHistoryRepay({ id: r.id, vendor, remarks: r.remarks || "", paymentMethod: pay })} title="Edit vendor, remark and payment mode"><Pencil size={15} /></IconAction>
+            <IconAction className="history-delete-btn" onClick={() => deleteHistoryRepayment(r.id)} title="Delete history"><Trash2 size={16} /></IconAction>
           </div>
         )}
       </div>
@@ -8121,7 +8216,7 @@ function LifeTracker() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <SectionLabel>Goals</SectionLabel>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {((catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).length > 0) || (catTab === "financegoals" && (financeHistoryGoals.length + financeHistoryRepayments.length) > 0) ? (
+                  {((catTab === "career" || catTab === "health") && goals.filter((g) => g.category === catTab && g.done).length > 0) || (catTab === "financegoals" && (financeHistoryGoals.length + financeHistoryRepayments.length + financeHistoryExpenses.length) > 0) ? (
                     <button onClick={() => setHistoryExpanded((v) => !v)} title={historyExpanded ? "Hide history" : "View history"} aria-label={historyExpanded ? "Hide history" : "View history"} style={{ display: "flex", alignItems: "center", gap: 4, background: historyExpanded ? PANEL_2 : "transparent", border: `1px solid ${historyExpanded ? TEAL : LINE}`, color: historyExpanded ? TEAL : INK_DIM, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", fontWeight: 700 }}><History size={15} /> <span>History</span></button>
                   ) : null}
                 </div>
@@ -8374,7 +8469,7 @@ function LifeTracker() {
             const historyCount = catTab === "finance"
               ? financeHistoryExpenses.length
               : catTab === "financegoals"
-                ? financeHistoryGoals.length + financeHistoryRepayments.length
+                ? financeHistoryGoals.length + financeHistoryRepayments.length + financeHistoryExpenses.length
                 : catTab === "trip"
                   ? travelHistoryPlans.length
                   : catTab === "shopping"
@@ -8410,19 +8505,12 @@ function LifeTracker() {
                     {financeHistoryRepayments.length > 0 && (
                       <div style={{ fontSize: 12, fontWeight: 800, color: INK_FAINT, letterSpacing: 1, margin: "10px 0 6px" }}>REPAYMENTS</div>
                     )}
-                    {financeHistoryRepayments.slice(0, historyVisibleCount).map((r) => (
-                        <div key={`repay-history-${r.id}`} className="history-list-row" style={{ borderBottom: `1px solid ${LINE}` }}>
-                          <Wallet size={18} color={BRASS} />
-                          <div className="history-main" style={{ flex: 1, minWidth: 0 }}>
-                            <div className="history-title" style={{ fontSize: 14, fontWeight: 600 }}>{r.name || r.category}</div>
-                            <div style={{ fontSize: 12, color: INK_FAINT }}>{r.category} · Paid {formatDMY(r.paidAt || r.dueDate)} · {fmtTime(r.paidAt || r.dueDate)}</div>
-                            {r.remarks && <div style={{ fontSize: 12, color: INK_DIM, marginTop: 3 }}>Remark: {r.remarks}</div>}
-                          </div>
-                          <div style={{ fontFamily: mono, fontWeight: 700 }}>{inr(r.amount || 0)}</div>
-                          <IconAction onClick={() => openEditRepayment(r)} title="Edit finance record"><Pencil size={15} /></IconAction><IconAction className="history-delete-btn" onClick={() => deleteHistoryRepayment(r.id)} title="Delete history"><Trash2 size={16} /></IconAction>
-                        </div>
-                      ))}
-                    <LoadMoreHistory total={financeHistoryGoals.length + financeHistoryRepayments.length} />
+                    {financeHistoryRepayments.slice(0, historyVisibleCount).map(renderRepaymentHistoryRow)}
+                    {financeHistoryExpenses.filter((e) => !e.linkedRepaymentId).length > 0 && (
+                      <div style={{ fontSize: 12, fontWeight: 800, color: INK_FAINT, letterSpacing: 1, margin: "14px 0 6px" }}>EXPENSES</div>
+                    )}
+                    {financeHistoryExpenses.filter((e) => !e.linkedRepaymentId).slice(0, historyVisibleCount).map(renderExpenseHistoryRow)}
+                    <LoadMoreHistory total={financeHistoryGoals.length + financeHistoryRepayments.length + financeHistoryExpenses.length} />
                     </>}
 
                     {catTab === "finance" && <>
