@@ -4887,7 +4887,10 @@ function LifeTracker() {
     // Only ever run once, on mount, to tag the initial history entry.
     // eslint-disable-next-line
   }, []);
+  const navFirstRunRef = useRef(true);
   useEffect(() => {
+    // First run = app just opened: the start page is already in history, so do not add a duplicate entry.
+    if (navFirstRunRef.current) { navFirstRunRef.current = false; return; }
     if (skipNextNavPushRef.current) { skipNextNavPushRef.current = false; return; }
     history.pushState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory, moreSection } }, "");
   }, [page, catTab, expandedDailyCategory, moreSection]);
@@ -4907,7 +4910,9 @@ function LifeTracker() {
       if (selectedStreakId) { setSelectedStreakId(null); rearm(); return; }
       const snap = e.state && e.state.snapshot;
       if (snap) {
-        skipNextNavPushRef.current = true;
+        const msNew = snap.moreSection === undefined ? null : snap.moreSection;
+        const changed = snap.page !== page || snap.catTab !== catTab || snap.expandedDailyCategory !== expandedDailyCategory || msNew !== moreSection;
+        skipNextNavPushRef.current = changed; // only skip the re-push when state will really change
         setPage(snap.page);
         setCatTab(snap.catTab);
         setExpandedDailyCategory(snap.expandedDailyCategory);
