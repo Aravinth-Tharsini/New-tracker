@@ -4865,42 +4865,23 @@ function LifeTracker() {
     setPage(target);
   };
 
-  // ---- Back button: real, chronological navigation history (not a guessed priority order) ----
-  // The previous approach checked a fixed list of states ("is a modal open? is a category
-  // expanded? ...") in priority order every time Back was pressed. That breaks whenever more
-  // than one of those states happens to be set at once from unrelated earlier navigation --
-  // e.g. switching tabs via the bottom nav doesn't clear the Planner tab's `catTab` or the
-  // Daily tab's `expandedDailyCategory`, so a stale leftover value could get "closed" first,
-  // silently eating a Back press instead of undoing whatever the user actually did most
-  // recently. That's a step getting skipped or answered out of order.
-  //
-  // Instead, every time the composite navigation state (page / catTab / expandedDailyCategory)
-  // actually changes, we push a *real* browser history entry carrying that exact state. Back
-  // then just reads what the browser's own history says was there a moment ago and restores
-  // that -- which by construction can never skip a step or go out of order, because it's a
-  // real sequential stack, not a recomputed guess. Modals (import confirm, holidays popup, the
-  // add/edit item form) stay outside that stack and simply close on the next Back press --
-  // standard behavior, since a modal is always the topmost layer regardless of what's under it.
-  const skipNextNavPushRef = useRef(false);
+  // Main pages = Home, Today, Planner, Progress, More (bottom bar). Back works like this:
+  //  1) something open (popup, form, option, category) -> Back closes ONE level and stays on that main page
+  //  2) already on a main page with nothing open -> Back exits the app
+  // We keep one "guard" history entry above the start entry so we can catch every Back press.
   useEffect(() => {
-    history.replaceState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory, moreSection } }, "");
-    // Only ever run once, on mount, to tag the initial history entry.
+    try {
+      history.replaceState({ appNav: "base" }, "");
+      history.pushState({ appNav: "guard" }, "");
+    } catch (e) { /* ignore */ }
     // eslint-disable-next-line
   }, []);
-  const navFirstRunRef = useRef(true);
   useEffect(() => {
-    // First run = app just opened: the start page is already in history, so do not add a duplicate entry.
-    if (navFirstRunRef.current) { navFirstRunRef.current = false; return; }
-    if (skipNextNavPushRef.current) { skipNextNavPushRef.current = false; return; }
-    history.pushState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory, moreSection } }, "");
-  }, [page, catTab, expandedDailyCategory, moreSection]);
-  useEffect(() => {
-    const rearm = () => history.pushState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory, moreSection } }, "");
-    const handlePopState = (e) => {
+    const rearm = () => { try { history.pushState({ appNav: "guard" }, ""); } catch (e) { /* ignore */ } };
+    const handlePopState = () => {
       if (pendingImportData) { cancelImport(); rearm(); return; }
       if (showHolidays) { setShowHolidays(false); rearm(); return; }
       if (itemForm || addingGroup || addingSubTo) { closeItemForm(); rearm(); return; }
-      // Inline forms / open cards inside a page: Back closes them first, then the next Back leaves the page.
       if (showAddMyDay || editingMyDayId) { setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm()); rearm(); return; }
       if (showAddGoal || editingGoalId) { setShowAddGoal(false); setEditingGoalId(null); setGoalForm(blankGoalForm()); rearm(); return; }
       if (showAddTravel || editingTravelId) { setShowAddTravel(false); setEditingTravelId(null); setTravelForm(blankTravelForm()); rearm(); return; }
@@ -4908,22 +4889,23 @@ function LifeTracker() {
       if (shoppingForm) { setShoppingForm(null); rearm(); return; }
       if (bikeServiceForm) { setBikeServiceForm(null); rearm(); return; }
       if (selectedStreakId) { setSelectedStreakId(null); rearm(); return; }
-      const snap = e.state && e.state.snapshot;
-      if (snap) {
-        const msNew = snap.moreSection === undefined ? null : snap.moreSection;
-        const changed = snap.page !== page || snap.catTab !== catTab || snap.expandedDailyCategory !== expandedDailyCategory || msNew !== moreSection;
-        skipNextNavPushRef.current = changed; // only skip the re-push when state will really change
-        setPage(snap.page);
-        setCatTab(snap.catTab);
-        setExpandedDailyCategory(snap.expandedDailyCategory);
-        setMoreSection(snap.moreSection === undefined ? null : snap.moreSection);
-      }
-      // No snapshot left in history and nothing open -- let this Back proceed normally,
-      // which is the one case where the app should actually close.
+      if (showQuickCapture) { setShowQuickCapture(false); rearm(); return; }
+      // More page: option -> More list (Sheet -> Storage first)
+      if (page === "datalink" && moreSection) { setMoreSection(moreSection === "sheet" ? "storage" : null); rearm(); return; }
+      // Today page: opened category -> Today main
+      if (page === "daily" && expandedDailyCategory) { setExpandedDailyCategory(null); rearm(); return; }
+      // Planner page: opened category -> Planner main
+      if (page === "categories" && catTab) { setCatTab(null); rearm(); return; }
+      // On a main page with nothing open: exit the app.
+      try {
+        const A = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+        if (A && A.exitApp) { A.exitApp(); return; }
+      } catch (e) { /* ignore */ }
+      // No app plugin: we are now on the start entry, so the next system Back leaves the app/page.
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [page, catTab, expandedDailyCategory, moreSection, itemForm, addingGroup, addingSubTo, showHolidays, pendingImportData, showAddMyDay, editingMyDayId, showAddGoal, editingGoalId, showAddTravel, editingTravelId, showAddRepayment, editingRepaymentId, shoppingForm, bikeServiceForm, selectedStreakId]);
+  }, [page, catTab, expandedDailyCategory, moreSection, itemForm, addingGroup, addingSubTo, showHolidays, pendingImportData, showAddMyDay, editingMyDayId, showAddGoal, editingGoalId, showAddTravel, editingTravelId, showAddRepayment, editingRepaymentId, shoppingForm, bikeServiceForm, selectedStreakId, showQuickCapture]);
 
   const saveItemForm = () => {
     if (!itemForm.name.trim()) return;
