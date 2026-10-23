@@ -4883,33 +4883,42 @@ function LifeTracker() {
   // standard behavior, since a modal is always the topmost layer regardless of what's under it.
   const skipNextNavPushRef = useRef(false);
   useEffect(() => {
-    history.replaceState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory } }, "");
+    history.replaceState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory, moreSection } }, "");
     // Only ever run once, on mount, to tag the initial history entry.
     // eslint-disable-next-line
   }, []);
   useEffect(() => {
     if (skipNextNavPushRef.current) { skipNextNavPushRef.current = false; return; }
-    history.pushState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory } }, "");
-  }, [page, catTab, expandedDailyCategory]);
+    history.pushState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory, moreSection } }, "");
+  }, [page, catTab, expandedDailyCategory, moreSection]);
   useEffect(() => {
-    const rearm = () => history.pushState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory } }, "");
+    const rearm = () => history.pushState({ appNav: true, snapshot: { page, catTab, expandedDailyCategory, moreSection } }, "");
     const handlePopState = (e) => {
       if (pendingImportData) { cancelImport(); rearm(); return; }
       if (showHolidays) { setShowHolidays(false); rearm(); return; }
       if (itemForm || addingGroup || addingSubTo) { closeItemForm(); rearm(); return; }
+      // Inline forms / open cards inside a page: Back closes them first, then the next Back leaves the page.
+      if (showAddMyDay || editingMyDayId) { setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm()); rearm(); return; }
+      if (showAddGoal || editingGoalId) { setShowAddGoal(false); setEditingGoalId(null); setGoalForm(blankGoalForm()); rearm(); return; }
+      if (showAddTravel || editingTravelId) { setShowAddTravel(false); setEditingTravelId(null); setTravelForm(blankTravelForm()); rearm(); return; }
+      if (showAddRepayment || editingRepaymentId) { setShowAddRepayment(false); setEditingRepaymentId(null); setRepaymentForm(blankRepaymentForm()); rearm(); return; }
+      if (shoppingForm) { setShoppingForm(null); rearm(); return; }
+      if (bikeServiceForm) { setBikeServiceForm(null); rearm(); return; }
+      if (selectedStreakId) { setSelectedStreakId(null); rearm(); return; }
       const snap = e.state && e.state.snapshot;
       if (snap) {
         skipNextNavPushRef.current = true;
         setPage(snap.page);
         setCatTab(snap.catTab);
         setExpandedDailyCategory(snap.expandedDailyCategory);
+        setMoreSection(snap.moreSection === undefined ? null : snap.moreSection);
       }
       // No snapshot left in history and nothing open -- let this Back proceed normally,
       // which is the one case where the app should actually close.
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [page, catTab, expandedDailyCategory, itemForm, addingGroup, addingSubTo, showHolidays, pendingImportData]);
+  }, [page, catTab, expandedDailyCategory, moreSection, itemForm, addingGroup, addingSubTo, showHolidays, pendingImportData, showAddMyDay, editingMyDayId, showAddGoal, editingGoalId, showAddTravel, editingTravelId, showAddRepayment, editingRepaymentId, shoppingForm, bikeServiceForm, selectedStreakId]);
 
   const saveItemForm = () => {
     if (!itemForm.name.trim()) return;
