@@ -988,15 +988,16 @@ function brassHex() { return typeof document !== "undefined" && document.documen
 function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // ---- App updates (shown on the More screen only) ----
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
-// repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
-const APP_VERSION = "2026.10.24.6";
+// repository ("user/repo") whose recent Releases hold the APKs; leave it empty to turn the APK check off.
+// The APK check compares Release tags with the REAL installed APK version (read from the phone), not with APP_VERSION.
+const APP_VERSION = "2026.10.24.7";
 // Shown on More > App update ("What's new"). Keep each line short and simple; add a new block for every release.
 const APP_CHANGELOG = {
   date: "24 Oct 2026",
   items: [
-    ["new", "Notification mode now has System default."],
-    ["new", "System default uses your phone\u2019s own notification sound and settings."],
-    ["better", "The More menu shows System default when it is selected."],
+    ["new", "App update now reads the real installed app version."],
+    ["new", "Required updates show a red dot and a highlighted card."],
+    ["better", "Optional updates show quietly, with no red dot."],
   ],
 };
 const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
@@ -1005,6 +1006,52 @@ function versionIsNewer(latest, current) {
   const b = String(current || "").replace(/^[^0-9]*/, "").split(/[.\-]/).map((n) => parseInt(n, 10) || 0);
   for (let i = 0; i < Math.max(a.length, b.length); i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x > y; }
   return false;
+}
+// ---- APK update check (GitHub Releases) ----
+// Reads the real installed APK version: first from the native AlarmRing plugin (PackageManager versionName), then from the
+// "LifeTrackerAPK/<version>" text the build adds to the user agent. Returns "" when it cannot be read (e.g. an older APK).
+async function readInstalledApkVersion() {
+  try {
+    const cap = window.Capacitor;
+    const AR = cap && cap.Plugins && cap.Plugins.AlarmRing;
+    if (AR && AR.getVersion) {
+      const r = await AR.getVersion();
+      const v = r && r.versionName ? String(r.versionName).trim() : "";
+      if (/^\d/.test(v)) return v;
+    }
+  } catch (e) {}
+  try {
+    const m = /LifeTrackerAPK\/(\d[\w.\-]*)/.exec(navigator.userAgent || "");
+    if (m) return m[1];
+  } catch (e) {}
+  return "";
+}
+// Recent GitHub Releases (newest first) that already have an APK file. A release is mandatory only when its notes contain [mandatory].
+async function fetchApkReleases(repo) {
+  const r = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=10`, { headers: { Accept: "application/vnd.github+json" } });
+  if (r.status === 404) return []; // the repo has no Release yet
+  if (!r.ok) throw new Error("release");
+  const list = await r.json();
+  const out = [];
+  (Array.isArray(list) ? list : []).forEach((j) => {
+    if (!j || !j.tag_name || j.draft || j.prerelease) return;
+    const apks = (j.assets || []).filter((x) => /\.apk$/i.test(x.name || ""));
+    const asset = apks.find((x) => /app-debug\.apk$/i.test(x.name || "")) || apks[0];
+    if (!asset) return; // the APK is not attached yet: nothing to download
+    const body = String(j.body || "");
+    out.push({ version: String(j.tag_name).replace(/^[^0-9]*/, ""), url: asset.browser_download_url, mandatory: /\[mandatory\]/i.test(body), notes: body.replace(/\[mandatory\]/gi, "").trim().slice(0, 500) });
+  });
+  return out;
+}
+// Decides what the phone should show. installed = "" means the version could not be read: then only mandatory releases are shown.
+function evaluateApkUpdate(releases, installed) {
+  if (!releases.length) return null;
+  const sorted = releases.slice().sort((a, b) => (versionIsNewer(a.version, b.version) ? -1 : versionIsNewer(b.version, a.version) ? 1 : 0));
+  const pool = installed ? sorted.filter((r) => versionIsNewer(r.version, installed)) : sorted.filter((r) => r.mandatory);
+  if (!pool.length) return null;
+  const mand = pool.filter((r) => r.mandatory);
+  const target = sorted[0]; // the newest release is the one to install
+  return { version: target.version, url: target.url, mandatory: mand.length > 0, notes: (mand.length ? mand[0] : target).notes };
 }
 // ---- Automatic distance (needs internet): finds both places on OpenStreetMap (Nominatim), then the road
 // distance with OSRM. Flights use the straight-line distance. If anything fails the km box stays editable by hand. ----
@@ -4699,20 +4746,20 @@ function LifeTracker() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   // Full-screen loading animation shown while an update is being applied: { kind: "web" | "apk", step: 0..2 }
   const [updateOverlay, setUpdateOverlay] = useState(null);
+  const [installedApk, setInstalledApk] = useState(undefined); // undefined = not checked yet, "" = could not be read
   const fetchLatestApk = async (repo) => {
-    const r = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
-    if (r.status === 404) return null; // the repo has no Release yet: nothing to update to
-    if (!r.ok) throw new Error("release");
-    const j = await r.json();
-    if (!j || !j.tag_name || !versionIsNewer(j.tag_name, APP_VERSION)) return null;
-    const asset = (j.assets || []).find((x) => /\.apk$/i.test(x.name || ""));
-    return { version: String(j.tag_name).replace(/^v/i, ""), url: asset ? asset.browser_download_url : j.html_url, notes: String(j.body || "").trim().slice(0, 500) };
+    const cap = window.Capacitor;
+    const native = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
+    const installed = native ? await readInstalledApkVersion() : APP_VERSION; // in a browser there is no APK: keep the old comparison
+    if (native) setInstalledApk(installed);
+    const releases = await fetchApkReleases(repo);
+    return { installed, update: evaluateApkUpdate(releases, installed) };
   };
   useEffect(() => {
     const cap = window.Capacitor;
     if (!updateRepo || !cap || !(cap.isNativePlatform && cap.isNativePlatform())) return undefined;
     let cancelled = false;
-    fetchLatestApk(updateRepo).then((u) => { if (!cancelled && u) setApkUpdate(u); }).catch(() => {});
+    fetchLatestApk(updateRepo).then((res) => { if (!cancelled && res.update) setApkUpdate(res.update); }).catch(() => {});
     return () => { cancelled = true; };
   }, [updateRepo]);
   const checkForUpdates = async () => {
@@ -4723,16 +4770,17 @@ function LifeTracker() {
         if (reg) { await reg.update(); await new Promise((r) => setTimeout(r, 2500)); }
       }
     } catch (e) {}
-    let found = false;
+    let found = false, apkUnread = false;
     if (window.__appUpdateReady || (await pageChanged())) { setWebUpdateReady(true); found = true; }
     if (updateRepo) {
       try {
-        const u = await fetchLatestApk(updateRepo);
-        if (u) { setApkUpdate(u); found = true; }
+        const res = await fetchLatestApk(updateRepo);
+        apkUnread = !res.installed;
+        if (res.update) { setApkUpdate(res.update); found = true; }
       } catch (e) { if (!found) { setUpdateMsg("Could not check for updates. Check your internet and the update source name."); setCheckingUpdate(false); return; } }
     }
     if (found) { setUpdateMsg(""); setCheckingUpdate(false); return; }
-    setUpdateMsg("You have the latest version.");
+    setUpdateMsg(apkUnread ? "No required update found." : "You have the latest version.");
     setCheckingUpdate(false);
   };
   // True when the hosted index.html differs from the copy this app is running (covers a release where the
@@ -10037,10 +10085,10 @@ function LifeTracker() {
         <div key="datalink-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, minHeight: 0, width: "100%" }}>
           {moreSection === null ? (() => {
             const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-            const upAvail = !!(webUpdateReady || apkUpdate);
+            const apkMand = !!(apkUpdate && apkUpdate.mandatory);
             const groups = [
               { label: "App", items: [
-                { id: "update", icon: Download, color: "#2F6FED", title: "App update", sub: upAvail ? "Update available" : `Version ${APP_VERSION}`, dot: upAvail },
+                { id: "update", icon: Download, color: "#2F6FED", title: "App update", sub: apkMand ? "Required update" : webUpdateReady ? "Update available" : apkUpdate ? "Optional update available" : `Version ${APP_VERSION}`, dot: apkMand || webUpdateReady },
               ] },
               { label: "Appearance", items: [
                 { id: "darkmode", icon: darkMode ? Moon : Sun, color: "#5856D6", title: "Dark mode", sub: darkPref === "system" ? "System default" : darkPref === "on" ? "On" : "Off" },
@@ -10116,16 +10164,18 @@ function LifeTracker() {
               {moreSection === "update" && (<>
           <Card style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: (webUpdateReady || apkUpdate) ? BRASS : INK }}>{(webUpdateReady || apkUpdate) ? "Update available" : "App update"}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: (apkUpdate && apkUpdate.mandatory) ? CORAL : webUpdateReady ? BRASS : INK }}>{(apkUpdate && apkUpdate.mandatory) ? "Required update" : webUpdateReady ? "Update available" : apkUpdate ? "Optional update available" : "App update"}</div>
               <div style={{ fontSize: 12, color: INK_FAINT, fontFamily: mono }}>Version {APP_VERSION}</div>
             </div>
+            {installedApk !== undefined ? <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 4 }}>{installedApk ? `Installed app (APK): ${installedApk}` : "Could not read installed version"}</div> : null}
             {(webUpdateReady || apkUpdate) ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
                 {apkUpdate && (
-                  <div style={{ border: `1px solid ${LINE}`, borderRadius: 12, padding: "10px 12px" }}>
+                  <div style={{ border: apkUpdate.mandatory ? `1.5px solid ${CORAL}` : `1px solid ${LINE}`, background: apkUpdate.mandatory ? "rgba(255,59,48,.08)" : "transparent", borderRadius: 12, padding: "10px 12px" }}>
+                    {apkUpdate.mandatory ? <div style={{ fontSize: 11.5, fontWeight: 800, color: CORAL, letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 3 }}>Required update</div> : null}
                     <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>New app (APK) {apkUpdate.version}</div>{apkUpdate.notes ? <div style={{ fontSize: 12.5, color: INK_FAINT, margin: "4px 0 0", lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{apkUpdate.notes}</div> : null}
-                    <div style={{ fontSize: 12.5, color: INK_FAINT, margin: "3px 0 9px", lineHeight: 1.4 }}>A full app upgrade is ready. Download and install it yourself. Your data stays on the phone.</div>
-                    <button onClick={openApkUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: BRASS, border: "none", color: "#FFFFFF", borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}><Download size={14} /> Download new app</button>
+                    <div style={{ fontSize: 12.5, color: INK_FAINT, margin: "3px 0 9px", lineHeight: 1.4 }}>{apkUpdate.mandatory ? "This update is required. Download it, then install it yourself. Your data stays on the phone." : "A full app upgrade is ready. Download and install it yourself when you like. Your data stays on the phone."}</div>
+                    <button onClick={openApkUpdate} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: apkUpdate.mandatory ? CORAL : "transparent", border: apkUpdate.mandatory ? "none" : `1px solid ${BRASS}`, color: apkUpdate.mandatory ? "#FFFFFF" : BRASS, borderRadius: 8, padding: "9px 10px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}><Download size={14} /> {apkUpdate.mandatory ? "Download required update" : "Download new app"}</button>
                   </div>
                 )}
                 {webUpdateReady && (
