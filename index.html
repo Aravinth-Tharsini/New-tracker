@@ -4584,6 +4584,8 @@ function LifeTracker() {
   const updateRepo = APK_UPDATE_REPO;
   const [updateMsg, setUpdateMsg] = useState("");
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  // Full-screen loading animation shown while an update is being applied: { kind: "web" | "apk", step: 0..2 }
+  const [updateOverlay, setUpdateOverlay] = useState(null);
   const fetchLatestApk = async (repo) => {
     const r = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
     if (r.status === 404) return null; // the repo has no Release yet: nothing to update to
@@ -4636,6 +4638,10 @@ function LifeTracker() {
     return () => clearTimeout(t);
   }, []);
   const applyWebUpdate = async () => {
+    const startedAt = Date.now();
+    setUpdateOverlay({ kind: "web", step: 0 });
+    const t1 = setTimeout(() => setUpdateOverlay((o) => (o ? { ...o, step: 1 } : o)), 900);
+    const t2 = setTimeout(() => setUpdateOverlay((o) => (o ? { ...o, step: 2 } : o)), 1900);
     try {
       // Store the newest page in the cache first, then let the waiting version take over, then reload.
       const fresh = await fetch("index.html?t=" + Date.now(), { cache: "no-store" });
@@ -4652,12 +4658,22 @@ function LifeTracker() {
         });
       }
     } catch (e) {}
+    // keep the loading screen visible long enough to be seen, then restart on the new version
+    const left = 2600 - (Date.now() - startedAt);
+    if (left > 0) await new Promise((r) => setTimeout(r, left));
+    clearTimeout(t1); clearTimeout(t2);
     window.location.reload(); // your saved data stays; only the app files are refreshed
   };
   const openApkUpdate = () => {
     if (!apkUpdate) return;
-    const B = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser;
-    if (B && B.open) B.open({ url: apkUpdate.url }); else window.open(apkUpdate.url, "_blank");
+    setUpdateOverlay({ kind: "apk", step: 0 });
+    setTimeout(() => setUpdateOverlay((o) => (o ? { ...o, step: 1 } : o)), 900);
+    setTimeout(() => {
+      const B = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser;
+      try { if (B && B.open) B.open({ url: apkUpdate.url }); else window.open(apkUpdate.url, "_blank"); } catch (e) {}
+      setUpdateOverlay((o) => (o ? { ...o, step: 2 } : o));
+      setTimeout(() => setUpdateOverlay(null), 2200);
+    }, 1800);
   };
   const [newTravelNoteText, setNewTravelNoteText] = useState("");
   const toggleTravelReminder = (offset) => setTravelForm((f) => ({ ...f, reminderOffsets: f.reminderOffsets.includes(offset) ? f.reminderOffsets.filter((o) => o !== offset) : [...f.reminderOffsets, offset] }));
@@ -10285,6 +10301,28 @@ function doPost(e) {
         </div>
       </div>
       {tree3d && <Tree3DView info={tree3d} onClose={() => setTree3d(null)} />}
+
+      {updateOverlay && (() => {
+        const web = updateOverlay.kind === "web";
+        const steps = web ? ["Downloading new version\u2026", "Updating app files\u2026", "Restarting\u2026"] : ["Preparing your update\u2026", "Opening download\u2026", "Install the downloaded file to finish"];
+        return (
+          <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "linear-gradient(160deg, #0B1B4A 0%, #1E4FCB 100%)", color: "#FFFFFF", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "env(safe-area-inset-top) 28px env(safe-area-inset-bottom)", textAlign: "center" }}>
+            <style>{"@keyframes ltSpin{to{transform:rotate(360deg)}}@keyframes ltPulseU{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.1);opacity:.85}}@keyframes ltBar{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}@keyframes ltFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}"}</style>
+            <div style={{ position: "relative", width: 128, height: 128, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "4px solid rgba(255,255,255,0.18)", borderTopColor: "#FFFFFF", animation: "ltSpin 1s linear infinite" }} />
+              <div style={{ width: 84, height: 84, borderRadius: "50%", background: "rgba(255,255,255,0.14)", display: "flex", alignItems: "center", justifyContent: "center", animation: "ltPulseU 1.8s ease-in-out infinite" }}>
+                <Download size={38} strokeWidth={2} color="#FFFFFF" />
+              </div>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, marginTop: 30, letterSpacing: "-.3px" }}>{web ? "Updating Life Tracker" : "New app version"}</div>
+            <div key={updateOverlay.step} style={{ fontSize: 16, opacity: 0.88, marginTop: 10, minHeight: 24, animation: "ltFade .4s ease both" }}>{steps[Math.min(updateOverlay.step, 2)]}</div>
+            <div style={{ width: "100%", maxWidth: 260, height: 6, borderRadius: 3, background: "rgba(255,255,255,0.2)", overflow: "hidden", marginTop: 26 }}>
+              <div style={{ width: "40%", height: "100%", borderRadius: 3, background: "#FFFFFF", animation: "ltBar 1.3s ease-in-out infinite" }} />
+            </div>
+            <div style={{ fontSize: 13.5, opacity: 0.6, marginTop: 22 }}>Your data stays safe on this phone.</div>
+          </div>
+        );
+      })()}
 
       {alarmScreen && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "linear-gradient(160deg, #0B1B4A 0%, #1E4FCB 100%)", color: "#FFFFFF", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "env(safe-area-inset-top) 28px env(safe-area-inset-bottom)", textAlign: "center" }}>
