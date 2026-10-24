@@ -987,17 +987,19 @@ function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // ---- App updates (shown on the More screen only) ----
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
 // repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
-const APP_VERSION = "2026.10.17";
+const APP_VERSION = "2026.10.24";
 // Shown on More > App update ("What's new"). Keep each line short and simple; add a new block for every release.
 const APP_CHANGELOG = {
-  date: "17 Oct 2026",
+  date: "24 Oct 2026",
   items: [
-    ["fixed", "Routine screen no longer shows \u201COops! Something went wrong\u201D. The Skipped today list works now."],
-    ["fixed", "Home greeting now matches the time, including \u201CGood night\u201D after 9 PM."],
-    ["new", "Life tree: real photo look for Leafy, In bloom and Fruiting, with wind gusts and light that follows the time of day."],
-    ["new", "Birds, a nest with chicks, butterflies, bees and fireflies now live on the tree. They change between day and night."],
-    ["better", "Seed to young tree now grow in the same forest scene."],
-    ["better", "The tree turns only when you drag it. The level list on the tree screen was removed."],
+    ["new", "Alarm sound: keep the Default or choose your own."],
+    ["new", "Notification sound: keep the Default or choose your own."],
+    ["new", "Pick a ready-made tone, or an audio file from your phone."],
+    ["new", "Tap play to hear a sound before you choose it."],
+    ["new", "Dark mode and Notifications On/Off are now in the More menu."],
+    ["better", "Top bar is cleaner: the dark mode and bell icons were removed."],
+    ["better", "What\u2019s new shows only the latest update."],
+    ["removed", "The 10-second test alarm was removed."],
   ],
 };
 const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
@@ -2024,6 +2026,36 @@ function nativeAR() {
   const cap = window.Capacitor;
   const AR = cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins && cap.Plugins.AlarmRing;
   return AR && typeof AR.getRinging === "function" ? AR : null;
+}
+// ---- Alarm and notification sounds ----
+// "default" keeps the app's normal sound. Anything else is a ready-made tone (made in the app, no files) or "custom"
+// (an audio file the person picked from the phone, kept as a small data URL).
+const SOUND_CHOICES = [
+  { id: "default", label: "Default" },
+  { id: "chime", label: "Chime" },
+  { id: "bell", label: "Bell" },
+  { id: "digital", label: "Digital" },
+  { id: "gentle", label: "Gentle" },
+];
+const SOUND_PATTERNS = {
+  chime: { type: "sine", vol: 0.4, notes: [[659, 0, 0.35], [880, 0.2, 0.35], [1319, 0.4, 0.6]] },
+  bell: { type: "triangle", vol: 0.45, notes: [[1047, 0, 1.0], [784, 0.45, 1.0]] },
+  digital: { type: "square", vol: 0.22, notes: [[1000, 0, 0.12], [1000, 0.2, 0.12], [1000, 0.4, 0.12]] },
+  gentle: { type: "sine", vol: 0.35, notes: [[523, 0, 0.5], [659, 0.3, 0.5], [784, 0.6, 0.8]] },
+};
+const SOUND_CUSTOM_MAX_BYTES = 1000000;
+function playSoundPattern(ctx, id) {
+  const pat = SOUND_PATTERNS[id]; if (!ctx || !pat) return;
+  if (ctx.state === "suspended" && ctx.resume) ctx.resume().catch(() => {});
+  const t0 = ctx.currentTime;
+  pat.notes.forEach(([f, at, len]) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = pat.type; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t0 + at);
+    g.gain.exponentialRampToValueAtTime(pat.vol, t0 + at + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + len);
+    o.connect(g); g.connect(ctx.destination); o.start(t0 + at); o.stop(t0 + at + len + 0.05);
+  });
 }
 function stopNativeRing() { const AR = nativeAR(); if (AR) { try { AR.stopRing().catch(() => {}); } catch (e) {} } }
 async function ensureNotifChannels(LN) {
@@ -3496,31 +3528,58 @@ function LifeTracker() {
     }
   };
 
-  const [notifStatus, setNotifStatus] = useState("");
-  const testNotifications = async () => {
-    const cap = window.Capacitor;
-    if (!cap || !(cap.isNativePlatform && cap.isNativePlatform())) { setNotifStatus("Open the installed APK app to test. A browser can't schedule alarms."); return; }
-    const LN = nativeLN();
-    if (!LN) { setNotifStatus("Notification plugin is missing. Install the newest APK."); return; }
+  // Sound choices for alarms and notifications (More > Reminders & alarms > Sounds).
+  const [soundPrefs, setSoundPrefs] = useState(() => ({ alarm: { id: "default" }, notification: { id: "default" }, ...(readPersistedSync("soundPrefs", {}) || {}) }));
+  useEffect(() => { if (loaded) window.storage.set("soundPrefs", JSON.stringify(soundPrefs), false).catch(() => {}); }, [soundPrefs, loaded]);
+  const soundPrefsRef = useRef(soundPrefs);
+  soundPrefsRef.current = soundPrefs;
+  const previewRef = useRef({ ctx: null, audio: null });
+  const [soundMsg, setSoundMsg] = useState("");
+  const stopPreview = () => {
+    const pr = previewRef.current;
+    try { if (pr.audio) { pr.audio.pause(); pr.audio = null; } } catch (e) {}
+  };
+  const playChoice = (choice, kind) => {
+    stopPreview();
+    const pr = previewRef.current;
     try {
-      let perm = await LN.checkPermissions();
-      if (perm.display !== "granted") perm = await LN.requestPermissions();
-      if (perm.display !== "granted") { setNotifStatus("Notifications are blocked. Open phone Settings \u2192 Apps \u2192 Life Tracker \u2192 Notifications and turn them on."); return; }
-      let exact = "n/a";
-      try { if (LN.checkExactNotificationSetting) { const ex = await LN.checkExactNotificationSetting(); exact = ex.exact_alarm; if (exact !== "granted" && LN.changeExactNotificationSetting) await LN.changeExactNotificationSetting(); } } catch (e) {}
-      await ensureNotifChannels(LN);
-      const ARt = nativeAR();
-      if (ARt) {
-        await ARt.schedule({ group: "test", items: [{ id: 999000, at: Date.now() + 10000, title: "Test alarm", body: "If you hear this, alarms work. Tap to open it.", kind: "test", itemId: "", key: "" }] });
-        setNotifStatus(`Test alarm set for 10 seconds from now. Lock the screen and wait: it should ring loudly with vibration. Notifications: allowed. Exact alarms: ${exact === "granted" ? "allowed" : exact}.`);
+      if (choice.id === "custom" && choice.data) { pr.audio = new Audio(choice.data); pr.audio.play().catch(() => {}); return; }
+      if (!pr.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) pr.ctx = new AC(); }
+      if (!pr.ctx) return;
+      if (choice.id === "default") {
+        if (kind === "alarm") { // the app's normal alarm beep
+          const ctx = pr.ctx; if (ctx.state === "suspended" && ctx.resume) ctx.resume().catch(() => {});
+          [880, 1175].forEach((f, k) => {
+            const o = ctx.createOscillator(), g = ctx.createGain(); o.type = "square"; o.frequency.value = f;
+            const t0 = ctx.currentTime + k * 0.5;
+            g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.45, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4);
+            o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + 0.42);
+          });
+        }
         return;
       }
-      const at = Date.now() + 10000;
-      const mk = (id, n) => ({ id, title: "Test alarm", body: n ? "Re-ring " + n : "If you see this and hear it, alarms work. Tap to open it.", channelId: "alarms_full", extra: { alarm: true, kind: "test", itemId: "" }, schedule: { at: new Date(at + n * 60000), allowWhileIdle: true } });
-      await LN.schedule({ notifications: [mk(999000, 0)] });
-      let pend = 0; try { const pn = await LN.getPending(); pend = (pn.notifications || []).filter((n) => n.id < OWN_ID_MAX).length; } catch (e) {}
-      setNotifStatus(`Test alarm set for 10 seconds from now. Lock the screen and wait. Notifications: allowed. Exact alarms: ${exact === "granted" ? "allowed" : exact + " (alarms may be late)"}. Reminders planned: ${pend}.`);
-    } catch (e) { setNotifStatus("Test failed: " + String((e && e.message) || e).slice(0, 100)); }
+      playSoundPattern(pr.ctx, choice.id);
+    } catch (e) {}
+  };
+  const chooseSound = (kind, choice) => {
+    setSoundMsg("");
+    setSoundPrefs((p) => ({ ...p, [kind]: choice }));
+    playChoice(choice, kind);
+  };
+  const pickCustomSound = (kind, file) => {
+    if (!file) return;
+    if (file.type && !/^audio\//.test(file.type)) { setSoundMsg("Please choose an audio file."); return; }
+    if (file.size > SOUND_CUSTOM_MAX_BYTES) { setSoundMsg("That file is too big. Choose a short sound under 1 MB."); return; }
+    const fr = new FileReader();
+    fr.onload = () => chooseSound(kind, { id: "custom", name: file.name, data: String(fr.result || "") });
+    fr.onerror = () => setSoundMsg("Could not read that file.");
+    fr.readAsDataURL(file);
+  };
+  // Notification sound: "Default" leaves the phone's own notification sound alone. A chosen sound plays with in-app notifications.
+  const notify = (title, opts) => {
+    const n = new Notification(title, opts);
+    try { const c = soundPrefsRef.current && soundPrefsRef.current.notification; if (c && c.id !== "default") playChoice(c, "notification"); } catch (e) {}
+    return n;
   };
   const toggleReminders = () => {
     setRemindersEnabled((v) => {
@@ -5333,16 +5392,25 @@ function LifeTracker() {
   useEffect(() => {
     if (!alarmScreen) return undefined;
     let ctx = null, step = 0;
+    const sp = (soundPrefsRef.current && soundPrefsRef.current.alarm) || { id: "default" };
+    let customAudio = null;
+    if (sp.id === "custom" && sp.data) {
+      try { customAudio = new Audio(sp.data); customAudio.loop = true; customAudio.addEventListener("error", () => { customAudio = null; }); } catch (e) { customAudio = null; }
+    }
     const beep = () => {
       try {
-        if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) ctx = new AC(); }
-        if (ctx) {
-          if (ctx.state === "suspended" && ctx.resume) ctx.resume().catch(() => {});
-          const o = ctx.createOscillator(), g = ctx.createGain();
-          o.type = "square"; o.frequency.value = (step++ % 2) ? 1175 : 880;
-          const t0 = ctx.currentTime;
-          g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.45, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4);
-          o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + 0.42);
+        if (customAudio) { if (customAudio.paused) customAudio.play().catch(() => {}); }
+        else {
+          if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) ctx = new AC(); }
+          if (ctx && SOUND_PATTERNS[sp.id]) playSoundPattern(ctx, sp.id);
+          else if (ctx) {
+            if (ctx.state === "suspended" && ctx.resume) ctx.resume().catch(() => {});
+            const o = ctx.createOscillator(), g = ctx.createGain();
+            o.type = "square"; o.frequency.value = (step++ % 2) ? 1175 : 880;
+            const t0 = ctx.currentTime;
+            g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.45, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4);
+            o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + 0.42);
+          }
         }
       } catch (e) {}
       try { if (navigator.vibrate) navigator.vibrate([300, 150, 300]); } catch (e) {}
@@ -5353,7 +5421,7 @@ function LifeTracker() {
     const t = setInterval(tick, 1500);
     let lock = null, gone = false;
     try { if (navigator.wakeLock && navigator.wakeLock.request) navigator.wakeLock.request("screen").then((l) => { if (gone) { try { l.release(); } catch (e) {} } else lock = l; }).catch(() => {}); } catch (e) {}
-    return () => { gone = true; clearInterval(t); try { if (ctx) ctx.close(); } catch (e) {} try { if (lock) lock.release(); } catch (e) {} };
+    return () => { gone = true; clearInterval(t); try { if (customAudio) { customAudio.pause(); customAudio = null; } } catch (e) {} try { if (ctx) ctx.close(); } catch (e) {} try { if (lock) lock.release(); } catch (e) {} };
   }, [alarmScreen]);
 
   // ---- Evening nudge: one notification per day, only after 8pm, only if there's something
@@ -5372,7 +5440,7 @@ function LifeTracker() {
       const body = atRiskStreakItems.length > 0
         ? `${atRiskStreakItems[0].name}'s ${streaks[atRiskStreakItems[0].id]}-day streak ends tonight${pendingCount > 1 ? ` \u00b7 ${pendingCount} things left today` : ""}.`
         : `${pendingCount} thing${pendingCount === 1 ? "" : "s"} left today \u2014 quick catch-up?`;
-      new Notification("Before the day ends\u2026", { body });
+      notify("Before the day ends\u2026", { body });
     } catch (e) {}
   }, [now, remindersEnabled, lastEveningNudgeDate, today, validItems, atRiskStreakItems, streaks, dailyLogs]);
 
@@ -5403,7 +5471,7 @@ function LifeTracker() {
       if (due && notifiedRef.current[item.id] !== dueKey) {
         notifiedRef.current[item.id] = dueKey;
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          try { new Notification(`${item.name} is due`, { body: `Time to log ${item.amount} ${item.unit}` }); } catch (e) {}
+          try { notify(`${item.name} is due`, { body: `Time to log ${item.amount} ${item.unit}` }); } catch (e) {}
         }
       }
     });
@@ -5424,7 +5492,7 @@ function LifeTracker() {
       if (!done && now >= dueAt && notifiedRef.current[`missed:${item.id}`] !== notifyKey) {
         notifiedRef.current[`missed:${item.id}`] = notifyKey;
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          try { new Notification(`${item.name} not done yet`, { body: `Scheduled for ${item.scheduledTime} \u2014 tap to log it.` }); } catch (e) {}
+          try { notify(`${item.name} not done yet`, { body: `Scheduled for ${item.scheduledTime} \u2014 tap to log it.` }); } catch (e) {}
         }
       }
     });
@@ -5444,7 +5512,7 @@ function LifeTracker() {
           notifiedRef.current[`travel:${plan.id}:${offset}`] = notifyKey;
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
             const label = (REMINDER_OPTIONS.find((o) => o.value === offset) || {}).label || "";
-            try { new Notification(`Upcoming trip: ${plan.fromLocation} \u2192 ${plan.toLocation}`, { body: `${plan.mode} on ${formatDMY(plan.travelDate)}${plan.travelTime ? ` at ${plan.travelTime}` : ""} \u2014 ${label.toLowerCase()}` }); } catch (e) {}
+            try { notify(`Upcoming trip: ${plan.fromLocation} \u2192 ${plan.toLocation}`, { body: `${plan.mode} on ${formatDMY(plan.travelDate)}${plan.travelTime ? ` at ${plan.travelTime}` : ""} \u2014 ${label.toLowerCase()}` }); } catch (e) {}
           }
         }
       });
@@ -5470,7 +5538,7 @@ function LifeTracker() {
             notifiedRef.current[`mydayoffset:${ev.id}:${offset}`] = notifyKey;
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
               const label = (REMINDER_OPTIONS.find((o) => o.value === offset) || {}).label || "";
-              try { new Notification(`${ev.type}: ${ev.title}`, { body: `${formatDMY(ev.eventDate)}${ev.eventTime ? ` at ${fmtTimeString12(ev.eventTime)}` : ""} \u2014 ${label.toLowerCase()}` }); } catch (e) {}
+              try { notify(`${ev.type}: ${ev.title}`, { body: `${formatDMY(ev.eventDate)}${ev.eventTime ? ` at ${fmtTimeString12(ev.eventTime)}` : ""} \u2014 ${label.toLowerCase()}` }); } catch (e) {}
             }
           }
         });
@@ -5486,7 +5554,7 @@ function LifeTracker() {
       if (now >= remindAt && now < eventDT && notifiedRef.current[`myday:${ev.id}`] !== notifyKey) {
         notifiedRef.current[`myday:${ev.id}`] = notifyKey;
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          try { new Notification(`${ev.type}: ${ev.title}`, { body: `Starts at ${fmtTimeString12(ev.eventTime)}${ev.location ? ` \u00b7 ${ev.location}` : ""}` }); } catch (e) {}
+          try { notify(`${ev.type}: ${ev.title}`, { body: `Starts at ${fmtTimeString12(ev.eventTime)}${ev.location ? ` \u00b7 ${ev.location}` : ""}` }); } catch (e) {}
         }
       }
     });
@@ -6657,15 +6725,6 @@ function LifeTracker() {
           </span>
         </span>
         <div className="app-header-icons" style={{ display: "flex", alignItems: "center", position: "relative" }}>
-          <button onClick={() => setDarkMode((v) => !v)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} style={{ width: 34, height: 34, borderRadius: 999, background: PANEL_2, border: "none", color: INK, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 }}>
-            {darkMode ? <Sun size={17} strokeWidth={1.8} /> : <Moon size={17} strokeWidth={1.8} />}
-          </button>
-          <button onClick={toggleReminders} title={remindersEnabled ? "Reminders on" : "Reminders off"} style={{ width: 34, height: 34, borderRadius: 999, background: PANEL_2, border: "none", position: "relative", color: INK, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 }}>
-            {remindersEnabled ? <Bell size={17} strokeWidth={1.8} /> : <BellOff size={17} strokeWidth={1.8} color={INK_FAINT} />}
-            {remindersEnabled && (
-              <span style={{ position: "absolute", top: 4, right: 5, width: 8, height: 8, borderRadius: "50%", background: CORAL, border: "1.5px solid var(--panel-2, #F2F2F7)" }} />
-            )}
-          </button>
           <button onClick={() => setShowHolidays((v) => !v)} title="Upcoming Indian holidays" style={{ width: 34, height: 34, borderRadius: 999, background: PANEL_2, border: "none", position: "relative", color: INK, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 }}>
             <PartyPopper size={17} strokeWidth={1.8} color={nextHoliday && nextHoliday.daysAway <= 7 ? CORAL : INK} />
             {nextHoliday && nextHoliday.daysAway <= 7 && (
@@ -9920,7 +9979,11 @@ function LifeTracker() {
               { label: "App", items: [
                 { id: "update", icon: Download, color: "#2F6FED", title: "App update", sub: upAvail ? "Update available" : `Version ${APP_VERSION}`, dot: upAvail },
               ] },
+              { label: "Appearance", items: [
+                { id: "darkmode", icon: darkMode ? Moon : Sun, color: "#5856D6", title: "Dark mode", sub: darkMode ? "On" : "Off", toggle: { on: darkMode, set: () => setDarkMode((v) => !v) } },
+              ] },
               { label: "Notifications", items: [
+                { id: "notifications", icon: remindersEnabled ? Bell : BellOff, color: "#FF3B30", title: "Notifications", sub: remindersEnabled ? "On" : "Off", toggle: { on: remindersEnabled, set: toggleReminders } },
                 { id: "reminders", icon: Bell, color: "#F59E0B", title: "Reminders & alarms", sub: notifBlocked ? "Notifications are blocked" : `Daily: ${reminderStyle.daily} \u00b7 Plans: ${reminderStyle.plans} \u00b7 Trips: ${reminderStyle.trips}`, dot: !!notifBlocked },
                 ...(isNative ? [] : [{ id: "push", icon: Smartphone, color: "#8B5CF6", title: "Push notifications", sub: pushSubscription ? "This device is registered" : "Not set up" }]),
               ] },
@@ -9937,14 +10000,20 @@ function LifeTracker() {
                       {gr.items.map((it, i) => {
                         const RIcon = it.icon;
                         return (
-                          <button key={it.id} onClick={() => setMoreSection(it.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "11px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit", color: INK }}>
+                          <button key={it.id} onClick={() => (it.toggle ? it.toggle.set() : setMoreSection(it.id))} role={it.toggle ? "switch" : undefined} aria-checked={it.toggle ? it.toggle.on : undefined} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "11px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit", color: INK }}>
                             <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: it.color, display: "flex", alignItems: "center", justifyContent: "center" }}><RIcon size={18} color="#fff" strokeWidth={2.2} /></span>
                             <span style={{ flex: 1, minWidth: 0 }}>
                               <span style={{ display: "block", fontSize: 15, fontWeight: 650 }}>{it.title}</span>
                               <span style={{ display: "block", fontSize: 12.5, color: it.dot ? CORAL : INK_FAINT, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.sub}</span>
                             </span>
                             {it.dot && <span style={{ width: 9, height: 9, borderRadius: 5, background: CORAL, flexShrink: 0 }} />}
-                            <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
+                            {it.toggle ? (
+                              <span style={{ flexShrink: 0, position: "relative", width: 48, height: 29, borderRadius: 15, background: it.toggle.on ? TEAL : hexA(INK_FAINT, 0.35), transition: "background .2s" }}>
+                                <span style={{ position: "absolute", top: 2, left: it.toggle.on ? 21 : 2, width: 25, height: 25, borderRadius: 13, background: "#FFFFFF", boxShadow: "0 1px 3px rgba(0,0,0,.3)", transition: "left .2s" }} />
+                              </span>
+                            ) : (
+                              <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
+                            )}
                           </button>
                         );
                       })}
@@ -10026,6 +10095,34 @@ function LifeTracker() {
               </div>
             ))}
           </Card>
+          <Card style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Sounds</div>
+            <div style={{ fontSize: 13, color: INK_FAINT, margin: "4px 0 6px", lineHeight: 1.4 }}>Default keeps the normal sound. Or pick a tone, or an audio file from your phone. Tap a row to choose it and hear it.</div>
+            {[{ kind: "alarm", label: "Alarm sound" }, { kind: "notification", label: "Notification sound" }].map((grp) => {
+              const cur = soundPrefs[grp.kind] || { id: "default" };
+              const rows = [...SOUND_CHOICES, ...(cur.id === "custom" ? [{ id: "custom", label: cur.name || "Your sound" }] : [])];
+              return (
+                <div key={grp.kind} style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, marginBottom: 4 }}>{grp.label}</div>
+                  {rows.map((r, i) => {
+                    const on = cur.id === r.id;
+                    return (
+                      <button key={r.id} onClick={() => chooseSound(grp.kind, r.id === "custom" ? cur : { id: r.id })} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
+                        <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? BRASS : INK_FAINT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <span style={{ width: 10, height: 10, borderRadius: 5, background: BRASS }} />}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: on ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}{r.id === "default" && grp.kind === "notification" ? " (phone\u2019s sound)" : ""}</span>
+                        {!(r.id === "default" && grp.kind === "notification") && <span onClick={(e) => { e.stopPropagation(); playChoice(r.id === "custom" ? cur : { id: r.id }, grp.kind); }} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, fontSize: 12.5, fontWeight: 600, color: BRASS, padding: "4px 8px" }}><Play size={13} /> Play</span>}
+                      </button>
+                    );
+                  })}
+                  <label style={{ display: "block", marginTop: 8, textAlign: "center", padding: "9px 10px", borderRadius: 10, border: `1.5px solid ${BRASS}`, color: BRASS, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                    Choose from phone
+                    <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pickCustomSound(grp.kind, f); }} />
+                  </label>
+                </div>
+              );
+            })}
+            {soundMsg ? <div style={{ fontSize: 13, color: CORAL, marginTop: 8, lineHeight: 1.4 }}>{soundMsg}</div> : null}
+          </Card>
           {notifBlocked && (
             <Card style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: CORAL }}>Notifications are blocked</div>
@@ -10046,8 +10143,6 @@ function LifeTracker() {
                 </div>
               )}
               <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 12, lineHeight: 1.45 }}>To make sure alarms ring when the phone is asleep: in phone Settings \u2192 Apps \u2192 Life Tracker \u2192 Battery, choose <b>Unrestricted</b> (or turn off battery optimization). Some phones (Xiaomi, Oppo, Vivo, Samsung, Realme) also need <b>Autostart</b> on and the app locked in Recent apps. Keep the phone's volume and Do Not Disturb settings in mind, because they decide whether an alarm makes sound.</div>
-              <button onClick={testNotifications} style={{ marginTop: 10, width: "100%", padding: "11px 10px", borderRadius: 10, border: `1.5px solid ${BRASS}`, background: "transparent", color: BRASS, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Test alarm in 10 seconds</button>
-              {notifStatus ? <div style={{ fontSize: 13, color: INK, marginTop: 8, lineHeight: 1.4 }}>{notifStatus}</div> : null}
             </Card>
           )}
               </>)}
