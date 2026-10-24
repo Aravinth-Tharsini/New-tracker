@@ -989,14 +989,15 @@ function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // ---- App updates (shown on the More screen only) ----
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
 // repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
-const APP_VERSION = "2026.10.24.2";
+const APP_VERSION = "2026.10.24.4";
 // Shown on More > App update ("What's new"). Keep each line short and simple; add a new block for every release.
 const APP_CHANGELOG = {
   date: "24 Oct 2026",
   items: [
-    ["fixed", "Back in More now goes one step back: option, then More list."],
-    ["fixed", "Back closes the app only on a main page with nothing open."],
-    ["fixed", "Back also closes the full-screen tree first."],
+    ["fixed", "The app restarts only after every update step and the loading screen finish."],
+    ["better", "The update bar now fills step by step to 100%."],
+    ["better", "Each step stays on screen long enough to be seen."],
+    ["fixed", "Back is ignored while an update is installing."],
   ],
 };
 const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
@@ -4750,17 +4751,27 @@ function LifeTracker() {
     return () => clearTimeout(t);
   }, []);
   const applyWebUpdate = async () => {
-    const startedAt = Date.now();
-    setUpdateOverlay({ kind: "web", step: 0 });
-    const t1 = setTimeout(() => setUpdateOverlay((o) => (o ? { ...o, step: 1 } : o)), 900);
-    const t2 = setTimeout(() => setUpdateOverlay((o) => (o ? { ...o, step: 2 } : o)), 1900);
+    if (updateOverlay) return; // an update is already running
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const MIN_STEP = 800; // each stage stays on screen at least this long, so every step of the animation is seen
+    const showStage = (step, progress) => setUpdateOverlay({ kind: "web", step, progress });
+    const padStage = async (since) => { const left = MIN_STEP - (Date.now() - since); if (left > 0) await wait(left); };
+    // Stage 1: download the newest page and store it in the cache.
+    let since = Date.now();
+    showStage(0, 10);
     try {
-      // Store the newest page in the cache first, then let the waiting version take over, then reload.
       const fresh = await fetch("index.html?t=" + Date.now(), { cache: "no-store" });
       if (fresh.ok && window.caches) {
         const keys = (await caches.keys()).filter((k) => k.startsWith("life-tracker-cache"));
         await Promise.all(keys.map(async (k) => (await caches.open(k)).put("index.html", fresh.clone())));
       }
+    } catch (e) {}
+    setUpdateOverlay((o) => (o ? { ...o, progress: 45 } : o));
+    await padStage(since);
+    // Stage 2: let the waiting version take over (finishes when it has really taken control, or after 3 s).
+    since = Date.now();
+    showStage(1, 50);
+    try {
       const reg = await navigator.serviceWorker.getRegistration();
       if (reg && reg.waiting) {
         await new Promise((res) => {
@@ -4770,10 +4781,11 @@ function LifeTracker() {
         });
       }
     } catch (e) {}
-    // keep the loading screen visible long enough to be seen, then restart on the new version
-    const left = 2600 - (Date.now() - startedAt);
-    if (left > 0) await new Promise((r) => setTimeout(r, left));
-    clearTimeout(t1); clearTimeout(t2);
+    setUpdateOverlay((o) => (o ? { ...o, progress: 90 } : o));
+    await padStage(since);
+    // Stage 3: the bar fills to 100% and "Restarting..." is shown. Only then does the app reload.
+    showStage(2, 100);
+    await wait(1100);
     window.location.reload(); // your saved data stays; only the app files are refreshed
   };
   const openApkUpdate = () => {
@@ -5050,6 +5062,7 @@ function LifeTracker() {
   // One place that decides what Back closes. Returns true when it closed something, false on a main page with nothing open.
   const handleBackRef = useRef(null);
   handleBackRef.current = () => {
+      if (updateOverlay) return true; // the update screen cannot be skipped
       if (tree3d) { setTree3d(null); return true; }
       if (pendingImportData) { cancelImport(); return true; }
       if (showHolidays) { setShowHolidays(false); return true; }
@@ -10023,10 +10036,10 @@ function LifeTracker() {
                 { id: "update", icon: Download, color: "#2F6FED", title: "App update", sub: upAvail ? "Update available" : `Version ${APP_VERSION}`, dot: upAvail },
               ] },
               { label: "Appearance", items: [
-                { id: "darkmode", icon: darkMode ? Moon : Sun, color: "#5856D6", title: "Dark mode", sub: darkPref === "system" ? "System default \u00b7 follows your phone" : darkPref === "on" ? "Always dark" : "Always light", seg: { value: darkPref, options: [{ v: "on", t: "On" }, { v: "off", t: "Off" }, { v: "system", t: "System default" }], set: setDarkPref } },
+                { id: "darkmode", icon: darkMode ? Moon : Sun, color: "#5856D6", title: "Dark mode", sub: darkPref === "system" ? "System default" : darkPref === "on" ? "On" : "Off" },
               ] },
               { label: "Notifications", items: [
-                { id: "notifmode", icon: notifMode === "on" ? Bell : BellOff, color: "#FF3B30", title: "Notification mode", sub: notifMode === "dnd" ? "DND \u00b7 silent, no vibration, no alarm pop-up" : notifMode === "mute" ? "Mute \u00b7 no sound, vibration only" : "On \u00b7 sound and vibration", seg: { value: notifMode, options: [{ v: "on", t: "On" }, { v: "dnd", t: "DND" }, { v: "mute", t: "Mute" }], set: (m) => { setNotifMode(m); if (!remindersEnabled) toggleReminders(); } } },
+                { id: "notifmode", icon: notifMode === "on" ? Bell : BellOff, color: "#FF3B30", title: "Notification mode", sub: notifMode === "dnd" ? "DND (Do Not Disturb)" : notifMode === "mute" ? "Mute" : "On" },
                 { id: "reminders", icon: Bell, color: "#F59E0B", title: "Reminders & alarms", sub: notifBlocked ? "Notifications are blocked" : `Daily: ${reminderStyle.daily} \u00b7 Plans: ${reminderStyle.plans} \u00b7 Trips: ${reminderStyle.trips}`, dot: !!notifBlocked },
                 ...(isNative ? [] : [{ id: "push", icon: Smartphone, color: "#8B5CF6", title: "Push notifications", sub: pushSubscription ? "This device is registered" : "Not set up" }]),
               ] },
@@ -10085,7 +10098,7 @@ function LifeTracker() {
           })() : (
             <>
               {(() => {
-                const TITLES = { update: "App update", reminders: "Reminders & alarms", push: "Push notifications", storage: "Storage & backup", sheet: "Google Sheet sync" };
+                const TITLES = { darkmode: "Dark mode", notifmode: "Notification mode", update: "App update", reminders: "Reminders & alarms", push: "Push notifications", storage: "Storage & backup", sheet: "Google Sheet sync" };
                 return (
                   <button onClick={() => setMoreSection(moreSection === "sheet" ? "storage" : null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: "2px 0 12px", cursor: "pointer", color: BRASS, fontFamily: "inherit" }}>
                     <ChevronLeft size={22} strokeWidth={2.4} />
@@ -10140,6 +10153,39 @@ function LifeTracker() {
             </div>
           </Card>
               </>)}
+              {(moreSection === "darkmode" || moreSection === "notifmode") && (() => {
+                const isDark = moreSection === "darkmode";
+                const opts = isDark
+                  ? [{ v: "on", t: "On", d: "Always use the dark theme." }, { v: "off", t: "Off", d: "Always use the light theme." }, { v: "system", t: "System default", d: "Match your phone\u2019s theme. It changes by itself when the phone does." }]
+                  : [{ v: "on", t: "On", d: "Reminders and alarms use sound and vibration." }, { v: "dnd", t: "DND (Do Not Disturb)", d: "Reminders arrive silently in the notification panel. No sound, no vibration, no alarm pop-up." }, { v: "mute", t: "Mute", d: "No sound. Reminders and alarms only vibrate." }];
+                const cur = isDark ? darkPref : notifMode;
+                const pick = (v) => { if (isDark) setDarkPref(v); else { setNotifMode(v); if (!remindersEnabled) toggleReminders(); } };
+                return (<>
+                  <Card style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, marginBottom: 2 }}>{isDark ? "Theme" : "Mode"}</div>
+                    {opts.map((o, i) => {
+                      const on = cur === o.v;
+                      return (
+                        <button key={o.v} onClick={() => pick(o.v)} role="radio" aria-checked={on} style={{ width: "100%", display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
+                          <span style={{ flexShrink: 0, marginTop: 1, width: 22, height: 22, borderRadius: 11, border: `2px solid ${on ? BRASS : INK_FAINT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <span style={{ width: 11, height: 11, borderRadius: 6, background: BRASS }} />}</span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ display: "block", fontSize: 15, fontWeight: on ? 700 : 600 }}>{o.t}</span>
+                            <span style={{ display: "block", fontSize: 13, color: INK_FAINT, marginTop: 2, lineHeight: 1.4 }}>{o.d}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </Card>
+                  <Card style={{ marginBottom: 12 }}>
+                    {isDark ? (
+                      <div style={{ fontSize: 13, color: INK_FAINT, lineHeight: 1.45 }}>Showing now: <b style={{ color: INK }}>{darkMode ? "Dark" : "Light"}</b>{darkPref === "system" ? " (from your phone)" : ""}.</div>
+                    ) : (
+                      <div style={{ fontSize: 13, color: INK_FAINT, lineHeight: 1.45 }}>This sets how reminders and alarms arrive. Alarm or Notification style and sounds are in <b style={{ color: INK }}>Reminders &amp; alarms</b>.</div>
+                    )}
+                    {!isDark && notifBlocked && <div style={{ fontSize: 13, color: CORAL, marginTop: 8, lineHeight: 1.4 }}>Notifications are blocked in phone Settings, so reminders cannot appear.</div>}
+                  </Card>
+                </>);
+              })()}
               {moreSection === "reminders" && (<>
           <Card style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 10, lineHeight: 1.4 }}>Default for new reminders. You can also choose Notification or Alarm on each reminder, next to its time. An alarm is loud, and when you tap it in the notification panel, it opens in full screen.</div>
@@ -10532,8 +10578,9 @@ function doPost(e) {
             <div style={{ fontSize: 26, fontWeight: 800, marginTop: 30, letterSpacing: "-.3px" }}>{web ? "Updating Life Tracker" : "New app version"}</div>
             <div key={updateOverlay.step} style={{ fontSize: 16, opacity: 0.88, marginTop: 10, minHeight: 24, animation: "ltFade .4s ease both" }}>{steps[Math.min(updateOverlay.step, 2)]}</div>
             <div style={{ width: "100%", maxWidth: 260, height: 6, borderRadius: 3, background: "rgba(255,255,255,0.2)", overflow: "hidden", marginTop: 26 }}>
-              <div style={{ width: "40%", height: "100%", borderRadius: 3, background: "#FFFFFF", animation: "ltBar 1.3s ease-in-out infinite" }} />
+              {web ? <div style={{ width: `${updateOverlay.progress || 0}%`, height: "100%", borderRadius: 3, background: "#FFFFFF", transition: "width .6s ease" }} /> : <div style={{ width: "40%", height: "100%", borderRadius: 3, background: "#FFFFFF", animation: "ltBar 1.3s ease-in-out infinite" }} />}
             </div>
+            {web ? <div style={{ fontSize: 13.5, opacity: 0.8, marginTop: 10, fontFamily: mono }}>{updateOverlay.progress || 0}%</div> : null}
             <div style={{ fontSize: 13.5, opacity: 0.6, marginTop: 22 }}>Your data stays safe on this phone.</div>
           </div>
         );
