@@ -989,17 +989,14 @@ function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // ---- App updates (shown on the More screen only) ----
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
 // repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
-const APP_VERSION = "2026.10.24.1";
+const APP_VERSION = "2026.10.24.2";
 // Shown on More > App update ("What's new"). Keep each line short and simple; add a new block for every release.
 const APP_CHANGELOG = {
   date: "24 Oct 2026",
   items: [
-    ["new", "Dark mode: choose On, Off or System default."],
-    ["new", "Notification modes: On, DND (Do Not Disturb) or Mute."],
-    ["new", "DND: reminders arrive silently, with no vibration or alarm pop-up."],
-    ["new", "Mute: no sound, vibration only."],
-    ["better", "System default follows your phone\u2019s theme as it changes."],
-    ["better", "Both settings stay in the More menu only."],
+    ["fixed", "Back in More now goes one step back: option, then More list."],
+    ["fixed", "Back closes the app only on a main page with nothing open."],
+    ["fixed", "Back also closes the full-screen tree first."],
   ],
 };
 const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
@@ -5050,26 +5047,33 @@ function LifeTracker() {
     } catch (e) { /* ignore */ }
     // eslint-disable-next-line
   }, []);
+  // One place that decides what Back closes. Returns true when it closed something, false on a main page with nothing open.
+  const handleBackRef = useRef(null);
+  handleBackRef.current = () => {
+      if (tree3d) { setTree3d(null); return true; }
+      if (pendingImportData) { cancelImport(); return true; }
+      if (showHolidays) { setShowHolidays(false); return true; }
+      if (itemForm || addingGroup || addingSubTo) { closeItemForm(); return true; }
+      if (showAddMyDay || editingMyDayId) { setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm()); return true; }
+      if (showAddGoal || editingGoalId) { setShowAddGoal(false); setEditingGoalId(null); setGoalForm(blankGoalForm()); return true; }
+      if (showAddTravel || editingTravelId) { setShowAddTravel(false); setEditingTravelId(null); setTravelForm(blankTravelForm()); return true; }
+      if (showAddRepayment || editingRepaymentId) { setShowAddRepayment(false); setEditingRepaymentId(null); setRepaymentForm(blankRepaymentForm()); return true; }
+      if (shoppingForm) { setShoppingForm(null); return true; }
+      if (bikeServiceForm) { setBikeServiceForm(null); return true; }
+      if (selectedStreakId) { setSelectedStreakId(null); return true; }
+      if (showQuickCapture) { setShowQuickCapture(false); return true; }
+      // More page: option -> More list (Sheet -> Storage first)
+      if (page === "datalink" && moreSection) { setMoreSection(moreSection === "sheet" ? "storage" : null); return true; }
+      // Today page: opened category -> Today main
+      if (page === "daily" && expandedDailyCategory) { setExpandedDailyCategory(null); return true; }
+      // Planner page: opened category -> Planner main
+      if (page === "categories" && catTab) { setCatTab(null); return true; }
+      return false;
+  };
   useEffect(() => {
     const rearm = () => { try { history.pushState({ appNav: "guard" }, ""); } catch (e) { /* ignore */ } };
     const handlePopState = () => {
-      if (pendingImportData) { cancelImport(); rearm(); return; }
-      if (showHolidays) { setShowHolidays(false); rearm(); return; }
-      if (itemForm || addingGroup || addingSubTo) { closeItemForm(); rearm(); return; }
-      if (showAddMyDay || editingMyDayId) { setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm()); rearm(); return; }
-      if (showAddGoal || editingGoalId) { setShowAddGoal(false); setEditingGoalId(null); setGoalForm(blankGoalForm()); rearm(); return; }
-      if (showAddTravel || editingTravelId) { setShowAddTravel(false); setEditingTravelId(null); setTravelForm(blankTravelForm()); rearm(); return; }
-      if (showAddRepayment || editingRepaymentId) { setShowAddRepayment(false); setEditingRepaymentId(null); setRepaymentForm(blankRepaymentForm()); rearm(); return; }
-      if (shoppingForm) { setShoppingForm(null); rearm(); return; }
-      if (bikeServiceForm) { setBikeServiceForm(null); rearm(); return; }
-      if (selectedStreakId) { setSelectedStreakId(null); rearm(); return; }
-      if (showQuickCapture) { setShowQuickCapture(false); rearm(); return; }
-      // More page: option -> More list (Sheet -> Storage first)
-      if (page === "datalink" && moreSection) { setMoreSection(moreSection === "sheet" ? "storage" : null); rearm(); return; }
-      // Today page: opened category -> Today main
-      if (page === "daily" && expandedDailyCategory) { setExpandedDailyCategory(null); rearm(); return; }
-      // Planner page: opened category -> Planner main
-      if (page === "categories" && catTab) { setCatTab(null); rearm(); return; }
+      if (handleBackRef.current && handleBackRef.current()) { rearm(); return; }
       // On a main page with nothing open: exit the app.
       try {
         const A = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
@@ -5080,6 +5084,21 @@ function LifeTracker() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [page, catTab, expandedDailyCategory, moreSection, itemForm, addingGroup, addingSubTo, showHolidays, pendingImportData, showAddMyDay, editingMyDayId, showAddGoal, editingGoalId, showAddTravel, editingTravelId, showAddRepayment, editingRepaymentId, shoppingForm, bikeServiceForm, selectedStreakId, showQuickCapture]);
+
+  // Android app (Capacitor): handle the Back button / gesture directly. Relying on browser history alone is not reliable here,
+  // because the WebView skips history entries that were not created by a tap, so Back could close the app from inside More.
+  useEffect(() => {
+    const A = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+    if (!A || !A.addListener) return undefined;
+    let h = null, gone = false;
+    try {
+      Promise.resolve(A.addListener("backButton", () => {
+        if (handleBackRef.current && handleBackRef.current()) return;
+        try { if (A.exitApp) A.exitApp(); else if (A.minimizeApp) A.minimizeApp(); } catch (e) {}
+      })).then((x) => { if (gone) { try { x && x.remove && x.remove(); } catch (e) {} } else h = x; }).catch(() => {});
+    } catch (e) {}
+    return () => { gone = true; try { h && h.remove && h.remove(); } catch (e) {} };
+  }, []);
 
   const saveItemForm = () => {
     if (!itemForm.name.trim()) return;
