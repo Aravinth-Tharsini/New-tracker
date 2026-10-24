@@ -21,8 +21,10 @@
       try {
         var raw = localStorage.getItem("life-tracker:__store__");
         var store = raw ? JSON.parse(raw) : {};
-        var dark = store.darkMode != null ? JSON.parse(store.darkMode) === true
-          : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var sys = !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        var pref = store.darkPref != null ? JSON.parse(store.darkPref) : null;
+        var dark = pref === "system" ? sys : pref === "on" ? true : pref === "off" ? false
+          : (store.darkMode != null ? JSON.parse(store.darkMode) === true : sys);
         var bg = dark ? "#000000" : "#F5F5F7";
         var d = document.documentElement;
         d.style.background = bg;
@@ -987,19 +989,17 @@ function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // ---- App updates (shown on the More screen only) ----
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
 // repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
-const APP_VERSION = "2026.10.24";
+const APP_VERSION = "2026.10.24.1";
 // Shown on More > App update ("What's new"). Keep each line short and simple; add a new block for every release.
 const APP_CHANGELOG = {
   date: "24 Oct 2026",
   items: [
-    ["new", "Alarm sound: keep the Default or choose your own."],
-    ["new", "Notification sound: keep the Default or choose your own."],
-    ["new", "Pick a ready-made tone, or an audio file from your phone."],
-    ["new", "Tap play to hear a sound before you choose it."],
-    ["new", "Dark mode and Notifications On/Off are now in the More menu."],
-    ["better", "Top bar is cleaner: the dark mode and bell icons were removed."],
-    ["better", "What\u2019s new shows only the latest update."],
-    ["removed", "The 10-second test alarm was removed."],
+    ["new", "Dark mode: choose On, Off or System default."],
+    ["new", "Notification modes: On, DND (Do Not Disturb) or Mute."],
+    ["new", "DND: reminders arrive silently, with no vibration or alarm pop-up."],
+    ["new", "Mute: no sound, vibration only."],
+    ["better", "System default follows your phone\u2019s theme as it changes."],
+    ["better", "Both settings stay in the More menu only."],
   ],
 };
 const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
@@ -2014,8 +2014,12 @@ const SNOOZE_ID_BASE = 9000000;
 const NOTIF_CHANNELS = [
   { id: "reminders_high", name: "Reminders", description: "Trip, daily activity and plan reminders", importance: 5, visibility: 1, vibration: true, lights: true },
   { id: "reminders_normal", name: "Reminders (notification)", description: "Quiet reminders in the notification panel", importance: 3, visibility: 1, vibration: true },
+  { id: "reminders_mute", name: "Reminders (muted)", description: "No sound, vibration only", importance: 2, visibility: 1, vibration: true },
+  { id: "reminders_dnd", name: "Reminders (Do Not Disturb)", description: "Silent, no vibration", importance: 2, visibility: 1, vibration: false },
   { id: "alarms_full", name: "Alarms", description: "Loud alarms. Tap to open the full-screen alarm.", importance: 5, visibility: 1, vibration: true, lights: true },
 ];
+// Notification mode: "on" (normal), "dnd" (silent, no vibration, no alarm pop-up) or "mute" (no sound, vibration only).
+function modeChannel(mode, normal) { return mode === "dnd" ? "reminders_dnd" : mode === "mute" ? "reminders_mute" : normal; }
 function nativeLN() {
   const cap = window.Capacitor;
   return cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins && cap.Plugins.LocalNotifications ? cap.Plugins.LocalNotifications : null;
@@ -3219,7 +3223,19 @@ function LifeTracker() {
   const [savedShopNames, setSavedShopNames] = useState(() => readPersistedSync("savedShopNames", []));
   const [savedShoppingCategories, setSavedShoppingCategories] = useState(() => readPersistedSync("savedShoppingCategories", ["Groceries", "Vegetables", "Electronics"]));
   const [remindersEnabled, setRemindersEnabled] = useState(() => readPersistedSync("remindersEnabled", false));
-  const [darkMode, setDarkMode] = useState(() => readPersistedSync("darkMode", false));
+  const [darkPref, setDarkPref] = useState(() => { const v = readPersistedSync("darkPref", null); return v === "on" || v === "off" || v === "system" ? v : (readPersistedSync("darkMode", false) ? "on" : "off"); });
+  const [systemDark, setSystemDark] = useState(() => { try { return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches); } catch (e) { return false; } });
+  useEffect(() => {
+    try {
+      const mq = window.matchMedia("(prefers-color-scheme: dark)"); const h = (e) => setSystemDark(!!e.matches);
+      if (mq.addEventListener) mq.addEventListener("change", h); else if (mq.addListener) mq.addListener(h);
+      return () => { try { if (mq.removeEventListener) mq.removeEventListener("change", h); else if (mq.removeListener) mq.removeListener(h); } catch (e) {} };
+    } catch (e) { return undefined; }
+  }, []);
+  const darkMode = darkPref === "on" || (darkPref === "system" && systemDark);
+  const [notifMode, setNotifMode] = useState(() => { const v = readPersistedSync("notifMode", "on"); return v === "dnd" || v === "mute" ? v : "on"; });
+  const notifModeRef = useRef(notifMode);
+  notifModeRef.current = notifMode;
   // BRASS/BRASS_DIM/TEAL/CORAL are CSS custom-property references ("var(--brass)") so solid
   // colors and borders can flip instantly with the theme. But hexA() needs a real "#RRGGBB"
   // string to compute an alpha-tinted background, and a CSS var string doesn't parse as hex.
@@ -3350,6 +3366,8 @@ function LifeTracker() {
   const [tree3d, setTree3d] = useState(null); // full-screen 3D tree (opened by tapping the tree on Home)
   const alarmDoneRef = useRef(null); // set below: tells the alarm listener if a task is already finished
   useEffect(() => { if (loaded) window.storage.set("darkMode", JSON.stringify(darkMode), false).catch(() => {}); }, [darkMode, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("darkPref", JSON.stringify(darkPref), false).catch(() => {}); }, [darkPref, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("notifMode", JSON.stringify(notifMode), false).catch(() => {}); }, [notifMode, loaded]);
   // Keeps the real <html>/<body> background (and the browser's theme-color chrome) in sync with dark
   // mode too, not just the in-app container — otherwise overscroll/bounce or any area outside the app's
   // own max-width wrapper still shows the browser's default white, producing a light gap at the very
@@ -3577,8 +3595,12 @@ function LifeTracker() {
   };
   // Notification sound: "Default" leaves the phone's own notification sound alone. A chosen sound plays with in-app notifications.
   const notify = (title, opts) => {
-    const n = new Notification(title, opts);
-    try { const c = soundPrefsRef.current && soundPrefsRef.current.notification; if (c && c.id !== "default") playChoice(c, "notification"); } catch (e) {}
+    const m = notifModeRef.current;
+    const n = new Notification(title, m === "on" ? opts : { ...opts, silent: true });
+    try {
+      if (m === "on") { const c = soundPrefsRef.current && soundPrefsRef.current.notification; if (c && c.id !== "default") playChoice(c, "notification"); }
+      else if (m === "mute" && navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    } catch (e) {}
     return n;
   };
   const toggleReminders = () => {
@@ -5133,7 +5155,7 @@ function LifeTracker() {
           const HORIZON_DAYS = 14, MAX_ALARMS = 480; // Android keeps at most ~500 alarms per app
           const NATIVE_WD = { Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6, Sat: 7, Sun: 1 };
           const WD_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-          const decor = (cat, item) => { const alarm = ((item && item.reminderType) || reminderStyle[cat]) === "alarm"; return { alarm, channelId: alarm ? "alarms_full" : "reminders_normal", extra: { alarm, kind: cat, itemId: (item && item.id) || "" } }; };
+          const decor = (cat, item) => { const alarm = ((item && item.reminderType) || reminderStyle[cat]) === "alarm"; return { alarm, channelId: modeChannel(notifMode, alarm ? "alarms_full" : "reminders_normal"), extra: { alarm, kind: cat, itemId: (item && item.id) || "" } }; };
           const mains = [], weekly = [];
           const add = (title, body, at, cat, item, key) => { if (at && !isNaN(at.getTime()) && at.getTime() > nowMs + 3000) mains.push({ title, body, at, cat, item, key: key || "" }); };
           const hhmmOf = (v) => String(v || "").slice(0, 5);
@@ -5223,11 +5245,11 @@ function LifeTracker() {
           const FOLLOW_UP_WINDOW = nowMs + 3 * 86400000;
           for (const m of mains) {
             const dc = decor(m.cat, m.item);
-            if (AR && dc.alarm) { if (ring.length < 200) ring.push({ id: ring.length + 1, at: m.at.getTime(), title: m.title, body: m.body, kind: m.cat, itemId: (m.item && m.item.id) || "", key: m.key }); continue; }
+            if (AR && dc.alarm && notifMode === "on") { if (ring.length < 200) ring.push({ id: ring.length + 1, at: m.at.getTime(), title: m.title, body: m.body, kind: m.cat, itemId: (m.item && m.item.id) || "", key: m.key }); continue; }
             if (list.length >= MAX_ALARMS) continue;
             list.push({ id: nid, title: m.title, body: m.body, schedule: { at: m.at, allowWhileIdle: true }, channelId: dc.channelId, extra: dc.extra });
             // A real alarm keeps ringing: two more rings, 1 and 2 minutes later, until the alarm is opened / answered.
-            if (!AR && dc.alarm && m.at.getTime() < FOLLOW_UP_WINDOW && list.length + 2 <= MAX_ALARMS) {
+            if (!AR && notifMode === "on" && dc.alarm && m.at.getTime() < FOLLOW_UP_WINDOW && list.length + 2 <= MAX_ALARMS) {
               [1, 2].forEach((n) => list.push({ id: nid + n, title: m.title, body: m.body, schedule: { at: new Date(m.at.getTime() + n * 60000), allowWhileIdle: true }, channelId: dc.channelId, extra: { ...dc.extra, followUp: n } }));
             }
             nid += 10;
@@ -5251,7 +5273,7 @@ function LifeTracker() {
     }, 1200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [travelPlans, dailyItems, myDayEvents, shoppingLists, repayments, today, reminderStyle, dailySig, exactAlarmOk, notifBlocked]);
+  }, [travelPlans, dailyItems, myDayEvents, shoppingLists, repayments, today, reminderStyle, dailySig, exactAlarmOk, notifBlocked, notifMode]);
 
   // Tapping an alarm in the notification panel opens the full-screen alarm screen.
   useEffect(() => {
@@ -5291,14 +5313,14 @@ function LifeTracker() {
       snoozeTimersRef.current.push(tid);
     } catch (e) {}
     const LN = nativeLN(), ARs = nativeAR();
-    if (ARs) {
+    if (ARs && notifModeRef.current === "on") {
       try { const sid = 700000 + (Date.now() % 100000); await ARs.schedule({ group: "snz" + sid, items: [{ id: sid, at: atMs, title: a.title, body: a.body, kind: a.kind || "", itemId: a.itemId || "", key: "" }] }); } catch (e) {}
     } else if (LN) {
       await ackNativeAlarm(a.title, a.nid);
       try {
         await ensureNotifChannels(LN);
         const id = SNOOZE_ID_BASE + (Date.now() % 900000) * 10;
-        const base = { title: a.title, body: a.body, channelId: "alarms_full", extra: { alarm: true, kind: a.kind || "", itemId: a.itemId || "" } };
+        const base = { title: a.title, body: a.body, channelId: modeChannel(notifModeRef.current, "alarms_full"), extra: { alarm: true, kind: a.kind || "", itemId: a.itemId || "" } };
         await LN.schedule({ notifications: [
           { id, ...base, schedule: { at: new Date(atMs), allowWhileIdle: true } },
           { id: id + 1, ...base, extra: { ...base.extra, followUp: 1 }, schedule: { at: new Date(atMs + 60000), allowWhileIdle: true } },
@@ -5357,6 +5379,7 @@ function LifeTracker() {
       if (diff < 0) { if (at.getTime() < nextAt) nextAt = at.getTime(); return false; }
       if (diff > 120000 || notifiedRef.current[key]) return false;
       notifiedRef.current[key] = true;
+      if (notifModeRef.current === "dnd") return false;
       if (alarmDoneRef.current && alarmDoneRef.current(kind, itemId)) return false;
       setAlarmScreen({ title, body, kind, itemId });
       return true;
@@ -5392,13 +5415,14 @@ function LifeTracker() {
   useEffect(() => {
     if (!alarmScreen) return undefined;
     let ctx = null, step = 0;
+    const nm = notifModeRef.current;
     const sp = (soundPrefsRef.current && soundPrefsRef.current.alarm) || { id: "default" };
     let customAudio = null;
-    if (sp.id === "custom" && sp.data) {
+    if (nm === "on" && sp.id === "custom" && sp.data) {
       try { customAudio = new Audio(sp.data); customAudio.loop = true; customAudio.addEventListener("error", () => { customAudio = null; }); } catch (e) { customAudio = null; }
     }
     const beep = () => {
-      try {
+      if (nm === "on") try {
         if (customAudio) { if (customAudio.paused) customAudio.play().catch(() => {}); }
         else {
           if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) ctx = new AC(); }
@@ -5413,7 +5437,7 @@ function LifeTracker() {
           }
         }
       } catch (e) {}
-      try { if (navigator.vibrate) navigator.vibrate([300, 150, 300]); } catch (e) {}
+      try { if (nm !== "dnd" && navigator.vibrate) navigator.vibrate([300, 150, 300]); } catch (e) {}
     };
     const ARr = nativeAR();
     const tick = () => { if (ARr) { ARr.getRinging().then((r) => { if (!r || !r.ringing) beep(); }).catch(() => beep()); } else beep(); };
@@ -9980,10 +10004,10 @@ function LifeTracker() {
                 { id: "update", icon: Download, color: "#2F6FED", title: "App update", sub: upAvail ? "Update available" : `Version ${APP_VERSION}`, dot: upAvail },
               ] },
               { label: "Appearance", items: [
-                { id: "darkmode", icon: darkMode ? Moon : Sun, color: "#5856D6", title: "Dark mode", sub: darkMode ? "On" : "Off", toggle: { on: darkMode, set: () => setDarkMode((v) => !v) } },
+                { id: "darkmode", icon: darkMode ? Moon : Sun, color: "#5856D6", title: "Dark mode", sub: darkPref === "system" ? "System default \u00b7 follows your phone" : darkPref === "on" ? "Always dark" : "Always light", seg: { value: darkPref, options: [{ v: "on", t: "On" }, { v: "off", t: "Off" }, { v: "system", t: "System default" }], set: setDarkPref } },
               ] },
               { label: "Notifications", items: [
-                { id: "notifications", icon: remindersEnabled ? Bell : BellOff, color: "#FF3B30", title: "Notifications", sub: remindersEnabled ? "On" : "Off", toggle: { on: remindersEnabled, set: toggleReminders } },
+                { id: "notifmode", icon: notifMode === "on" ? Bell : BellOff, color: "#FF3B30", title: "Notification mode", sub: notifMode === "dnd" ? "DND \u00b7 silent, no vibration, no alarm pop-up" : notifMode === "mute" ? "Mute \u00b7 no sound, vibration only" : "On \u00b7 sound and vibration", seg: { value: notifMode, options: [{ v: "on", t: "On" }, { v: "dnd", t: "DND" }, { v: "mute", t: "Mute" }], set: (m) => { setNotifMode(m); if (!remindersEnabled) toggleReminders(); } } },
                 { id: "reminders", icon: Bell, color: "#F59E0B", title: "Reminders & alarms", sub: notifBlocked ? "Notifications are blocked" : `Daily: ${reminderStyle.daily} \u00b7 Plans: ${reminderStyle.plans} \u00b7 Trips: ${reminderStyle.trips}`, dot: !!notifBlocked },
                 ...(isNative ? [] : [{ id: "push", icon: Smartphone, color: "#8B5CF6", title: "Push notifications", sub: pushSubscription ? "This device is registered" : "Not set up" }]),
               ] },
@@ -9999,6 +10023,22 @@ function LifeTracker() {
                     <Card style={{ padding: "2px 14px", borderRadius: 20 }}>
                       {gr.items.map((it, i) => {
                         const RIcon = it.icon;
+                        if (it.seg) return (
+                          <div key={it.id} style={{ padding: "11px 0", borderTop: i > 0 ? `1px solid ${LINE}` : "none" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: it.color, display: "flex", alignItems: "center", justifyContent: "center" }}><RIcon size={18} color="#fff" strokeWidth={2.2} /></span>
+                              <span style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ display: "block", fontSize: 15, fontWeight: 650, color: INK }}>{it.title}</span>
+                                <span style={{ display: "block", fontSize: 12.5, color: INK_FAINT, marginTop: 1 }}>{it.sub}</span>
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", borderRadius: 9, overflow: "hidden", border: `1px solid ${BRASS}`, marginTop: 10 }}>
+                              {it.seg.options.map((o) => (
+                                <button key={o.v} onClick={() => it.seg.set(o.v)} style={{ flex: 1, border: "none", padding: "8px 4px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", background: it.seg.value === o.v ? BRASS : "transparent", color: it.seg.value === o.v ? "#FFFFFF" : BRASS }}>{o.t}</button>
+                              ))}
+                            </div>
+                          </div>
+                        );
                         return (
                           <button key={it.id} onClick={() => (it.toggle ? it.toggle.set() : setMoreSection(it.id))} role={it.toggle ? "switch" : undefined} aria-checked={it.toggle ? it.toggle.on : undefined} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "11px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit", color: INK }}>
                             <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: it.color, display: "flex", alignItems: "center", justifyContent: "center" }}><RIcon size={18} color="#fff" strokeWidth={2.2} /></span>
