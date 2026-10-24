@@ -3309,6 +3309,16 @@ function LifeTracker() {
   const CORAL_HEX = darkMode ? "#FF453A" : "#FF3B30";
   const [showHolidays, setShowHolidays] = useState(false);
   const [moreSection, setMoreSection] = useState(null); // More page: null = category list, otherwise the open option
+  // Open every main page, Planner category and More option at the top. The app scrolls as the whole document and nothing
+  // used to reset it, so a short page could open under the old scroll offset (header + back-row cut off). Runs before paint.
+  // Form scrollIntoView calls are deferred (animation frame + timeout), so they still run after this and keep working.
+  // scroll-behavior is switched to "auto" for the jump because the page CSS sets smooth scrolling.
+  useLayoutEffect(() => {
+    const de = document.documentElement, prev = de.style.scrollBehavior;
+    de.style.scrollBehavior = "auto";
+    try { window.scrollTo(0, 0); de.scrollTop = 0; document.body.scrollTop = 0; } catch (e) {}
+    de.style.scrollBehavior = prev;
+  }, [page, catTab, moreSection]);
   const upcomingHolidays = useMemo(() => {
     return INDIA_GOVT_HOLIDAYS
       .map((h) => ({ ...h, daysAway: daysUntil(h.date) }))
