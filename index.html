@@ -2004,6 +2004,37 @@ function nativeFS() {
   const cap = window.Capacitor;
   return cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins && cap.Plugins.Filesystem ? cap.Plugins : null;
 }
+// ---- Native reminder helpers (Android APK / Capacitor LocalNotifications) ----
+// Notification ids: every reminder we plan uses ids below OWN_ID_MAX in blocks of 10 (slot 0 = the reminder itself,
+// slots 1-2 = re-rings for alarms). Snoozed alarms use ids from SNOOZE_ID_BASE up, so re-planning never wipes a snooze.
+const OWN_ID_MAX = 100000;
+const SNOOZE_ID_BASE = 9000000;
+const NOTIF_CHANNELS = [
+  { id: "reminders_high", name: "Reminders", description: "Trip, daily activity and plan reminders", importance: 5, visibility: 1, vibration: true, lights: true },
+  { id: "reminders_normal", name: "Reminders (notification)", description: "Quiet reminders in the notification panel", importance: 3, visibility: 1, vibration: true },
+  { id: "alarms_full", name: "Alarms", description: "Loud alarms. Tap to open the full-screen alarm.", importance: 5, visibility: 1, vibration: true, lights: true },
+];
+function nativeLN() {
+  const cap = window.Capacitor;
+  return cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins && cap.Plugins.LocalNotifications ? cap.Plugins.LocalNotifications : null;
+}
+async function ensureNotifChannels(LN) {
+  if (!LN || !LN.createChannel) return;
+  for (const c of NOTIF_CHANNELS) { try { await LN.createChannel(c); } catch (e) {} }
+}
+// Stops the re-rings of an alarm the person has now seen (tapped / Done / Snooze / Dismiss / in-app alarm opened) and
+// clears its notification from the panel. Never touches other days' reminders.
+async function ackNativeAlarm(title, nid) {
+  const LN = nativeLN(); if (!LN) return;
+  const cancelIds = new Set(), removeIds = new Set();
+  if (nid) { const base = Math.floor(nid / 10) * 10; [base + 1, base + 2].forEach((x) => cancelIds.add(x)); [base, base + 1, base + 2].forEach((x) => removeIds.add(x)); }
+  if (title) {
+    try { const d = await LN.getDeliveredNotifications(); ((d && d.notifications) || []).forEach((n) => { if (n.title === title && true) { const b = Math.floor(n.id / 10) * 10; [b, b + 1, b + 2].forEach((x) => removeIds.add(x)); [b + 1, b + 2].forEach((x) => cancelIds.add(x)); } }); } catch (e) {}
+    try { const p = await LN.getPending(); ((p && p.notifications) || []).forEach((n) => { const at = n.schedule && n.schedule.at ? new Date(n.schedule.at).getTime() : 0; if (n.title === title && n.id % 10 !== 0 && at && at - Date.now() < 5 * 60000) cancelIds.add(n.id); }); } catch (e) {}
+  }
+  try { if (cancelIds.size) await LN.cancel({ notifications: [...cancelIds].map((id) => ({ id })) }); } catch (e) {}
+  try { if (removeIds.size && LN.removeDeliveredNotifications) await LN.removeDeliveredNotifications({ notifications: [...removeIds].map((id) => ({ id })) }); } catch (e) {}
+}
 async function saveBackupFile(filename, content, mime, opts = {}) {
   const P = nativeFS();
   const cap0 = window.Capacitor;
@@ -3461,8 +3492,7 @@ function LifeTracker() {
   const testNotifications = async () => {
     const cap = window.Capacitor;
     if (!cap || !(cap.isNativePlatform && cap.isNativePlatform())) { setNotifStatus("Open the installed APK app to test. A browser can't schedule alarms."); return; }
-    const LN = cap.Plugins && cap.Plugins.LocalNotifications;
-    const AR = cap.Plugins && cap.Plugins.AlarmRing;
+    const LN = nativeLN();
     if (!LN) { setNotifStatus("Notification plugin is missing. Install the newest APK."); return; }
     try {
       let perm = await LN.checkPermissions();
@@ -3470,10 +3500,12 @@ function LifeTracker() {
       if (perm.display !== "granted") { setNotifStatus("Notifications are blocked. Open phone Settings \u2192 Apps \u2192 Life Tracker \u2192 Notifications and turn them on."); return; }
       let exact = "n/a";
       try { if (LN.checkExactNotificationSetting) { const ex = await LN.checkExactNotificationSetting(); exact = ex.exact_alarm; if (exact !== "granted" && LN.changeExactNotificationSetting) await LN.changeExactNotificationSetting(); } } catch (e) {}
-      try { if (LN.createChannel) await LN.createChannel({ id: "reminders_high", name: "Reminders", description: "Trip, daily activity and plan reminders", importance: 5, visibility: 1, vibration: true, lights: true }); } catch (e) {}
-      await LN.schedule({ notifications: [{ id: 999001, title: "Test notification", body: "If you see this, notifications work.", channelId: "reminders_high", schedule: { at: new Date(Date.now() + 10000), allowWhileIdle: true } }] });
-      let pend = 0; try { const pn = await LN.getPending(); pend = (pn.notifications || []).length; } catch (e) {}
-      setNotifStatus(`Test sent for 10 seconds from now. Lock the screen and wait. Permission: granted. Exact alarms: ${exact}. Ringing alarm plugin: ${AR ? "yes" : "no (old APK)"}. Reminders scheduled: ${pend}.`);
+      await ensureNotifChannels(LN);
+      const at = Date.now() + 10000;
+      const mk = (id, n) => ({ id, title: "Test alarm", body: n ? "Re-ring " + n : "If you see this and hear it, alarms work. Tap to open it.", channelId: "alarms_full", extra: { alarm: true, kind: "test", itemId: "" }, schedule: { at: new Date(at + n * 60000), allowWhileIdle: true } });
+      await LN.schedule({ notifications: [mk(999000, 0)] });
+      let pend = 0; try { const pn = await LN.getPending(); pend = (pn.notifications || []).filter((n) => n.id < OWN_ID_MAX).length; } catch (e) {}
+      setNotifStatus(`Test alarm set for 10 seconds from now. Lock the screen and wait. Notifications: allowed. Exact alarms: ${exact === "granted" ? "allowed" : exact + " (alarms may be late)"}. Reminders planned: ${pend}.`);
     } catch (e) { setNotifStatus("Test failed: " + String((e && e.message) || e).slice(0, 100)); }
   };
   const toggleReminders = () => {
@@ -4503,30 +4535,41 @@ function LifeTracker() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [loaded, travelPlans]);
 
-  // Notifications are checked quietly in the background when the APK opens (no test button needed).
+  // Notifications are checked quietly in the background when the APK opens, and again every time the app comes back
+  // to the front (so permissions granted in phone Settings are picked up immediately and alarms are re-planned exact).
   const [notifBlocked, setNotifBlocked] = useState(false);
+  const [exactAlarmOk, setExactAlarmOk] = useState(true);
+  const recheckNativeSetup = async (askExact) => {
+    const LN = nativeLN(); if (!LN) return;
+    try {
+      let perm = await LN.checkPermissions();
+      if (perm.display !== "granted") perm = await LN.requestPermissions();
+      setNotifBlocked(perm.display !== "granted");
+      if (perm.display !== "granted") return;
+      await ensureNotifChannels(LN);
+      if (LN.checkExactNotificationSetting) {
+        const ex = await LN.checkExactNotificationSetting();
+        const ok = ex.exact_alarm === "granted";
+        setExactAlarmOk(ok);
+        // Without "Alarms & reminders" access Android delays alarms by minutes. Ask once automatically (it opens a phone
+        // settings screen); after that the Reminders & alarms page shows a button instead of re-opening it by surprise.
+        let asked = false; try { asked = !!localStorage.getItem("exactAlarmAsked"); } catch (e) {}
+        if (!ok && askExact && !asked && LN.changeExactNotificationSetting) { try { localStorage.setItem("exactAlarmAsked", "1"); } catch (e) {} await LN.changeExactNotificationSetting(); }
+      }
+    } catch (e) {}
+  };
   useEffect(() => {
-    const cap = window.Capacitor;
-    if (!cap || !(cap.isNativePlatform && cap.isNativePlatform())) return;
-    const LN = cap.Plugins && cap.Plugins.LocalNotifications;
-    if (!LN) return;
-    (async () => {
-      try {
-        let perm = await LN.checkPermissions();
-        if (perm.display !== "granted") perm = await LN.requestPermissions();
-        setNotifBlocked(perm.display !== "granted");
-        if (perm.display !== "granted") return;
-        try { if (LN.createChannel) await LN.createChannel({ id: "reminders_high", name: "Reminders", description: "Trip, daily activity and plan reminders", importance: 5, visibility: 1, vibration: true, lights: true }); } catch (e) {}
-        try {
-          // Exact alarms: ask only once, because this opens a phone settings screen.
-          let asked = false; try { asked = localStorage.getItem("exactAlarmAsked") === "1"; } catch (e) {}
-          if (!asked && LN.checkExactNotificationSetting) {
-            const ex = await LN.checkExactNotificationSetting();
-            if (ex.exact_alarm !== "granted" && LN.changeExactNotificationSetting) { try { localStorage.setItem("exactAlarmAsked", "1"); } catch (e) {} await LN.changeExactNotificationSetting(); }
-          }
-        } catch (e) {}
-      } catch (e) {}
-    })();
+    recheckNativeSetup(true);
+    const onBack = () => { if (document.visibilityState === "visible") { recheckNativeSetup(false); setNow(new Date()); } };
+    document.addEventListener("visibilitychange", onBack);
+    window.addEventListener("focus", onBack);
+    let h = null, gone = false;
+    try {
+      const A = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+      if (A && A.addListener) Promise.resolve(A.addListener("appStateChange", (st) => { if (st && st.isActive) onBack(); })).then((x) => { if (gone) { try { x && x.remove && x.remove(); } catch (e) {} } else h = x; }).catch(() => {});
+    } catch (e) {}
+    return () => { gone = true; document.removeEventListener("visibilitychange", onBack); window.removeEventListener("focus", onBack); try { h && h.remove && h.remove(); } catch (e) {} };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Update check: a newer web version (service worker) and/or a newer APK (latest GitHub release). Shown on More only.
@@ -4958,123 +5001,190 @@ function LifeTracker() {
   );
 
   // ---- Native (APK) notifications: when the app runs inside the Capacitor Android wrapper, schedule real
-  // on-device alarms for trips, daily activities and My Day plans. They fire even when the app is closed.
-  // In a normal browser (no Capacitor) this does nothing, so the web app is unchanged.
+  // on-device alarms for trips, daily activities, My Day plans, shopping and repayment reminders. They fire even when
+  // the app is closed. In a normal browser (no Capacitor) this does nothing, so the web app is unchanged.
+  const schedGenRef = useRef(0);
+  const schedChainRef = useRef(Promise.resolve());
+  const dailySig = dailyItems.filter(isItemValid).filter((i) => i.scheduledTime).map((i) => { const r = (dailyLogs[today] || {})[i.id] || {}; return i.id + ":" + ((r.status === "done" || r.status === "skipped") ? r.status : "") + ":" + (r.rescheduledTime || ""); }).join(",");
   useEffect(() => {
-    const cap = window.Capacitor;
-    const LN = cap && cap.Plugins && cap.Plugins.LocalNotifications;
-    if (!LN || !(cap.isNativePlatform && cap.isNativePlatform())) return;
-    const timer = setTimeout(async () => {
-      try {
-        let perm = await LN.checkPermissions();
-        if (perm.display !== "granted") perm = await LN.requestPermissions();
-        if (perm.display !== "granted") return;
+    const LN = nativeLN();
+    if (!LN) return;
+    const timer = setTimeout(() => {
+      const gen = ++schedGenRef.current;
+      // One planning run at a time, and a newer run always wins, so two overlapping runs can never double-schedule.
+      schedChainRef.current = schedChainRef.current.then(async () => {
+        if (gen !== schedGenRef.current) return;
         try {
-          const ex = LN.checkExactNotificationSetting ? await LN.checkExactNotificationSetting() : null;
-          if (ex && ex.exact_alarm !== "granted" && localStorage.getItem("exactAlarmAsked") !== today) { localStorage.setItem("exactAlarmAsked", today); await LN.changeExactNotificationSetting(); }
-        } catch (e) {}
-        const pending = await LN.getPending();
-        if (pending.notifications && pending.notifications.length) await LN.cancel({ notifications: pending.notifications });
-        const list = []; const nowMs = Date.now(); let nid = 1;
-        const decor = (cat, item) => { const alarm = ((item && item.reminderType) || reminderStyle[cat]) === "alarm"; return { channelId: alarm ? "alarms_full" : "reminders_normal", extra: { alarm, kind: cat, itemId: (item && item.id) || "" } }; };
-        const add = (title, body, at, cat, item) => { if (at && at.getTime() > nowMs + 5000) list.push({ id: nid++, title, body, schedule: { at, allowWhileIdle: true }, ...decor(cat, item) }); };
-        const NATIVE_WD = { Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6, Sat: 7, Sun: 1 };
-        const AR = null; // the old auto-ringing alarm plugin is replaced by notification + full-screen alarm screen
-        const alarms = [];
-        const WD_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-        const addAlarm = (title, body, at) => { if (at && at.getTime() > nowMs + 5000) alarms.push({ id: 1000 + alarms.length, title, body, at: at.getTime() }); };
-        // Next 7 days of a daily/weekly repeating time, as individual alarms (re-planned every time the app opens or data changes).
-        const addRepeatingAlarms = (title, body, hh, mm, dayNames) => {
-          for (let k = 0; k < 7; k++) {
-            const d = new Date(); d.setDate(d.getDate() + k); d.setHours(hh, mm, 0, 0);
-            if (!dayNames.length || dayNames.length >= 7 || dayNames.includes(WD_NAMES[d.getDay()])) addAlarm(title, body, d);
-          }
-        };
-        // Trips: the chosen "days before" reminders at 9:00 AM, plus 1 hour before departure.
-        travelPlans.filter((t) => !t.completed && !t.dismissed && t.travelDate).forEach((t) => {
-          const dep = new Date(`${t.travelDate}T${t.travelTime || "09:00"}:00`);
-          if (isNaN(dep.getTime())) return;
-          const label = `${t.fromLocation} \u2192 ${t.toLocation}`;
-          (t.reminderOffsets || (t.reminderOffset ? [t.reminderOffset] : [])).forEach((o) => {
-            const opt = REMINDER_OPTIONS.find((x) => x.value === o); if (!opt || opt.days === 0) return;
-            const d = new Date(`${t.travelDate}T09:00:00`); d.setDate(d.getDate() - opt.days);
-            add(`Upcoming trip: ${label}`, `${t.mode} on ${formatDMY(t.travelDate)}${t.travelTime ? " at " + fmtTimeString12(t.travelTime) : ""}`, d, "trips", t);
-          });
-          add(`Trip in 1 hour: ${label}`, `${t.mode}${t.travelTime ? " at " + fmtTimeString12(t.travelTime) : ""}`, new Date(dep.getTime() - 3600000), "trips", t);
-        });
-        // Daily activities with a set time: one alarm per day for the next 7 days (re-planned whenever the app opens
-        // or a task changes), so a task already done/skipped today does NOT ring again today.
-        dailyItems.filter(isItemValid).filter((i) => i.scheduledTime).forEach((i) => {
-          const [hh, mm] = i.scheduledTime.split(":").map(Number); if (Number.isNaN(hh) || Number.isNaN(mm)) return;
-          const days = (i.days || []).filter((d) => NATIVE_WD[d]);
-          const rec = (dailyLogs[today] || {})[i.id] || {};
-          const doneToday = rec.status === "done" || rec.status === "skipped";
-          for (let k = 0; k < 7; k++) {
-            const d = new Date(); d.setDate(d.getDate() + k); d.setHours(hh, mm, 0, 0);
-            if (k === 0 && doneToday) continue;
-            if (days.length && days.length < 7 && !days.includes(WD_NAMES[d.getDay()])) continue;
-            add(i.name, "Time for your daily activity", d, "daily", i);
-          }
-        });
-        // My Day plans: the chosen alarm/notification at the plan time, an early reminder (reminderMinutes before),
-        // and every "days before" reminder picked in the form. Repeating plans fire weekly on their days.
-        const shiftWd = (wd, h, m, minus) => { const t = (((wd - 1) * 1440 + h * 60 + m - minus) % 10080 + 10080) % 10080; return { weekday: Math.floor(t / 1440) + 1, hour: Math.floor((t % 1440) / 60), minute: t % 60 }; };
-        myDayEvents.filter((e) => !e.completed && !e.dismissed && e.eventDate).forEach((e) => {
-          const title = e.title || "Plan";
-          const [hh, mm] = String(e.eventTime || "").split(":").map(Number);
-          const hasTime = !!e.eventTime && !Number.isNaN(hh) && !Number.isNaN(mm);
-          const body = `${hasTime ? fmtTimeString12(e.eventTime) : "Today"}${e.location ? " \u00b7 " + e.location : ""}`;
-          const early = e.reminderEnabled !== false ? (parseInt(e.reminderMinutes, 10) || 0) : 0;
-          const rd = (e.repeatDays || []).filter((d) => NATIVE_WD[d]);
-          if (hasTime && rd.length) {
-            rd.forEach((d) => {
-              list.push({ id: nid++, title, body, schedule: { on: { weekday: NATIVE_WD[d], hour: hh, minute: mm }, repeats: true, allowWhileIdle: true }, ...decor("plans", e) });
-              if (early > 0) list.push({ id: nid++, title: `${title} in ${early} min`, body, schedule: { on: shiftWd(NATIVE_WD[d], hh, mm, early), repeats: true, allowWhileIdle: true }, ...decor("plans", e) });
+          let perm = await LN.checkPermissions();
+          if (perm.display !== "granted") perm = await LN.requestPermissions();
+          if (perm.display !== "granted") return;
+          await ensureNotifChannels(LN);
+          const nowMs = Date.now();
+          const HORIZON_DAYS = 14, MAX_ALARMS = 480; // Android keeps at most ~500 alarms per app
+          const NATIVE_WD = { Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6, Sat: 7, Sun: 1 };
+          const WD_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+          const decor = (cat, item) => { const alarm = ((item && item.reminderType) || reminderStyle[cat]) === "alarm"; return { alarm, channelId: alarm ? "alarms_full" : "reminders_normal", extra: { alarm, kind: cat, itemId: (item && item.id) || "" } }; };
+          const mains = [], weekly = [];
+          const add = (title, body, at, cat, item) => { if (at && !isNaN(at.getTime()) && at.getTime() > nowMs + 3000) mains.push({ title, body, at, cat, item }); };
+          const hhmmOf = (v) => String(v || "").slice(0, 5);
+          // Trips: the chosen "days before" reminders at 9:00 AM, plus 1 hour before departure.
+          travelPlans.filter((t) => !t.completed && !t.dismissed && t.travelDate).forEach((t) => {
+            const dep = new Date(`${t.travelDate}T${hhmmOf(t.travelTime) || "09:00"}:00`);
+            if (isNaN(dep.getTime())) return;
+            const label = `${t.fromLocation} \u2192 ${t.toLocation}`;
+            (t.reminderOffsets || (t.reminderOffset ? [t.reminderOffset] : [])).forEach((o) => {
+              const opt = REMINDER_OPTIONS.find((x) => x.value === o); if (!opt || opt.days === 0) return;
+              const d = new Date(`${t.travelDate}T09:00:00`); d.setDate(d.getDate() - opt.days);
+              add(`Upcoming trip: ${label}`, `${t.mode} on ${formatDMY(t.travelDate)}${t.travelTime ? " at " + fmtTimeString12(t.travelTime) : ""}`, d, "trips", t);
             });
-          } else if (hasTime) {
-            const at = new Date(`${e.eventDate}T${e.eventTime}:00`);
-            add(title, body, at, "plans", e);
-            if (early > 0) add(`${title} in ${early} min`, body, new Date(at.getTime() - early * 60000), "plans", e);
-          }
-          if (!rd.length) (e.reminderOffsets || []).forEach((o) => {
-            const opt = REMINDER_OPTIONS.find((x) => x.value === o); if (!opt || !opt.days) return;
-            const d = new Date(`${e.eventDate}T09:00:00`); d.setDate(d.getDate() - opt.days);
-            add(`Upcoming: ${title}`, `${formatDMY(e.eventDate)}${hasTime ? " at " + fmtTimeString12(e.eventTime) : ""} \u2014 ${opt.label.toLowerCase()}`, d, "plans", e);
+            add(`Trip in 1 hour: ${label}`, `${t.mode}${t.travelTime ? " at " + fmtTimeString12(t.travelTime) : ""}`, new Date(dep.getTime() - 3600000), "trips", t);
           });
-        });
-        // High-importance channel: pops up on screen with sound + vibration, and shows on the lock screen.
-        try { if (LN.createChannel) { await LN.createChannel({ id: "reminders_normal", name: "Reminders (notification)", description: "Quiet reminders in the notification panel", importance: 3, visibility: 1, vibration: true }); await LN.createChannel({ id: "alarms_full", name: "Alarms", description: "Loud alarms. Tap to open the full-screen alarm.", importance: 5, visibility: 1, vibration: true, lights: true }); } } catch (e) {}
-        // Clear alarms scheduled by the old ringing-alarm plugin so nothing rings twice.
-        try { const OLD = cap.Plugins && cap.Plugins.AlarmRing; if (OLD && OLD.schedule) await OLD.schedule({ items: [] }); } catch (e) {}
-        if (list.length) await LN.schedule({ notifications: list.slice(0, 400) });
-      } catch (err) {}
-    }, 1500);
+          // Daily activities with a set time: one alarm per day for the next 14 days (re-planned whenever the app opens
+          // or a task changes). Today uses a same-day reschedule if there is one, and a task already done/skipped
+          // today does NOT ring again today.
+          dailyItems.filter(isItemValid).filter((i) => i.scheduledTime).forEach((i) => {
+            const days = (i.days || []).filter((d) => NATIVE_WD[d]);
+            const rec = (dailyLogs[today] || {})[i.id] || {};
+            const doneToday = rec.status === "done" || rec.status === "skipped";
+            for (let k = 0; k < HORIZON_DAYS; k++) {
+              const tm = (k === 0 && rec.rescheduledTime) ? rec.rescheduledTime : i.scheduledTime;
+              const [hh, mm] = String(tm).split(":").map(Number); if (Number.isNaN(hh) || Number.isNaN(mm)) continue;
+              const d = new Date(); d.setDate(d.getDate() + k); d.setHours(hh, mm, 0, 0);
+              if (k === 0 && doneToday) continue;
+              if (days.length && days.length < 7 && !days.includes(WD_NAMES[d.getDay()])) continue;
+              add(i.name, "Time for your daily activity", d, "daily", i);
+            }
+          });
+          // My Day plans: the chosen alarm/notification at the plan time, an early reminder (reminderMinutes before),
+          // and every "days before" reminder picked in the form. Repeating plans fire weekly on their days.
+          const shiftWd = (wd, h, m, minus) => { const t = (((wd - 1) * 1440 + h * 60 + m - minus) % 10080 + 10080) % 10080; return { weekday: Math.floor(t / 1440) + 1, hour: Math.floor((t % 1440) / 60), minute: t % 60 }; };
+          myDayEvents.filter((e) => !e.completed && !e.dismissed && e.eventDate).forEach((e) => {
+            const title = e.title || "Plan";
+            const [hh, mm] = String(e.eventTime || "").split(":").map(Number);
+            const hasTime = !!e.eventTime && !Number.isNaN(hh) && !Number.isNaN(mm);
+            const body = `${hasTime ? fmtTimeString12(e.eventTime) : "Today"}${e.location ? " \u00b7 " + e.location : ""}`;
+            const early = e.reminderEnabled !== false ? (parseInt(e.reminderMinutes, 10) || 0) : 0;
+            const rd = (e.repeatDays || []).filter((d) => NATIVE_WD[d]);
+            if (hasTime && rd.length) {
+              rd.forEach((d) => {
+                weekly.push({ title, body, on: { weekday: NATIVE_WD[d], hour: hh, minute: mm }, cat: "plans", item: e });
+                if (early > 0) weekly.push({ title: `${title} in ${early} min`, body, on: shiftWd(NATIVE_WD[d], hh, mm, early), cat: "plans", item: e });
+              });
+            } else if (hasTime) {
+              const at = new Date(`${e.eventDate}T${hhmmOf(e.eventTime)}:00`);
+              add(title, body, at, "plans", e);
+              if (early > 0) add(`${title} in ${early} min`, body, new Date(at.getTime() - early * 60000), "plans", e);
+            }
+            if (!rd.length) (e.reminderOffsets || []).forEach((o) => {
+              const opt = REMINDER_OPTIONS.find((x) => x.value === o); if (!opt || !opt.days) return;
+              const d = new Date(`${e.eventDate}T09:00:00`); d.setDate(d.getDate() - opt.days);
+              add(`Upcoming: ${title}`, `${formatDMY(e.eventDate)}${hasTime ? " at " + fmtTimeString12(e.eventTime) : ""} \u2014 ${opt.label.toLowerCase()}`, d, "plans", e);
+            });
+          });
+          // Shopping lists with a reminder time: a quiet notification at that exact time.
+          shoppingLists.filter((l) => l && !["paid", "completed", "cancelled"].includes(l.status) && !l.dismissed && l.reminderTime).forEach((l) => {
+            const date = l.reminderDate || l.shoppingDate || ""; if (!date) return;
+            const n = (l.items || []).length;
+            add(`Shopping: ${l.shopName || "List"}`, `${n} item${n === 1 ? "" : "s"}${l.location ? " \u00b7 " + l.location : ""}`, new Date(`${date}T${hhmmOf(l.reminderTime)}:00`), "shopping", l);
+          });
+          // Repayment reminders: 9:00 AM on the reminder day and on the due day, until paid.
+          repayments.filter((r) => r && !r.paid && r.dueDate).forEach((r) => {
+            const lead = reminderLeadDays(r.reminderOffset);
+            const nm = r.name || r.category || "Payment";
+            const amt = r.amount ? ` \u00b7 ${inr(r.amount)}` : "";
+            if (lead > 0) { const d = new Date(`${r.dueDate}T09:00:00`); d.setDate(d.getDate() - lead); add(`Upcoming payment: ${nm}`, `Due ${formatDMY(r.dueDate)}${amt}`, d, "repay", r); }
+            add(`Payment due today: ${nm}`, `${formatDMY(r.dueDate)}${amt}`, new Date(`${r.dueDate}T09:00:00`), "repay", r);
+          });
+          // Build the final list: soonest first, never more than Android's alarm limit.
+          mains.sort((x, y) => x.at.getTime() - y.at.getTime());
+          const list = []; let nid = 10;
+          weekly.forEach((w) => { if (list.length >= MAX_ALARMS) return; const dc = decor(w.cat, w.item); list.push({ id: nid, title: w.title, body: w.body, schedule: { on: w.on, repeats: true, allowWhileIdle: true }, channelId: dc.channelId, extra: dc.extra }); nid += 10; });
+          const FOLLOW_UP_WINDOW = nowMs + 3 * 86400000;
+          for (const m of mains) {
+            if (list.length >= MAX_ALARMS) break;
+            const dc = decor(m.cat, m.item);
+            list.push({ id: nid, title: m.title, body: m.body, schedule: { at: m.at, allowWhileIdle: true }, channelId: dc.channelId, extra: dc.extra });
+            // A real alarm keeps ringing: two more rings, 1 and 2 minutes later, until the alarm is opened / answered.
+            if (dc.alarm && m.at.getTime() < FOLLOW_UP_WINDOW && list.length + 2 <= MAX_ALARMS) {
+              [1, 2].forEach((n) => list.push({ id: nid + n, title: m.title, body: m.body, schedule: { at: new Date(m.at.getTime() + n * 60000), allowWhileIdle: true }, channelId: dc.channelId, extra: { ...dc.extra, followUp: n } }));
+            }
+            nid += 10;
+          }
+          if (gen !== schedGenRef.current) return; // a newer plan started while we were building this one
+          // Clear only the reminders this planner owns (never snoozed alarms), then schedule the fresh plan.
+          const pending = await LN.getPending();
+          const mine = ((pending && pending.notifications) || []).filter((n) => n.id < OWN_ID_MAX);
+          if (mine.length) await LN.cancel({ notifications: mine.map((n) => ({ id: n.id })) });
+          // The old ringing-alarm plugin (earlier APKs) is cleared so nothing rings twice.
+          try { const OLD = window.Capacitor.Plugins && window.Capacitor.Plugins.AlarmRing; if (OLD && OLD.schedule) await OLD.schedule({ items: [] }); } catch (e) {}
+          if (list.length) {
+            try { await LN.schedule({ notifications: list }); }
+            catch (e) { for (const n of list) { try { await LN.schedule({ notifications: [n] }); } catch (e2) {} } } // one bad entry must not drop the rest
+          }
+        } catch (err) {}
+      }).catch(() => {});
+    }, 1200);
     return () => clearTimeout(timer);
-  }, [travelPlans, dailyItems, myDayEvents, today, reminderStyle, dailyItems.filter((i) => { const r = (dailyLogs[today] || {})[i.id] || {}; return r.status === "done" || r.status === "skipped"; }).map((i) => i.id).join(",")]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [travelPlans, dailyItems, myDayEvents, shoppingLists, repayments, today, reminderStyle, dailySig, exactAlarmOk, notifBlocked]);
 
   // Tapping an alarm in the notification panel opens the full-screen alarm screen.
   useEffect(() => {
-    const cap = window.Capacitor; const LN = cap && cap.Plugins && cap.Plugins.LocalNotifications;
+    const LN = nativeLN();
     if (!LN || !LN.addListener) return undefined;
     let handle = null, gone = false;
     // addListener returns a Promise in newer Capacitor versions but a plain handle in older ones, so wrap it.
     try {
       Promise.resolve(LN.addListener("localNotificationActionPerformed", (ev) => {
         const n = ev && ev.notification;
-        if (n && n.extra && n.extra.alarm && !(alarmDoneRef.current && alarmDoneRef.current(n.extra.kind, n.extra.itemId))) setAlarmScreen({ title: n.title || "Alarm", body: n.body || "", kind: n.extra.kind || "", itemId: n.extra.itemId || "" });
+        if (!n || !n.extra || !n.extra.alarm) return;
+        if (alarmDoneRef.current && alarmDoneRef.current(n.extra.kind, n.extra.itemId)) { ackNativeAlarm(n.title, n.id); return; }
+        setAlarmScreen({ title: n.title || "Alarm", body: n.body || "", kind: n.extra.kind || "", itemId: n.extra.itemId || "", nid: n.id });
       })).then((h) => { if (gone) { try { h && h.remove && h.remove(); } catch (e) {} } else handle = h; }).catch(() => {});
     } catch (e) {}
     return () => { gone = true; if (handle && handle.remove) handle.remove(); };
   }, []);
+  // Once an alarm screen is up (from a tap, or opened by the app itself at the exact time) its re-rings are cancelled.
+  useEffect(() => {
+    if (!alarmScreen) return undefined;
+    const t = setTimeout(() => { ackNativeAlarm(alarmScreen.title, alarmScreen.nid); }, 1200);
+    return () => clearTimeout(t);
+  }, [alarmScreen]);
+  const snoozeTimersRef = useRef([]);
   const snoozeAlarm = async (mins) => {
-    const LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
-    if (LN && alarmScreen) { try { await LN.schedule({ notifications: [{ id: 990000 + (Date.now() % 9000), title: alarmScreen.title, body: alarmScreen.body, channelId: "alarms_full", extra: { alarm: true, kind: alarmScreen.kind || "", itemId: alarmScreen.itemId || "" }, schedule: { at: new Date(Date.now() + mins * 60000), allowWhileIdle: true } }] }); } catch (e) {} }
-    setAlarmScreen(null);
+    const a = alarmScreen; setAlarmScreen(null);
+    if (!a) return;
+    const atMs = Date.now() + mins * 60000;
+    // Re-open the alarm screen at the snooze time if the app is still open (browser/PWA too, where there is no native alarm).
+    try {
+      const tid = setTimeout(() => {
+        if (atMs + 120000 < Date.now()) return; // app was asleep far past it: the notification already did the job
+        if (alarmDoneRef.current && alarmDoneRef.current(a.kind, a.itemId)) return;
+        setAlarmScreen((cur) => cur || { title: a.title, body: a.body, kind: a.kind || "", itemId: a.itemId || "" });
+      }, mins * 60000 + 30);
+      snoozeTimersRef.current.push(tid);
+    } catch (e) {}
+    const LN = nativeLN();
+    if (LN) {
+      await ackNativeAlarm(a.title, a.nid);
+      try {
+        await ensureNotifChannels(LN);
+        const id = SNOOZE_ID_BASE + (Date.now() % 900000) * 10;
+        const base = { title: a.title, body: a.body, channelId: "alarms_full", extra: { alarm: true, kind: a.kind || "", itemId: a.itemId || "" } };
+        await LN.schedule({ notifications: [
+          { id, ...base, schedule: { at: new Date(atMs), allowWhileIdle: true } },
+          { id: id + 1, ...base, extra: { ...base.extra, followUp: 1 }, schedule: { at: new Date(atMs + 60000), allowWhileIdle: true } },
+        ] });
+      } catch (e) {}
+    }
   };
+  // Dismiss: close the alarm and stop its re-rings.
+  const closeAlarm = () => { const a = alarmScreen; setAlarmScreen(null); if (a) ackNativeAlarm(a.title, a.nid); };
   // Done: mark the task finished (daily activity / trip / My Day plan) and close the alarm.
   const doneAlarm = () => {
     const a = alarmScreen; setAlarmScreen(null);
     if (!a) return;
+    ackNativeAlarm(a.title, a.nid);
     try {
       let kind = a.kind, id = a.itemId;
       if (!id) { // older alarms carry no id: match by title
@@ -5110,48 +5220,69 @@ function LifeTracker() {
 
   // ---- In-app alarms: when the app is open (browser/PWA, or the APK in the foreground) the system can't pop a
   // notification, so open the full-screen alarm ourselves at the chosen time for plans, daily activities and trips.
+  // A precise timer is set for the next alarm, so it opens at the exact second instead of waiting for the clock tick.
   useEffect(() => {
-    if (alarmScreen) return;
+    if (alarmScreen) return undefined;
+    let nextAt = Infinity;
     const fire = (key, title, body, kind, itemId, at) => {
       const diff = now.getTime() - at.getTime();
-      if (diff < 0 || diff > 120000 || notifiedRef.current[key]) return false;
+      if (diff < 0) { if (at.getTime() < nextAt) nextAt = at.getTime(); return false; }
+      if (diff > 120000 || notifiedRef.current[key]) return false;
       notifiedRef.current[key] = true;
       if (alarmDoneRef.current && alarmDoneRef.current(kind, itemId)) return false;
       setAlarmScreen({ title, body, kind, itemId });
       return true;
     };
     const atToday = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); if (Number.isNaN(h) || Number.isNaN(m)) return null; const d = new Date(now); d.setHours(h, m, 0, 0); return d; };
-    for (const e of myDayEvents) {
-      if (e.completed || e.dismissed || !e.eventTime || (e.reminderType || reminderStyle.plans) !== "alarm" || !myDayEventOccursOn(e, today)) continue;
-      const at = atToday(e.eventTime); if (!at) continue;
-      if (fire(`alarm:plans:${e.id}:${today}:${e.eventTime}`, e.title || "Plan", `${fmtTimeString12(e.eventTime)}${e.location ? " \u00b7 " + e.location : ""}`, "plans", e.id, at)) return;
-      const early = e.reminderEnabled !== false ? (parseInt(e.reminderMinutes, 10) || 0) : 0;
-      if (early > 0 && fire(`alarm:plans-early:${e.id}:${today}:${e.eventTime}`, `${e.title || "Plan"} in ${early} min`, fmtTimeString12(e.eventTime), "plans", e.id, new Date(at.getTime() - early * 60000))) return;
-    }
-    for (const i of validItems) {
-      const t = effectiveScheduledTime(i);
-      if (i.type === "interval" || !t || (i.reminderType || reminderStyle.daily) !== "alarm") continue;
-      const at = atToday(t); if (!at) continue;
-      if (fire(`alarm:daily:${i.id}:${today}:${t}`, i.name, "Time for your daily activity", "daily", i.id, at)) return;
-    }
-    for (const tp of travelPlans) {
-      if (tp.completed || tp.dismissed || tp.travelDate !== today || !tp.travelTime || (tp.reminderType || reminderStyle.trips) !== "alarm") continue;
-      const dep = atToday(tp.travelTime); if (!dep) continue;
-      if (fire(`alarm:trips:${tp.id}:${today}`, `Trip in 1 hour: ${tp.fromLocation} \u2192 ${tp.toLocation}`, `${tp.mode} at ${fmtTimeString12(tp.travelTime)}`, "trips", tp.id, new Date(dep.getTime() - 3600000))) return;
-    }
+    const run = () => {
+      for (const e of myDayEvents) {
+        if (e.completed || e.dismissed || !e.eventTime || (e.reminderType || reminderStyle.plans) !== "alarm" || !myDayEventOccursOn(e, today)) continue;
+        const at = atToday(e.eventTime); if (!at) continue;
+        if (fire(`alarm:plans:${e.id}:${today}:${e.eventTime}`, e.title || "Plan", `${fmtTimeString12(e.eventTime)}${e.location ? " \u00b7 " + e.location : ""}`, "plans", e.id, at)) return true;
+        const early = e.reminderEnabled !== false ? (parseInt(e.reminderMinutes, 10) || 0) : 0;
+        if (early > 0 && fire(`alarm:plans-early:${e.id}:${today}:${e.eventTime}`, `${e.title || "Plan"} in ${early} min`, fmtTimeString12(e.eventTime), "plans", e.id, new Date(at.getTime() - early * 60000))) return true;
+      }
+      for (const i of validItems) {
+        const t = effectiveScheduledTime(i);
+        if (i.type === "interval" || !t || (i.reminderType || reminderStyle.daily) !== "alarm") continue;
+        const at = atToday(t); if (!at) continue;
+        if (fire(`alarm:daily:${i.id}:${today}:${t}`, i.name, "Time for your daily activity", "daily", i.id, at)) return true;
+      }
+      for (const tp of travelPlans) {
+        if (tp.completed || tp.dismissed || tp.travelDate !== today || !tp.travelTime || (tp.reminderType || reminderStyle.trips) !== "alarm") continue;
+        const dep = atToday(tp.travelTime); if (!dep) continue;
+        if (fire(`alarm:trips:${tp.id}:${today}`, `Trip in 1 hour: ${tp.fromLocation} \u2192 ${tp.toLocation}`, `${tp.mode} at ${fmtTimeString12(tp.travelTime)}`, "trips", tp.id, new Date(dep.getTime() - 3600000))) return true;
+      }
+      return false;
+    };
+    if (run() || nextAt === Infinity) return undefined;
+    const tm = setTimeout(() => setNow(new Date()), Math.max(20, Math.min(nextAt - Date.now() + 40, 2147000000)));
+    return () => clearTimeout(tm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, myDayEvents, dailyItems, dailyLogs, travelPlans, reminderStyle, today, alarmScreen]);
-  // Ring + vibrate while the full-screen alarm is showing.
+  // Ring + vibrate while the full-screen alarm is showing, and keep the screen awake so it can be seen and answered.
   useEffect(() => {
     if (!alarmScreen) return undefined;
-    let ctx = null;
+    let ctx = null, step = 0;
     const beep = () => {
-      try { if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) ctx = new AC(); } if (ctx) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = 880; g.gain.value = 0.2; o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.35); } } catch (e) {}
+      try {
+        if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) ctx = new AC(); }
+        if (ctx) {
+          if (ctx.state === "suspended" && ctx.resume) ctx.resume().catch(() => {});
+          const o = ctx.createOscillator(), g = ctx.createGain();
+          o.type = "square"; o.frequency.value = (step++ % 2) ? 1175 : 880;
+          const t0 = ctx.currentTime;
+          g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.45, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4);
+          o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + 0.42);
+        }
+      } catch (e) {}
       try { if (navigator.vibrate) navigator.vibrate([300, 150, 300]); } catch (e) {}
     };
     beep();
     const t = setInterval(beep, 1500);
-    return () => { clearInterval(t); try { if (ctx) ctx.close(); } catch (e) {} };
+    let lock = null, gone = false;
+    try { if (navigator.wakeLock && navigator.wakeLock.request) navigator.wakeLock.request("screen").then((l) => { if (gone) { try { l.release(); } catch (e) {} } else lock = l; }).catch(() => {}); } catch (e) {}
+    return () => { gone = true; clearInterval(t); try { if (ctx) ctx.close(); } catch (e) {} try { if (lock) lock.release(); } catch (e) {} };
   }, [alarmScreen]);
 
   // ---- Evening nudge: one notification per day, only after 8pm, only if there's something
@@ -9830,6 +9961,18 @@ function LifeTracker() {
               <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 4, lineHeight: 1.4 }}>Reminders cannot ring. Open phone Settings, Apps, Life Tracker, Notifications and turn them on.</div>
             </Card>
           )}
+          {window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() && (
+            <Card style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: exactAlarmOk ? INK : CORAL }}>{exactAlarmOk ? "Exact timing is on" : "Exact timing is off"}</div>
+              <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 4, lineHeight: 1.4 }}>{exactAlarmOk ? "Alarms and reminders fire at the exact minute, even when the app is closed or the screen is locked." : "Android may delay alarms by several minutes until you allow \u201cAlarms & reminders\u201d for this app."}</div>
+              {!exactAlarmOk && (
+                <button onClick={async () => { const LN = nativeLN(); try { if (LN && LN.changeExactNotificationSetting) await LN.changeExactNotificationSetting(); } catch (e) {} }} style={{ marginTop: 10, width: "100%", padding: "11px 10px", borderRadius: 10, border: "none", background: BRASS, color: "#FFFFFF", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Allow exact alarms</button>
+              )}
+              <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 12, lineHeight: 1.45 }}>To make sure alarms ring when the phone is asleep: in phone Settings \u2192 Apps \u2192 Life Tracker \u2192 Battery, choose <b>Unrestricted</b> (or turn off battery optimization). Some phones (Xiaomi, Oppo, Vivo, Samsung, Realme) also need <b>Autostart</b> on and the app locked in Recent apps. Keep the phone's volume and Do Not Disturb settings in mind, because they decide whether an alarm makes sound.</div>
+              <button onClick={testNotifications} style={{ marginTop: 10, width: "100%", padding: "11px 10px", borderRadius: 10, border: `1.5px solid ${BRASS}`, background: "transparent", color: BRASS, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Test alarm in 10 seconds</button>
+              {notifStatus ? <div style={{ fontSize: 13, color: INK, marginTop: 8, lineHeight: 1.4 }}>{notifStatus}</div> : null}
+            </Card>
+          )}
               </>)}
               {moreSection === "storage" && (<>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -10153,7 +10296,7 @@ function doPost(e) {
             {true ? <button onClick={doneAlarm} style={{ padding: "16px 10px", borderRadius: 14, border: "none", background: "#22C55E", color: "#FFFFFF", fontSize: 17, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{"\u2713"} Done</button> : null}
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={() => snoozeAlarm(10)} style={{ flex: 1, padding: "15px 10px", borderRadius: 14, border: "1.5px solid rgba(255,255,255,0.7)", background: "transparent", color: "#FFFFFF", fontSize: 16, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Snooze 10 min</button>
-              <button onClick={() => setAlarmScreen(null)} style={{ flex: 1, padding: "15px 10px", borderRadius: 14, border: "none", background: "#FFFFFF", color: "#1E4FCB", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Dismiss</button>
+              <button onClick={closeAlarm} style={{ flex: 1, padding: "15px 10px", borderRadius: 14, border: "none", background: "#FFFFFF", color: "#1E4FCB", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Dismiss</button>
             </div>
           </div>
         </div>
