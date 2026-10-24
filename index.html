@@ -989,14 +989,14 @@ function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // ---- App updates (shown on the More screen only) ----
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
 // repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
-const APP_VERSION = "2026.10.24.5";
+const APP_VERSION = "2026.10.24.6";
 // Shown on More > App update ("What's new"). Keep each line short and simple; add a new block for every release.
 const APP_CHANGELOG = {
   date: "24 Oct 2026",
   items: [
-    ["fixed", "Back now works in the Android app: More option, then More list."],
-    ["fixed", "Back on a main page closes the app right away."],
-    ["better", "Back steps through popups and forms one at a time."],
+    ["new", "Notification mode now has System default."],
+    ["new", "System default uses your phone\u2019s own notification sound and settings."],
+    ["better", "The More menu shows System default when it is selected."],
   ],
 };
 const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
@@ -2015,7 +2015,8 @@ const NOTIF_CHANNELS = [
   { id: "reminders_dnd", name: "Reminders (Do Not Disturb)", description: "Silent, no vibration", importance: 2, visibility: 1, vibration: false },
   { id: "alarms_full", name: "Alarms", description: "Loud alarms. Tap to open the full-screen alarm.", importance: 5, visibility: 1, vibration: true, lights: true },
 ];
-// Notification mode: "on" (normal), "dnd" (silent, no vibration, no alarm pop-up) or "mute" (no sound, vibration only).
+// Notification mode: "on" (app sounds), "dnd" (silent, no vibration, no alarm pop-up), "mute" (no sound, vibration only) or
+// "system" (the phone's own notification sound and settings; no app ringing or sound choice).
 function modeChannel(mode, normal) { return mode === "dnd" ? "reminders_dnd" : mode === "mute" ? "reminders_mute" : normal; }
 function nativeLN() {
   const cap = window.Capacitor;
@@ -3230,7 +3231,7 @@ function LifeTracker() {
     } catch (e) { return undefined; }
   }, []);
   const darkMode = darkPref === "on" || (darkPref === "system" && systemDark);
-  const [notifMode, setNotifMode] = useState(() => { const v = readPersistedSync("notifMode", "on"); return v === "dnd" || v === "mute" ? v : "on"; });
+  const [notifMode, setNotifMode] = useState(() => { const v = readPersistedSync("notifMode", "on"); return v === "dnd" || v === "mute" || v === "system" ? v : "on"; });
   const notifModeRef = useRef(notifMode);
   notifModeRef.current = notifMode;
   // BRASS/BRASS_DIM/TEAL/CORAL are CSS custom-property references ("var(--brass)") so solid
@@ -3593,7 +3594,7 @@ function LifeTracker() {
   // Notification sound: "Default" leaves the phone's own notification sound alone. A chosen sound plays with in-app notifications.
   const notify = (title, opts) => {
     const m = notifModeRef.current;
-    const n = new Notification(title, m === "on" ? opts : { ...opts, silent: true });
+    const n = new Notification(title, (m === "on" || m === "system") ? opts : { ...opts, silent: true });
     try {
       if (m === "on") { const c = soundPrefsRef.current && soundPrefsRef.current.notification; if (c && c.id !== "default") playChoice(c, "notification"); }
       else if (m === "mute" && navigator.vibrate) navigator.vibrate([200, 100, 200]);
@@ -5454,13 +5455,13 @@ function LifeTracker() {
     if (!alarmScreen) return undefined;
     let ctx = null, step = 0;
     const nm = notifModeRef.current;
-    const sp = (soundPrefsRef.current && soundPrefsRef.current.alarm) || { id: "default" };
+    const sp = nm === "system" ? { id: "default" } : ((soundPrefsRef.current && soundPrefsRef.current.alarm) || { id: "default" });
     let customAudio = null;
     if (nm === "on" && sp.id === "custom" && sp.data) {
       try { customAudio = new Audio(sp.data); customAudio.loop = true; customAudio.addEventListener("error", () => { customAudio = null; }); } catch (e) { customAudio = null; }
     }
     const beep = () => {
-      if (nm === "on") try {
+      if (nm === "on" || nm === "system") try {
         if (customAudio) { if (customAudio.paused) customAudio.play().catch(() => {}); }
         else {
           if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) ctx = new AC(); }
@@ -10045,7 +10046,7 @@ function LifeTracker() {
                 { id: "darkmode", icon: darkMode ? Moon : Sun, color: "#5856D6", title: "Dark mode", sub: darkPref === "system" ? "System default" : darkPref === "on" ? "On" : "Off" },
               ] },
               { label: "Notifications", items: [
-                { id: "notifmode", icon: notifMode === "on" ? Bell : BellOff, color: "#FF3B30", title: "Notification mode", sub: notifMode === "dnd" ? "DND (Do Not Disturb)" : notifMode === "mute" ? "Mute" : "On" },
+                { id: "notifmode", icon: (notifMode === "on" || notifMode === "system") ? Bell : BellOff, color: "#FF3B30", title: "Notification mode", sub: notifMode === "dnd" ? "DND (Do Not Disturb)" : notifMode === "mute" ? "Mute" : notifMode === "system" ? "System default" : "On" },
                 { id: "reminders", icon: Bell, color: "#F59E0B", title: "Reminders & alarms", sub: notifBlocked ? "Notifications are blocked" : `Daily: ${reminderStyle.daily} \u00b7 Plans: ${reminderStyle.plans} \u00b7 Trips: ${reminderStyle.trips}`, dot: !!notifBlocked },
                 ...(isNative ? [] : [{ id: "push", icon: Smartphone, color: "#8B5CF6", title: "Push notifications", sub: pushSubscription ? "This device is registered" : "Not set up" }]),
               ] },
@@ -10163,7 +10164,7 @@ function LifeTracker() {
                 const isDark = moreSection === "darkmode";
                 const opts = isDark
                   ? [{ v: "on", t: "On", d: "Always use the dark theme." }, { v: "off", t: "Off", d: "Always use the light theme." }, { v: "system", t: "System default", d: "Match your phone\u2019s theme. It changes by itself when the phone does." }]
-                  : [{ v: "on", t: "On", d: "Reminders and alarms use sound and vibration." }, { v: "dnd", t: "DND (Do Not Disturb)", d: "Reminders arrive silently in the notification panel. No sound, no vibration, no alarm pop-up." }, { v: "mute", t: "Mute", d: "No sound. Reminders and alarms only vibrate." }];
+                  : [{ v: "on", t: "On", d: "Reminders and alarms use sound and vibration." }, { v: "dnd", t: "DND (Do Not Disturb)", d: "Reminders arrive silently in the notification panel. No sound, no vibration, no alarm pop-up." }, { v: "mute", t: "Mute", d: "No sound. Reminders and alarms only vibrate." }, { v: "system", t: "System default", d: "Use your phone\u2019s own notification sound and settings. Your phone\u2019s volume, silent mode and Do Not Disturb decide what you hear." }];
                 const cur = isDark ? darkPref : notifMode;
                 const pick = (v) => { if (isDark) setDarkPref(v); else { setNotifMode(v); if (!remindersEnabled) toggleReminders(); } };
                 return (<>
