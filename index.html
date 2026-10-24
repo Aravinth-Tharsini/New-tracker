@@ -650,17 +650,37 @@ function computeRechargePlan(planAmount, durationValue, durationUnit, startDate)
   return { avgDailyCost: round(avgDailyCost), nextDate: addDays(startDate, days), days: Math.round(days) };
 }
 function inr(n) { return "₹" + Math.round(n).toLocaleString("en-IN"); }
-function fmtClock12(d) { return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" }); }
-function fmtTime(iso) { return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); }
+// ---- Global clock format (12h / 24h). Only changes how times are shown and entered; stored times stay "HH:MM" / ISO. ----
+let __clockFmt = (() => { try { const v = readPersistedSync("clockFormat", null); return v === "12h" || v === "24h" ? v : null; } catch (e) { return null; } })();
+const __clockListeners = new Set();
+function getClockFmtRaw() { return __clockFmt; }
+function getClockFmt() { return __clockFmt || "12h"; }
+function setClockFormat(v) {
+  if (v !== "12h" && v !== "24h") return;
+  __clockFmt = v;
+  try { window.storage.set("clockFormat", JSON.stringify(v), false).catch(() => {}); } catch (e) {}
+  __clockListeners.forEach((f) => { try { f(v); } catch (e) {} });
+}
+function useClockFormat() {
+  const [v, setV] = useState(__clockFmt);
+  useEffect(() => { const f = (x) => setV(x); __clockListeners.add(f); setV(__clockFmt); return () => { __clockListeners.delete(f); }; }, []);
+  return v;
+}
+function fmtHMS(h, m, s) {
+  const sec = s == null ? "" : ":" + pad2(s);
+  if (getClockFmt() === "24h") return `${pad2(h)}:${pad2(m)}${sec}`;
+  const period = h >= 12 ? "PM" : "AM"; let h12 = h % 12; if (h12 === 0) h12 = 12;
+  return `${pad2(h12)}:${pad2(m)}${sec} ${period}`;
+}
+function fmtClock12(d) { return fmtHMS(d.getHours(), d.getMinutes(), d.getSeconds()); }
+function fmtTime(iso) { const d = new Date(iso); return isNaN(d.getTime()) ? "" : fmtHMS(d.getHours(), d.getMinutes()); }
 
 function hhmm(d) { const dt = d instanceof Date ? d : new Date(d); return `${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`; }
 function fmtTimeString12(hhmmStr) {
   if (!hhmmStr) return "";
   const [h, m] = hhmmStr.split(":").map(Number);
   if (isNaN(h)) return "";
-  const period = h >= 12 ? "PM" : "AM";
-  let h12 = h % 12; if (h12 === 0) h12 = 12;
-  return `${h12}:${pad2(m)} ${period}`;
+  return fmtHMS(h, isNaN(m) ? 0 : m);
 }
 function timeOfDayLabel(hhmmStr) {
   if (!hhmmStr) return "";
@@ -1959,8 +1979,7 @@ function minutesSinceMidnight(iso) { const d = new Date(iso); return d.getHours(
 function fmtClockFromMinutes(min) {
   if (min == null) return "-";
   const h24 = Math.floor(min / 60) % 24, m = Math.round(min % 60);
-  const period = h24 >= 12 ? "PM" : "AM"; let h12 = h24 % 12; if (h12 === 0) h12 = 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+  return fmtHMS(h24, m);
 }
 function defaultLog() { return { expenses: [], intervalLogs: {} }; }
 function getIntervalLogs(log, itemId) {
@@ -3062,104 +3081,100 @@ function InsightsHeroArt({ accent = BRASS }) {
 }
 function TextField(props) { return <input {...props} style={{ background: PANEL_2, border: "none", borderRadius: 12, padding: "10px 11px", color: INK, fontSize: 16, outline: "none", minWidth: 0, boxSizing: "border-box", width: "100%", ...props.style }} />; }
 function Select(props) { return <select {...props} style={{ background: PANEL_2, border: "none", borderRadius: 10, color: INK, fontSize: 16, padding: "10px 8px", outline: "none", minWidth: 0, boxSizing: "border-box", width: "100%", ...props.style }}>{props.children}</select>; }
-// 12-hour time picker (hour / minute / AM-PM) so manually set times match the 12-hour live clock format.
-function Time12Input({ value, onChange, style }) {
-  const parsed = parseHHMMSafe(value);
-  const { h12, period } = to12hParts(parsed.h);
-
-  // Keep raw typed text locally so digits aren't clamped/reformatted mid-keystroke
-  // (e.g. typing "6" was being forced back before a second digit could follow).
-  const [hourDraft, setHourDraft] = useState(null);
-  const [minDraft, setMinDraft] = useState(null);
-
-  const hourDisplay = hourDraft != null ? hourDraft : String(h12);
-  const minDisplay = minDraft != null ? minDraft : pad2(parsed.m);
-
-  const commitHour = (raw) => {
-    const digits = raw.replace(/[^0-9]/g, "");
-    if (digits === "") return;
-    const nh12 = Math.min(12, Math.max(1, Number(digits)));
-    const h = from12hParts(nh12, period);
-    onChange(buildHHMM(h, parsed.m));
+// ---- Time entry: one tappable field + one shared picker (see <ClockHost/>) so every time input uses the global format. ----
+const WHEEL_H = 44;
+const __clockUI = { open: null };
+function openClockUI(req) { if (__clockUI.open) __clockUI.open(req); }
+function WheelCol({ items, index, onIndex, width }) {
+  const ref = useRef(null);
+  const last = useRef(index);
+  useEffect(() => { if (ref.current) ref.current.scrollTop = index * WHEEL_H; }, []);
+  const onScroll = () => {
+    const el = ref.current; if (!el) return;
+    const i = Math.max(0, Math.min(items.length - 1, Math.round(el.scrollTop / WHEEL_H)));
+    if (i !== last.current) { last.current = i; onIndex(i); }
   };
-
-  const commitMinute = (raw) => {
-    const digits = raw.replace(/[^0-9]/g, "");
-    if (digits === "") return;
-    const nm = Math.min(59, Math.max(0, Number(digits)));
-    onChange(buildHHMM(parsed.h, nm));
-  };
-
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 4, ...style }}>
-      <TextField
-        type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2}
-        value={hourDisplay}
-        onChange={(e) => { const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 2); setHourDraft(digits); commitHour(digits); }}
-        onFocus={(e) => e.target.select()}
-        onBlur={() => setHourDraft(null)}
-        style={{ width: 44, textAlign: "center", padding: "8px 4px", flexShrink: 0 }}
-      />
-      <span style={{ color: INK_FAINT, fontWeight: 700 }}>:</span>
-      <TextField
-        type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2}
-        value={minDisplay}
-        onChange={(e) => { const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 2); setMinDraft(digits); commitMinute(digits); }}
-        onFocus={(e) => e.target.select()}
-        onBlur={() => setMinDraft(null)}
-        style={{ width: 44, textAlign: "center", padding: "8px 4px", flexShrink: 0 }}
-      />
-      <Select value={period} onChange={(e) => { const h = from12hParts(h12, e.target.value); onChange(buildHHMM(h, parsed.m)); }} style={{ width: 66, padding: "8px 4px", flexShrink: 0 }}>
-        <option value="AM">AM</option>
-        <option value="PM">PM</option>
-      </Select>
+    <div ref={ref} className="lt-wheel" onScroll={onScroll} style={{ width, height: WHEEL_H * 5, overflowY: "auto", scrollSnapType: "y mandatory", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", overscrollBehavior: "contain", position: "relative", zIndex: 1 }}>
+      <div style={{ height: WHEEL_H * 2 }} />
+      {items.map((it, i) => {
+        const d = Math.abs(i - index);
+        return <div key={i} onClick={() => { if (ref.current && ref.current.scrollTo) ref.current.scrollTo({ top: i * WHEEL_H, behavior: "smooth" }); else if (ref.current) ref.current.scrollTop = i * WHEEL_H; }} style={{ height: WHEEL_H, scrollSnapAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: mono, fontSize: d === 0 ? 26 : 21, fontWeight: d === 0 ? 700 : 400, color: d === 0 ? BRASS : INK_DIM, opacity: d === 0 ? 1 : d === 1 ? 0.6 : 0.28, cursor: "pointer", userSelect: "none" }}>{it}</div>;
+      })}
+      <div style={{ height: WHEEL_H * 2 }} />
     </div>
   );
 }
-// 24-hour time picker (hour 00-23 / minute 00-59) with the same draft-preserving behavior as
-// Time12Input, so a leading zero (e.g. typing "0" then "6" for 06) is never stripped mid-keystroke.
-function Time24Input({ value, onChange, style }) {
-  const parsed = parseHHMMSafe(value);
-
-  const [hourDraft, setHourDraft] = useState(null);
-  const [minDraft, setMinDraft] = useState(null);
-
-  const hourDisplay = hourDraft != null ? hourDraft : pad2(parsed.h);
-  const minDisplay = minDraft != null ? minDraft : pad2(parsed.m);
-
-  const commitHour = (raw) => {
-    const digits = raw.replace(/[^0-9]/g, "");
-    if (digits === "") return;
-    const nh = Math.min(23, Math.max(0, Number(digits)));
-    onChange(buildHHMM(nh, parsed.m));
-  };
-
-  const commitMinute = (raw) => {
-    const digits = raw.replace(/[^0-9]/g, "");
-    if (digits === "") return;
-    const nm = Math.min(59, Math.max(0, Number(digits)));
-    onChange(buildHHMM(parsed.h, nm));
-  };
-
+function ClockPickerSheet({ value, onCancel, onSet }) {
+  const is24 = getClockFmt() === "24h";
+  const p = parseHHMMSafe(value);
+  const [h24, setH24] = useState(p.h);
+  const [mm, setMm] = useState(p.m);
+  const pm = h24 >= 12;
+  const hourItems = is24 ? Array.from({ length: 24 }, (_, i) => pad2(i)) : Array.from({ length: 12 }, (_, i) => pad2(i + 1));
+  const hourIdx = is24 ? h24 : (h24 % 12 === 0 ? 11 : (h24 % 12) - 1);
+  const minItems = Array.from({ length: 60 }, (_, i) => pad2(i));
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 4, ...style }}>
-      <TextField
-        type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} placeholder="HH"
-        value={hourDisplay}
-        onChange={(e) => { const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 2); setHourDraft(digits); commitHour(digits); }}
-        onFocus={(e) => e.target.select()}
-        onBlur={() => setHourDraft(null)}
-        style={{ width: "100%", textAlign: "center" }}
-      />
-      <span style={{ color: INK_FAINT, fontWeight: 700 }}>:</span>
-      <TextField
-        type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} placeholder="MM"
-        value={minDisplay}
-        onChange={(e) => { const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 2); setMinDraft(digits); commitMinute(digits); }}
-        onFocus={(e) => e.target.select()}
-        onBlur={() => setMinDraft(null)}
-        style={{ width: "100%", textAlign: "center" }}
-      />
+    <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: PANEL, borderRadius: "28px 28px 0 0", padding: "10px 20px calc(18px + env(safe-area-inset-bottom))", boxShadow: "0 -10px 40px rgba(0,0,0,.3)" }}>
+      <style>{".lt-wheel::-webkit-scrollbar{display:none}"}</style>
+      <div style={{ width: 44, height: 5, borderRadius: 3, background: LINE, margin: "0 auto 12px" }} />
+      <div style={{ textAlign: "center", fontSize: 16, fontWeight: 700, color: INK }}>Set time</div>
+      <div style={{ textAlign: "center", fontFamily: mono, fontSize: 34, fontWeight: 700, color: BRASS, margin: "8px 0 4px" }}>{fmtHMS(h24, mm)}</div>
+      <div style={{ position: "relative", height: WHEEL_H * 5 }}>
+        <div style={{ position: "absolute", left: 0, right: 0, top: WHEEL_H * 2, height: WHEEL_H, borderRadius: 14, background: PANEL_2 }} />
+        <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <WheelCol items={hourItems} index={hourIdx} width={72} onIndex={(i) => setH24(is24 ? i : from12hParts(i + 1, pm ? "PM" : "AM"))} />
+          <div style={{ fontFamily: mono, fontSize: 26, fontWeight: 700, color: INK_FAINT, zIndex: 1 }}>:</div>
+          <WheelCol items={minItems} index={mm} width={72} onIndex={setMm} />
+          {!is24 && <WheelCol items={["AM", "PM"]} index={pm ? 1 : 0} width={72} onIndex={(i) => setH24(from12hParts(hourIdx + 1, i === 1 ? "PM" : "AM"))} />}
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 12, marginTop: 14 }}>
+        <button onClick={onCancel} style={{ flex: 1, height: 48, borderRadius: 16, border: "none", background: PANEL_2, color: INK, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+        <button onClick={() => onSet(buildHHMM(h24, mm))} style={{ flex: 1, height: 48, borderRadius: 16, border: "none", background: BRASS, color: "#FFFFFF", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Set</button>
+      </div>
+      <div style={{ textAlign: "center", fontSize: 11, color: INK_FAINT, marginTop: 10 }}>{is24 ? "24-hour \u00b7 00:00\u201323:59" : "12-hour \u00b7 AM/PM"}</div>
+    </div>
+  );
+}
+function ClockHost() {
+  const [req, setReq] = useState(null);
+  const [step, setStep] = useState("picker");
+  useClockFormat();
+  useEffect(() => { __clockUI.open = (r) => { setStep(getClockFmtRaw() ? "picker" : "format"); setReq(r); }; return () => { __clockUI.open = null; }; }, []);
+  if (!req) return null;
+  const close = () => setReq(null);
+  const pick = (v) => { setClockFormat(v); setStep("picker"); };
+  return (
+    <div onClick={close} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} style={{ position: "fixed", inset: 0, zIndex: 20050, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: step === "format" ? "center" : "flex-end", justifyContent: "center", padding: step === "format" ? 20 : 0 }}>
+      {step === "format" ? (
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 340, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 24, padding: "22px 14px 16px", boxShadow: "0 20px 60px rgba(0,0,0,.35)" }}>
+          <div style={{ textAlign: "center", fontSize: 18, fontWeight: 700, color: INK }}>Choose clock format</div>
+          <div style={{ textAlign: "center", fontSize: 12.5, color: INK_DIM, margin: "6px 10px 16px", lineHeight: 1.4 }}>Used for every time in the app. You can change it later in Settings.</div>
+          {[["12h", "12-hour", "06:30 PM"], ["24h", "24-hour", "18:30"]].map(([v, t, sm]) => (
+            <button key={v} onClick={() => pick(v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", marginBottom: 10, background: PANEL_2, border: `1px solid ${LINE}`, borderRadius: 18, cursor: "pointer", textAlign: "left", color: INK }}>
+              <span style={{ width: 36, height: 36, borderRadius: 18, background: PANEL, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Clock size={20} color="var(--brass)" /></span>
+              <span style={{ flex: 1 }}><span style={{ display: "block", fontSize: 15, fontWeight: 700 }}>{t}</span><span style={{ display: "block", fontSize: 12.5, color: INK_DIM, fontFamily: mono, marginTop: 2 }}>{sm}</span></span>
+              <span style={{ width: 20, height: 20, borderRadius: 10, border: `1.5px solid ${INK_FAINT}`, flexShrink: 0 }} />
+            </button>
+          ))}
+          <div style={{ textAlign: "center", fontSize: 11, color: INK_FAINT, marginTop: 4 }}>Asked only once {"\u00b7"} then opens the clock</div>
+        </div>
+      ) : (
+        <ClockPickerSheet key={req.id} value={req.value} onCancel={close} onSet={(v) => { try { req.onSet(v); } catch (e) {} close(); }} />
+      )}
+    </div>
+  );
+}
+function TimeInput({ value, onChange, style, allowClear, placeholder }) {
+  useClockFormat();
+  const has = !!value && !isNaN(Number(String(value).split(":")[0]));
+  const open = () => openClockUI({ id: Date.now(), value, onSet: onChange });
+  return (
+    <div role="button" tabIndex={0} onClick={open} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }} style={{ display: "flex", alignItems: "center", gap: 10, background: PANEL_2, borderRadius: 12, padding: "10px 12px", minHeight: 44, minWidth: 0, boxSizing: "border-box", width: "100%", cursor: "pointer", color: has ? INK : INK_FAINT, fontSize: 16, fontWeight: 700, ...style }}>
+      <Clock size={18} color="var(--brass)" style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>{has ? fmtTimeString12(value) : (placeholder || "Set time")}</span>
+      {allowClear && has ? <span role="button" aria-label="Clear time" onClick={(e) => { e.stopPropagation(); onChange(""); }} style={{ display: "flex", padding: 2, color: INK_DIM }}><X size={16} /></span> : <ChevronDown size={16} color="var(--ink-dim)" style={{ flexShrink: 0 }} />}
     </div>
   );
 }
@@ -3278,6 +3293,7 @@ function LifeTracker() {
     } catch (e) { return undefined; }
   }, []);
   const darkMode = darkPref === "on" || (darkPref === "system" && systemDark);
+  const clockFormat = useClockFormat(); // re-renders the whole app when the clock format changes
   const [notifMode, setNotifMode] = useState(() => { const v = readPersistedSync("notifMode", "on"); return v === "dnd" || v === "mute" || v === "system" ? v : "on"; });
   const notifModeRef = useRef(notifMode);
   notifModeRef.current = notifMode;
@@ -4516,7 +4532,6 @@ function LifeTracker() {
     showToast("Trip updated");
   };
   const [editingTravelId, setEditingTravelId] = useState(null);
-  const [travelTimeInputMode, setTravelTimeInputMode] = useState("24h");
   const travelFormRef = useRef(null);
   const travelCardRefs = useRef({});
   const blankTravelForm = () => ({ reminderType: "", mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", arrivalTime: "", arrivalDate: "", legs: [], amount: "", distanceKm: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [] });
@@ -5360,7 +5375,7 @@ function LifeTracker() {
     }, 1200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [travelPlans, dailyItems, myDayEvents, shoppingLists, repayments, today, reminderStyle, dailySig, exactAlarmOk, notifBlocked, notifMode]);
+  }, [travelPlans, dailyItems, myDayEvents, shoppingLists, repayments, today, reminderStyle, dailySig, exactAlarmOk, notifBlocked, notifMode, clockFormat]);
 
   // Tapping an alarm in the notification panel opens the full-screen alarm screen.
   useEffect(() => {
@@ -5603,7 +5618,7 @@ function LifeTracker() {
       if (!done && now >= dueAt && notifiedRef.current[`missed:${item.id}`] !== notifyKey) {
         notifiedRef.current[`missed:${item.id}`] = notifyKey;
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          try { notify(`${item.name} not done yet`, { body: `Scheduled for ${item.scheduledTime} \u2014 tap to log it.` }); } catch (e) {}
+          try { notify(`${item.name} not done yet`, { body: `Scheduled for ${fmtTimeString12(item.scheduledTime)} \u2014 tap to log it.` }); } catch (e) {}
         }
       }
     });
@@ -5623,7 +5638,7 @@ function LifeTracker() {
           notifiedRef.current[`travel:${plan.id}:${offset}`] = notifyKey;
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
             const label = (REMINDER_OPTIONS.find((o) => o.value === offset) || {}).label || "";
-            try { notify(`Upcoming trip: ${plan.fromLocation} \u2192 ${plan.toLocation}`, { body: `${plan.mode} on ${formatDMY(plan.travelDate)}${plan.travelTime ? ` at ${plan.travelTime}` : ""} \u2014 ${label.toLowerCase()}` }); } catch (e) {}
+            try { notify(`Upcoming trip: ${plan.fromLocation} \u2192 ${plan.toLocation}`, { body: `${plan.mode} on ${formatDMY(plan.travelDate)}${plan.travelTime ? ` at ${fmtTimeString12(plan.travelTime)}` : ""} \u2014 ${label.toLowerCase()}` }); } catch (e) {}
           }
         }
       });
@@ -5740,26 +5755,12 @@ function LifeTracker() {
                           </div>
                         </div>
                         <div>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                            <div style={{ fontSize: 13, color: INK_FAINT }}>Travel time</div>
-                            <div style={{ display: "flex", gap: 3 }}>
-                              <button onClick={() => setTravelTimeInputMode("24h")} style={{ background: travelTimeInputMode === "24h" ? BRASS : PANEL_2, color: travelTimeInputMode === "24h" ? "#FFFFFF" : INK_DIM, border: "none", borderRadius: 7, padding: "2px 6px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>24h</button>
-                              <button onClick={() => setTravelTimeInputMode("12h")} style={{ background: travelTimeInputMode === "12h" ? BRASS : PANEL_2, color: travelTimeInputMode === "12h" ? "#FFFFFF" : INK_DIM, border: "none", borderRadius: 7, padding: "2px 6px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>12h</button>
-                            </div>
-                          </div>
-                          {travelTimeInputMode === "24h" ? (
-                            <Time24Input value={travelForm.travelTime} onChange={(v) => setTravelForm({ ...travelForm, travelTime: v })} style={{ fontFamily: mono }} />
-                          ) : (
-                            <Time12Input value={travelForm.travelTime} onChange={(v) => setTravelForm({ ...travelForm, travelTime: v })} style={{ fontFamily: mono }} />
-                          )}
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Travel time</div>
+                          <TimeInput value={travelForm.travelTime} onChange={(v) => setTravelForm({ ...travelForm, travelTime: v })} style={{ fontFamily: mono }} />
                         </div>
                         <div>
                           <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Reach time (optional)</div>
-                          {travelTimeInputMode === "24h" ? (
-                            <Time24Input value={travelForm.arrivalTime} onChange={(v) => setTravelForm({ ...travelForm, arrivalTime: v })} style={{ fontFamily: mono }} />
-                          ) : (
-                            <Time12Input value={travelForm.arrivalTime} onChange={(v) => setTravelForm({ ...travelForm, arrivalTime: v })} style={{ fontFamily: mono }} />
-                          )}
+                          <TimeInput allowClear value={travelForm.arrivalTime} onChange={(v) => setTravelForm({ ...travelForm, arrivalTime: v })} style={{ fontFamily: mono }} />
                           {timeEst.main && timeEst.main === travelForm.arrivalTime && <div style={{ fontSize: 12, color: TEAL, padding: "3px 2px 0" }}>Arrival time estimated from the road route (approx.). You can change it.</div>}
                         </div>
                         <div>
@@ -5782,7 +5783,7 @@ function LifeTracker() {
                         <TextField type="number" placeholder="Distance in km (optional)" value={travelForm.distanceKm} onChange={(e) => setTravelForm({ ...travelForm, distanceKm: e.target.value })} style={{ fontFamily: mono }} />
                         <DistHint status={distStatus.main} />
                         {travelForm.legs.map((l, i) => {
-                          const timeIn = (v, on) => (travelTimeInputMode === "24h" ? <Time24Input value={v} onChange={on} style={{ fontFamily: mono }} /> : <Time12Input value={v} onChange={on} style={{ fontFamily: mono }} />);
+                          const timeIn = (v, on) => <TimeInput allowClear value={v} onChange={on} style={{ fontFamily: mono }} />;
                           return (
                             <div key={l.id} style={{ border: `1.5px solid ${hexA(BRASS_HEX, 0.28)}`, borderRadius: 14, padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -5925,7 +5926,7 @@ function LifeTracker() {
                         <div style={{ display: "flex", gap: 6 }}>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Start time</div>
-                            <TextField type="time" value={goalForm.startTime} onChange={(e) => setGoalForm({ ...goalForm, startTime: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                            <TimeInput allowClear value={goalForm.startTime} onChange={(v) => setGoalForm({ ...goalForm, startTime: v })} style={{ fontFamily: mono }} />
                           </div>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Time per session (min)</div>
@@ -6209,7 +6210,7 @@ function LifeTracker() {
                       </div>
                       <div style={{ flex: "1 1 160px" }}>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Time (optional)</div>
-                        <Time12Input value={myDayForm.eventTime} onChange={(v) => setMyDayForm({ ...myDayForm, eventTime: v })} style={{ fontFamily: mono }} />
+                        <TimeInput allowClear value={myDayForm.eventTime} onChange={(v) => setMyDayForm({ ...myDayForm, eventTime: v })} style={{ fontFamily: mono }} />
                         {myDayForm.eventTime ? <ReminderTypePick value={myDayForm.reminderType || reminderStyle.plans} onChange={(v) => setMyDayForm((f) => ({ ...f, reminderType: v }))} /> : null}
                       </div>
                     </div>
@@ -6283,7 +6284,7 @@ function LifeTracker() {
                       </div>
                       <div style={{ flex: "1 1 140px" }}>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Reminder time</div>
-                        <TextField type="time" value={shoppingForm.reminderTime || ""} onChange={(e) => setShoppingForm((f) => ({ ...f, reminderTime: e.target.value }))} style={{ width: "100%", boxSizing: "border-box", fontFamily: mono }} />
+                        <TimeInput allowClear value={shoppingForm.reminderTime || ""} onChange={(v) => setShoppingForm((f) => ({ ...f, reminderTime: v }))} style={{ fontFamily: mono }} />
                       </div>
                     </div>
 
@@ -6458,12 +6459,7 @@ function LifeTracker() {
                     {(itemForm.type === "instant" || itemForm.type === "duration") && (
                       <div>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Scheduled time (optional — used for reminders)</div>
-                        <TextField
-                          type="time"
-                          value={itemForm.scheduledTime || ""}
-                          onChange={(e) => setItemForm((f) => ({ ...f, scheduledTime: e.target.value }))}
-                          style={{ fontFamily: mono, width: "100%" }}
-                        />
+                        <TimeInput allowClear value={itemForm.scheduledTime || ""} onChange={(v) => setItemForm((f) => ({ ...f, scheduledTime: v }))} style={{ fontFamily: mono }} />
                         {itemForm.scheduledTime ? <ReminderTypePick value={itemForm.reminderType || reminderStyle.daily} onChange={(v) => setItemForm((f) => ({ ...f, reminderType: v }))} /> : null}
                       </div>
                     )}
@@ -7240,7 +7236,7 @@ function LifeTracker() {
                         <div style={{ fontSize: compact ? 15 : 15, fontWeight: compact ? 700 : 400, color: compact ? INK : INK_DIM, marginBottom: 5 }}>{item.name}{compact ? " \u2014 done" : " recorded"}</div>
                         {editingInstantTime[item.id] ? (
                           <div style={{ display: "flex", alignItems: "center", justifyContent: compact ? "flex-start" : "center", gap: 5 }}>
-                            <Time12Input value={instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(rec.time)} onChange={(v) => setInstantTimeInputs((p) => ({ ...p, [item.id]: v }))} style={{ fontFamily: mono }} />
+                            <TimeInput value={instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(rec.time)} onChange={(v) => setInstantTimeInputs((p) => ({ ...p, [item.id]: v }))} style={{ fontFamily: mono }} />
                             <button onClick={() => editInstantTime(item.id, instantTimeInputs[item.id] != null ? instantTimeInputs[item.id] : hhmm(rec.time))} style={{ background: TEAL, border: "none", borderRadius: 7, padding: "6px 8px", color: "#FFFFFF", cursor: "pointer" }}><Check size={15} /></button>
                           </div>
                         ) : (
@@ -8073,7 +8069,7 @@ function LifeTracker() {
                                 </div>
                                 {isRes ? (
                                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-                                    <Time12Input value={rescheduleDraft} onChange={setRescheduleDraft} style={{ fontFamily: mono }} />
+                                    <TimeInput value={rescheduleDraft} onChange={setRescheduleDraft} style={{ fontFamily: mono }} />
                                     <button onClick={() => { rescheduleItemToday(act.id, rescheduleDraft); setReschedulingId(null); }} style={{ flexShrink: 0, background: TEAL, border: "none", borderRadius: 8, padding: "8px 12px", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save</button>
                                     <button onClick={() => setReschedulingId(null)} style={{ flexShrink: 0, background: "transparent", border: `1px solid ${LINE}`, borderRadius: 8, padding: "8px 10px", color: INK_DIM, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Cancel</button>
                                   </div>
@@ -8340,13 +8336,9 @@ function LifeTracker() {
                                 <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
                                   <div style={{ fontSize: 12, color: INK_FAINT }}>From and To can't be changed. You can edit the start time, reach time and amount.</div>
                                   <div style={{ fontSize: 12, fontWeight: 700, color: INK_DIM }}>Start time</div>
-                                  {travelTimeInputMode === "24h"
-                                    ? <Time24Input value={historyTripEdit.travelTime} onChange={(v) => setHistoryTripEdit({ ...historyTripEdit, travelTime: v })} style={{ fontFamily: mono }} />
-                                    : <Time12Input value={historyTripEdit.travelTime} onChange={(v) => setHistoryTripEdit({ ...historyTripEdit, travelTime: v })} style={{ fontFamily: mono }} />}
+                                  <TimeInput value={historyTripEdit.travelTime} onChange={(v) => setHistoryTripEdit({ ...historyTripEdit, travelTime: v })} style={{ fontFamily: mono }} />
                                   <div style={{ fontSize: 12, fontWeight: 700, color: INK_DIM }}>Reach time</div>
-                                  {travelTimeInputMode === "24h"
-                                    ? <Time24Input value={historyTripEdit.arrivalTime} onChange={(v) => setHistoryTripEdit({ ...historyTripEdit, arrivalTime: v })} style={{ fontFamily: mono }} />
-                                    : <Time12Input value={historyTripEdit.arrivalTime} onChange={(v) => setHistoryTripEdit({ ...historyTripEdit, arrivalTime: v })} style={{ fontFamily: mono }} />}
+                                  <TimeInput allowClear value={historyTripEdit.arrivalTime} onChange={(v) => setHistoryTripEdit({ ...historyTripEdit, arrivalTime: v })} style={{ fontFamily: mono }} />
                                   <div style={{ fontSize: 12, fontWeight: 700, color: INK_DIM }}>Amount</div>
                                   <input type="number" inputMode="decimal" value={historyTripEdit.amount} onChange={(ev) => setHistoryTripEdit({ ...historyTripEdit, amount: ev.target.value })} placeholder="0" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${LINE}`, background: PANEL_2, color: INK, fontSize: 15, fontFamily: mono }} />
                                   <div style={{ display: "flex", gap: 8 }}>
@@ -8442,7 +8434,7 @@ function LifeTracker() {
                             <div style={{ fontSize: 13, color: valid ? TEAL : CORAL, marginTop: 2 }}>{item.type} &middot; {valid ? "on Daily tab" : "incomplete \u2014 hidden"}</div>
                             {(item.scheduledTime || (item.days && item.days.length > 0)) && (
                               <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2, fontFamily: mono }}>
-                                {item.scheduledTime ? `at ${item.scheduledTime}` : ""}{item.scheduledTime && item.days && item.days.length > 0 ? " \u00b7 " : ""}{item.days && item.days.length > 0 ? item.days.join(", ") : (item.scheduledTime ? "every day" : "")}
+                                {item.scheduledTime ? `at ${fmtTimeString12(item.scheduledTime)}` : ""}{item.scheduledTime && item.days && item.days.length > 0 ? " \u00b7 " : ""}{item.days && item.days.length > 0 ? item.days.join(", ") : (item.scheduledTime ? "every day" : "")}
                               </div>
                             )}
                           </div>
@@ -8957,7 +8949,7 @@ function LifeTracker() {
                                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 7 }}>
                                   {g.goalType && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.goalType}</span>}
                                   <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.frequency || "Daily"}</span>
-                                  {g.startTime && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{g.startTime}</span>}
+                                  {g.startTime && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>{fmtTimeString12(g.startTime)}</span>}
                                   {g.reminderEnabled && <span style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "3px 6px", fontSize: 11, color: INK_DIM }}>Reminder {g.reminderMinutes || 15}m</span>}
                                 </div>
                                 {g.notes && <div style={{ fontSize: 13, color: INK_DIM, marginBottom: 7 }}>Target: {g.notes}</div>}
@@ -10085,6 +10077,7 @@ function LifeTracker() {
                 { id: "update", icon: Download, color: "#2F6FED", title: "App update", sub: apkMand ? "Required update" : webUpdateReady ? "Update available" : apkUpdate ? "Optional update available" : `Version ${APP_VERSION}`, dot: apkMand || webUpdateReady },
               ] },
               { label: "Appearance", items: [
+                { id: "clockfmt", icon: Clock, color: "#2F6FED", title: "Clock Format", sub: clockFormat === "24h" ? "24-hour (18:30)" : clockFormat === "12h" ? "12-hour (06:30 PM)" : "Not set \u00b7 asked on first use" },
                 { id: "darkmode", icon: darkMode ? Moon : Sun, color: "#5856D6", title: "Dark mode", sub: darkPref === "system" ? "System default" : darkPref === "on" ? "On" : "Off" },
               ] },
               { label: "Notifications", items: [
@@ -10147,7 +10140,7 @@ function LifeTracker() {
           })() : (
             <>
               {(() => {
-                const TITLES = { darkmode: "Dark mode", notifmode: "Notification mode", update: "App update", reminders: "Reminders & alarms", push: "Push notifications", storage: "Storage & backup", sheet: "Google Sheet sync" };
+                const TITLES = { clockfmt: "Clock Format", darkmode: "Dark mode", notifmode: "Notification mode", update: "App update", reminders: "Reminders & alarms", push: "Push notifications", storage: "Storage & backup", sheet: "Google Sheet sync" };
                 return (
                   <button onClick={() => setMoreSection(moreSection === "sheet" ? "storage" : null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: "2px 0 12px", cursor: "pointer", color: BRASS, fontFamily: "inherit" }}>
                     <ChevronLeft size={22} strokeWidth={2.4} />
@@ -10203,6 +10196,26 @@ function LifeTracker() {
               );})}
             </div>
           </Card>
+              </>)}
+              {moreSection === "clockfmt" && (<>
+                <Card style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, marginBottom: 2 }}>Time format</div>
+                  {[{ v: "12h", t: "12-hour", d: "06:30 PM" }, { v: "24h", t: "24-hour", d: "18:30" }].map((o, i) => {
+                    const on = clockFormat === o.v;
+                    return (
+                      <button key={o.v} onClick={() => setClockFormat(o.v)} role="radio" aria-checked={on} style={{ width: "100%", display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 0", background: "transparent", border: "none", borderTop: i ? `1px solid ${LINE}` : "none", color: INK, cursor: "pointer", textAlign: "left" }}>
+                        <span style={{ flexShrink: 0, marginTop: 1, width: 22, height: 22, borderRadius: 11, border: `2px solid ${on ? BRASS : INK_FAINT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <span style={{ width: 10, height: 10, borderRadius: 5, background: BRASS }} />}</span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: "block", fontSize: 15, fontWeight: on ? 700 : 600 }}>{o.t}</span>
+                          <span style={{ display: "block", fontSize: 13, color: INK_FAINT, marginTop: 2, fontFamily: mono }}>{o.d}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </Card>
+                <Card style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, color: INK_FAINT, lineHeight: 1.45 }}>Showing now: <b style={{ color: INK, fontFamily: mono }}>{fmtTime(now)}</b>. {clockFormat ? "" : "Not chosen yet \u2014 you will be asked the first time you open a time field. "}Applies to every time field and every time shown in the app. Saved times, alarms and reminders are not changed.</div>
+                </Card>
               </>)}
               {(moreSection === "darkmode" || moreSection === "notifmode") && (() => {
                 const isDark = moreSection === "darkmode";
@@ -10488,6 +10501,8 @@ function doPost(e) {
         );
       })()}
 
+      <ClockHost />
+
       {undoAction && <div className="toast-slide-enter" style={{ position: "fixed", left: "50%", bottom: 74, zIndex: 20, width: "calc(100% - 32px)", maxWidth: 448, background: INK, color: "#fff", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, boxShadow: CARD_SHADOW }}><span style={{ flex: 1, fontSize: 14 }}>{undoAction.message}</span>{undoAction.undo && <button onClick={() => { undoAction.undo(); setUndoAction(null); }} style={{ background: "transparent", border: "none", color: BRASS_DIM, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Undo2 size={14} /> Undo</button>}</div>}
 
       {pendingImportData && (
@@ -10640,7 +10655,7 @@ function doPost(e) {
       {alarmScreen && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "linear-gradient(160deg, #0B1B4A 0%, #1E4FCB 100%)", color: "#FFFFFF", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "env(safe-area-inset-top) 28px env(safe-area-inset-bottom)", textAlign: "center" }}>
           <Bell size={46} strokeWidth={1.6} />
-          <div style={{ fontSize: 56, fontWeight: 300, marginTop: 18, fontFamily: mono }}>{new Date(now).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</div>
+          <div style={{ fontSize: 56, fontWeight: 300, marginTop: 18, fontFamily: mono }}>{fmtTime(now)}</div>
           <div style={{ fontSize: 26, fontWeight: 700, marginTop: 14, lineHeight: 1.25 }}>{alarmScreen.title}</div>
           {alarmScreen.body ? <div style={{ fontSize: 16, opacity: 0.85, marginTop: 8, lineHeight: 1.4 }}>{alarmScreen.body}</div> : null}
           <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 44, width: "100%", maxWidth: 360 }}>
