@@ -70,7 +70,7 @@ jobs:
 
       - name: Allow notifications and exact alarms
         run: |
-          sed -i 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n    <application#' android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />\n    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n    <application#' android/app/src/main/AndroidManifest.xml
 
       - name: Allow storage access for backups
         run: |
@@ -86,6 +86,8 @@ jobs:
           cat > "$DIR/MainActivity.java" <<'EOF'
           package __APPID__;
 
+          import android.content.Intent;
+          import android.os.Build;
           import android.os.Bundle;
           import com.getcapacitor.BridgeActivity;
 
@@ -96,6 +98,28 @@ jobs:
               super.onCreate(savedInstanceState);
               getWindow().setStatusBarColor(android.graphics.Color.BLACK);
               getWindow().setNavigationBarColor(android.graphics.Color.BLACK);
+              showOverLockIfAlarm(getIntent());
+            }
+
+            @Override
+            protected void onNewIntent(Intent intent) {
+              super.onNewIntent(intent);
+              showOverLockIfAlarm(intent);
+            }
+
+            // When the app is opened by a ringing alarm, show it over the lock screen and light up the screen.
+            private void showOverLockIfAlarm(Intent intent) {
+              try {
+                if (intent != null && intent.getBooleanExtra("fromAlarm", false)) {
+                  if (Build.VERSION.SDK_INT >= 27) {
+                    setShowWhenLocked(true);
+                    setTurnScreenOn(true);
+                  } else {
+                    getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED | android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+                  }
+                  getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                }
+              } catch (Exception e) {}
             }
           }
           EOF
@@ -108,55 +132,145 @@ jobs:
           import android.content.Context;
           import android.content.Intent;
           import android.content.SharedPreferences;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.PowerManager;
           import com.getcapacitor.JSArray;
           import com.getcapacitor.JSObject;
           import com.getcapacitor.Plugin;
           import com.getcapacitor.PluginCall;
           import com.getcapacitor.PluginMethod;
           import com.getcapacitor.annotation.CapacitorPlugin;
+          import org.json.JSONArray;
           import org.json.JSONObject;
 
           @CapacitorPlugin(name = "AlarmRing")
           public class AlarmRingPlugin extends Plugin {
 
-            private PendingIntent op(Context c, int id, String title, String body) {
+            static PendingIntent op(Context c, int id, JSONObject o) {
               Intent i = new Intent(c, AlarmReceiver.class);
               i.setAction("alarm.ring." + id);
-              i.putExtra("title", title);
-              i.putExtra("body", body);
-              return PendingIntent.getBroadcast(c, id, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+              int flags = PendingIntent.FLAG_IMMUTABLE;
+              if (o != null) {
+                i.putExtra("title", o.optString("title", "Alarm"));
+                i.putExtra("body", o.optString("body", ""));
+                i.putExtra("kind", o.optString("kind", ""));
+                i.putExtra("itemId", o.optString("itemId", ""));
+                i.putExtra("key", o.optString("key", ""));
+                flags |= PendingIntent.FLAG_UPDATE_CURRENT;
+              } else {
+                flags |= PendingIntent.FLAG_NO_CREATE;
+              }
+              return PendingIntent.getBroadcast(c, id, i, flags);
+            }
+
+            // Sets every not-yet-passed alarm of one group as an exact "alarm clock" alarm (fires in Doze, over the lock screen).
+            static void setGroup(Context c, String group, JSONArray arr, boolean saveIds) {
+              AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
+              SharedPreferences sp = c.getSharedPreferences("alarm_ring", Context.MODE_PRIVATE);
+              if (saveIds) {
+                String old = sp.getString("ids_" + group, "");
+                if (!old.isEmpty()) {
+                  for (String s : old.split(",")) {
+                    try {
+                      PendingIntent pi = op(c, Integer.parseInt(s), null);
+                      if (pi != null) { am.cancel(pi); pi.cancel(); }
+                    } catch (Exception e) {}
+                  }
+                }
+              }
+              StringBuilder ids = new StringBuilder();
+              Intent launch = c.getPackageManager().getLaunchIntentForPackage(c.getPackageName());
+              PendingIntent showPi = PendingIntent.getActivity(c, 0, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+              long now = System.currentTimeMillis();
+              for (int k = 0; k < arr.length(); k++) {
+                try {
+                  JSONObject o = arr.getJSONObject(k);
+                  int id = o.getInt("id");
+                  long at = o.getLong("at");
+                  if (at <= now + 500) continue; // never fire a passed alarm immediately
+                  am.setAlarmClock(new AlarmManager.AlarmClockInfo(at, showPi), op(c, id, o));
+                  if (ids.length() > 0) ids.append(",");
+                  ids.append(id);
+                } catch (Exception e) {}
+              }
+              if (saveIds) {
+                sp.edit().putString("ids_" + group, ids.toString()).putString("items_" + group, arr.toString()).apply();
+              }
+            }
+
+            // After a phone restart or an app update Android forgets alarms, so every saved group is set again.
+            static void rescheduleAll(Context c) {
+              try {
+                SharedPreferences sp = c.getSharedPreferences("alarm_ring", Context.MODE_PRIVATE);
+                for (String key : sp.getAll().keySet()) {
+                  if (key.startsWith("items_")) {
+                    try { setGroup(c, key.substring(6), new JSONArray(sp.getString(key, "[]")), false); } catch (Exception e) {}
+                  }
+                }
+              } catch (Exception e) {}
             }
 
             @PluginMethod
             public void schedule(PluginCall call) {
-              Context c = getContext();
-              AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
-              SharedPreferences sp = c.getSharedPreferences("alarm_ring", Context.MODE_PRIVATE);
-              String old = sp.getString("ids", "");
-              if (!old.isEmpty()) {
-                for (String s : old.split(",")) {
-                  try { am.cancel(op(c, Integer.parseInt(s), "", "")); } catch (Exception e) {}
-                }
-              }
-              StringBuilder ids = new StringBuilder();
+              String group = call.getString("group", "main");
               JSArray items = call.getArray("items");
+              JSONArray arr = new JSONArray();
               if (items != null) {
-                Intent launch = c.getPackageManager().getLaunchIntentForPackage(c.getPackageName());
-                PendingIntent showPi = PendingIntent.getActivity(c, 0, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
                 for (int k = 0; k < items.length(); k++) {
-                  try {
-                    JSONObject o = items.getJSONObject(k);
-                    int id = o.getInt("id");
-                    long at = o.getLong("at");
-                    String title = o.optString("title", "Alarm");
-                    String body = o.optString("body", "");
-                    am.setAlarmClock(new AlarmManager.AlarmClockInfo(at, showPi), op(c, id, title, body));
-                    if (ids.length() > 0) ids.append(",");
-                    ids.append(id);
-                  } catch (Exception e) {}
+                  try { arr.put(items.getJSONObject(k)); } catch (Exception e) {}
                 }
               }
-              sp.edit().putString("ids", ids.toString()).apply();
+              setGroup(getContext(), group, arr, true);
+              call.resolve();
+            }
+
+            @PluginMethod
+            public void getRinging(PluginCall call) {
+              JSObject out = new JSObject();
+              out.put("ringing", AlarmService.ringing);
+              out.put("title", AlarmService.curTitle == null ? "" : AlarmService.curTitle);
+              out.put("body", AlarmService.curBody == null ? "" : AlarmService.curBody);
+              out.put("kind", AlarmService.curKind == null ? "" : AlarmService.curKind);
+              out.put("itemId", AlarmService.curItemId == null ? "" : AlarmService.curItemId);
+              out.put("key", AlarmService.curKey == null ? "" : AlarmService.curKey);
+              call.resolve(out);
+            }
+
+            @PluginMethod
+            public void stopRing(PluginCall call) {
+              try { getContext().stopService(new Intent(getContext(), AlarmService.class)); } catch (Exception e) {}
+              call.resolve();
+            }
+
+            @PluginMethod
+            public void batteryStatus(PluginCall call) {
+              JSObject out = new JSObject();
+              boolean ok = true;
+              try {
+                if (Build.VERSION.SDK_INT >= 23) {
+                  PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+                  ok = pm.isIgnoringBatteryOptimizations(getContext().getPackageName());
+                }
+              } catch (Exception e) {}
+              out.put("ok", ok);
+              call.resolve(out);
+            }
+
+            @PluginMethod
+            public void openBatterySettings(PluginCall call) {
+              Context c = getContext();
+              try {
+                Intent i = new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + c.getPackageName()));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                c.startActivity(i);
+              } catch (Exception e) {
+                try {
+                  Intent i2 = new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                  i2.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                  c.startActivity(i2);
+                } catch (Exception e2) {}
+              }
               call.resolve();
             }
 
@@ -230,7 +344,25 @@ jobs:
               Intent s = new Intent(context, AlarmService.class);
               s.putExtra("title", intent.getStringExtra("title"));
               s.putExtra("body", intent.getStringExtra("body"));
+              s.putExtra("kind", intent.getStringExtra("kind"));
+              s.putExtra("itemId", intent.getStringExtra("itemId"));
+              s.putExtra("key", intent.getStringExtra("key"));
               ContextCompat.startForegroundService(context, s);
+            }
+          }
+          EOF
+
+          cat > "$DIR/BootReceiver.java" <<'EOF'
+          package __APPID__;
+
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+
+          public class BootReceiver extends BroadcastReceiver {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+              AlarmRingPlugin.rescheduleAll(context);
             }
           }
           EOF
@@ -258,6 +390,8 @@ jobs:
           import androidx.core.app.NotificationCompat;
 
           public class AlarmService extends Service {
+            public static volatile boolean ringing = false;
+            public static volatile String curTitle, curBody, curKind, curItemId, curKey;
             private MediaPlayer mp;
             private Vibrator vib;
             private final Handler handler = new Handler(Looper.getMainLooper());
@@ -275,6 +409,11 @@ jobs:
               String body = intent != null ? intent.getStringExtra("body") : null;
               if (title == null) title = "Alarm";
               if (body == null) body = "";
+              curTitle = title; curBody = body;
+              curKind = intent != null ? intent.getStringExtra("kind") : null;
+              curItemId = intent != null ? intent.getStringExtra("itemId") : null;
+              curKey = intent != null ? intent.getStringExtra("key") : null;
+              ringing = true;
 
               NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
               if (Build.VERSION.SDK_INT >= 26) {
@@ -285,6 +424,8 @@ jobs:
                 nm.createNotificationChannel(ch);
               }
               Intent launch = getPackageManager().getLaunchIntentForPackage(getPackageName());
+              launch.putExtra("fromAlarm", true);
+              launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
               PendingIntent open = PendingIntent.getActivity(this, 1, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
               Intent stop = new Intent(this, AlarmService.class);
               stop.setAction("STOP");
@@ -332,7 +473,7 @@ jobs:
               } catch (Exception e) {}
 
               handler.removeCallbacksAndMessages(null);
-              handler.postDelayed(new Runnable() { public void run() { stopSelf(); } }, 60000);
+              handler.postDelayed(new Runnable() { public void run() { stopSelf(); } }, 120000);
               return START_NOT_STICKY;
             }
 
@@ -344,6 +485,7 @@ jobs:
 
             @Override
             public void onDestroy() {
+              ringing = false;
               handler.removeCallbacksAndMessages(null);
               stopRing();
               super.onDestroy();
@@ -355,7 +497,7 @@ jobs:
 
           MANIFEST=android/app/src/main/AndroidManifest.xml
           sed -i 's#<application#<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <application#' $MANIFEST
-          sed -i 's#</application>#<receiver android:name=".AlarmReceiver" android:exported="false" />\n        <service android:name=".AlarmService" android:exported="false" android:foregroundServiceType="mediaPlayback" />\n    </application>#' $MANIFEST
+          sed -i 's#</application>#<receiver android:name=".AlarmReceiver" android:exported="false" />\n        <receiver android:name=".BootReceiver" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter></receiver>\n        <service android:name=".AlarmService" android:exported="false" android:foregroundServiceType="mediaPlayback" />\n    </application>#' $MANIFEST
 
       - name: Sync
         run: npx cap sync android
