@@ -989,15 +989,14 @@ function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // ---- App updates (shown on the More screen only) ----
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
 // repository ("user/repo") whose latest Release holds the newest APK; leave it empty to turn the APK check off.
-const APP_VERSION = "2026.10.24.4";
+const APP_VERSION = "2026.10.24.5";
 // Shown on More > App update ("What's new"). Keep each line short and simple; add a new block for every release.
 const APP_CHANGELOG = {
   date: "24 Oct 2026",
   items: [
-    ["fixed", "The app restarts only after every update step and the loading screen finish."],
-    ["better", "The update bar now fills step by step to 100%."],
-    ["better", "Each step stays on screen long enough to be seen."],
-    ["fixed", "Back is ignored while an update is installing."],
+    ["fixed", "Back now works in the Android app: More option, then More list."],
+    ["fixed", "Back on a main page closes the app right away."],
+    ["better", "Back steps through popups and forms one at a time."],
   ],
 };
 const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
@@ -5051,14 +5050,9 @@ function LifeTracker() {
   // Main pages = Home, Today, Planner, Progress, More (bottom bar). Back works like this:
   //  1) something open (popup, form, option, category) -> Back closes ONE level and stays on that main page
   //  2) already on a main page with nothing open -> Back exits the app
-  // We keep one "guard" history entry above the start entry so we can catch every Back press.
-  useEffect(() => {
-    try {
-      history.replaceState({ appNav: "base" }, "");
-      history.pushState({ appNav: "guard" }, "");
-    } catch (e) { /* ignore */ }
-    // eslint-disable-next-line
-  }, []);
+  // History: ONE extra history entry exists only while something is open (it is added by the tap that opened it, so the
+  // Android WebView keeps it), and is removed again when everything is closed. On a main page there is no extra entry,
+  // so Back there leaves the app by itself.
   // One place that decides what Back closes. Returns true when it closed something, false on a main page with nothing open.
   const handleBackRef = useRef(null);
   handleBackRef.current = () => {
@@ -5083,20 +5077,32 @@ function LifeTracker() {
       if (page === "categories" && catTab) { setCatTab(null); return true; }
       return false;
   };
+  const backDepth = (updateOverlay ? 1 : 0) + (tree3d ? 1 : 0) + (pendingImportData ? 1 : 0) + (showHolidays ? 1 : 0)
+    + ((itemForm || addingGroup || addingSubTo) ? 1 : 0) + ((showAddMyDay || editingMyDayId) ? 1 : 0) + ((showAddGoal || editingGoalId) ? 1 : 0)
+    + ((showAddTravel || editingTravelId) ? 1 : 0) + ((showAddRepayment || editingRepaymentId) ? 1 : 0) + (shoppingForm ? 1 : 0)
+    + (bikeServiceForm ? 1 : 0) + (selectedStreakId ? 1 : 0) + (showQuickCapture ? 1 : 0)
+    + (page === "datalink" && moreSection ? (moreSection === "sheet" ? 2 : 1) : 0)
+    + (page === "daily" && expandedDailyCategory ? 1 : 0) + (page === "categories" && catTab ? 1 : 0);
+  const histEntryRef = useRef(false);
+  const histIgnoreRef = useRef(0);
+  const [histTick, setHistTick] = useState(0);
   useEffect(() => {
-    const rearm = () => { try { history.pushState({ appNav: "guard" }, ""); } catch (e) { /* ignore */ } };
-    const handlePopState = () => {
-      if (handleBackRef.current && handleBackRef.current()) { rearm(); return; }
-      // On a main page with nothing open: exit the app.
-      try {
-        const A = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
-        if (A && A.exitApp) { A.exitApp(); return; }
-      } catch (e) { /* ignore */ }
-      // No app plugin: we are now on the start entry, so the next system Back leaves the app/page.
+    try {
+      if (backDepth > 0 && !histEntryRef.current) { history.pushState({ appNav: "level" }, ""); histEntryRef.current = true; }
+      else if (backDepth === 0 && histEntryRef.current) { histEntryRef.current = false; histIgnoreRef.current += 1; history.back(); }
+    } catch (e) { /* ignore */ }
+  }, [backDepth, histTick]);
+  useEffect(() => {
+    const onPop = () => {
+      if (histIgnoreRef.current > 0) { histIgnoreRef.current -= 1; return; } // our own clean-up step, not a Back press
+      if (!histEntryRef.current) return;
+      histEntryRef.current = false;
+      try { if (handleBackRef.current) handleBackRef.current(); } catch (e) {}
+      setHistTick((t) => t + 1); // if something is still open, add its history entry again
     };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [page, catTab, expandedDailyCategory, moreSection, itemForm, addingGroup, addingSubTo, showHolidays, pendingImportData, showAddMyDay, editingMyDayId, showAddGoal, editingGoalId, showAddTravel, editingTravelId, showAddRepayment, editingRepaymentId, shoppingForm, bikeServiceForm, selectedStreakId, showQuickCapture]);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   // Android app (Capacitor): handle the Back button / gesture directly. Relying on browser history alone is not reliable here,
   // because the WebView skips history entries that were not created by a tap, so Back could close the app from inside More.
