@@ -2,8 +2,17 @@ name: Build APK
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional version for a test build, e.g. v2026.10.24.7 (empty = 1.0.<run number>)"
+        required: false
   push:
     branches: [main, master]
+  release:
+    types: [published]
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -35,10 +44,19 @@ jobs:
       - name: Add Android project
         run: npx cap add android
 
-      - name: Raise the version number on every build
+      - name: Set the app version from the Release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
+          TAG="${RELEASE_TAG:-$INPUT_TAG}"
+          VER=$(echo "$TAG" | sed -E 's/^[^0-9]*([0-9][0-9.]*).*/\1/')
+          case "$VER" in [0-9]*) ;; *) VER="1.0.$RUN_NUMBER" ;; esac
+          echo "APP_VERSION_NAME=$VER" >> "$GITHUB_ENV"
+          sed -i "s/versionCode 1/versionCode $RUN_NUMBER/; s/versionName \"1.0\"/versionName \"$VER\"/" android/app/build.gradle
           grep -n "versionCode\|versionName" android/app/build.gradle
+          grep -q "versionName \"$VER\"" android/app/build.gradle || { echo "versionName was not set"; exit 1; }
 
       - name: Use my app icon
         run: |
@@ -62,11 +80,15 @@ jobs:
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > ~/.android/debug.keystore
           else
+            if [ ! -f debug.keystore ]; then
+              echo "No KEYSTORE_B64 secret and no debug.keystore file. Add the KEYSTORE_B64 secret so every build is signed with the same key."
+              exit 1
+            fi
             cp debug.keystore ~/.android/debug.keystore
           fi
 
       - name: Show signing fingerprint (must be identical on every build)
-        run: keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android | grep -E "SHA1|SHA256" || echo "Could not read the fingerprint"
+        run: keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android | grep -E "SHA1|SHA256" || { echo "The keystore cannot be read. It must use alias androiddebugkey and password android."; exit 1; }
 
       - name: Allow notifications and exact alarms
         run: |
@@ -223,6 +245,19 @@ jobs:
               }
               setGroup(getContext(), group, arr, true);
               call.resolve();
+            }
+
+            // The real installed APK version (set by the workflow from the Release tag).
+            @PluginMethod
+            public void getVersion(PluginCall call) {
+              JSObject out = new JSObject();
+              try {
+                Context c = getContext();
+                android.content.pm.PackageInfo pi = c.getPackageManager().getPackageInfo(c.getPackageName(), 0);
+                out.put("versionName", pi.versionName == null ? "" : pi.versionName);
+                out.put("versionCode", Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : (long) pi.versionCode);
+              } catch (Exception e) {}
+              call.resolve(out);
             }
 
             @PluginMethod
@@ -499,6 +534,11 @@ jobs:
           sed -i 's#<application#<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <application#' $MANIFEST
           sed -i 's#</application>#<receiver android:name=".AlarmReceiver" android:exported="false" />\n        <receiver android:name=".BootReceiver" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter></receiver>\n        <service android:name=".AlarmService" android:exported="false" android:foregroundServiceType="mediaPlayback" />\n    </application>#' $MANIFEST
 
+      - name: Write the app version into the Capacitor config (backup way to read it)
+        run: |
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('capacitor.config.json','utf8'));const t='LifeTrackerAPK/'+process.env.APP_VERSION_NAME;c.appendUserAgent=t;c.android=Object.assign({},c.android,{appendUserAgent:t});fs.writeFileSync('capacitor.config.json',JSON.stringify(c,null,2));"
+          cat capacitor.config.json
+
       - name: Sync
         run: npx cap sync android
 
@@ -512,4 +552,15 @@ jobs:
         with:
           name: life-tracker-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          
+
+      - name: Show the APK signing fingerprint (must match the keystore fingerprint above)
+        run: |
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk | grep -i "SHA-256" || true
+
+      - name: Attach the APK to the Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" android/app/build/outputs/apk/debug/app-debug.apk --clobber --repo "$GITHUB_REPOSITORY"
