@@ -510,19 +510,145 @@ window.storage = {
 // ---- end storage polyfill ----
 
 import { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
-import {
-  CalendarDays, LayoutGrid, TrendingUp, Plus, Trash2, Check, Wallet, Briefcase, HeartPulse,
-  Settings2, Play, Square, ArrowUp, ArrowDown, ArrowRight, Sun, Building2, Dumbbell, Moon, Droplet, Receipt,
-  Target, Clock, Pencil, ChevronUp, ChevronDown, Bell, BellOff, Flame, Download, FileJson,
-  Plane, Train, Bus, Activity, Bike, Car, MapPin, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
-  ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
-  Link2, Upload, Cloud, CloudOff, RefreshCw, HardDrive, Eye, Undo2, History, Home as HomeIcon,
-  CheckCircle2, CreditCard, Rocket, ChevronRight, ChevronLeft, Sparkles, Ticket, PartyPopper, Trophy,
-  Fuel, Store, MessageSquare, Sunrise, Cookie, PiggyBank, Percent, ListChecks,
-  Star, XCircle, Brain, ClipboardCheck, GraduationCap, ArrowLeftRight,
-  Zap, Smartphone, Shirt, Wrench, Gift, Shield, X,
-  AlarmClock, BedDouble, Droplets, Apple, Pill, ShoppingCart, Sprout, Coins, Tv,
-} from "lucide-react";
+import { CalendarDays as __L_CalendarDays, LayoutGrid as __L_LayoutGrid, TrendingUp as __L_TrendingUp, Plus as __L_Plus, Trash2 as __L_Trash2, Check as __L_Check, Wallet as __L_Wallet, Briefcase as __L_Briefcase, HeartPulse as __L_HeartPulse, Settings2 as __L_Settings2, Play as __L_Play, Square as __L_Square, ArrowUp as __L_ArrowUp, ArrowDown as __L_ArrowDown, ArrowRight as __L_ArrowRight, Sun as __L_Sun, Building2 as __L_Building2, Dumbbell as __L_Dumbbell, Moon as __L_Moon, Droplet as __L_Droplet, Receipt as __L_Receipt, Target as __L_Target, Clock as __L_Clock, Pencil as __L_Pencil, ChevronUp as __L_ChevronUp, ChevronDown as __L_ChevronDown, Bell as __L_Bell, BellOff as __L_BellOff, Flame as __L_Flame, Download as __L_Download, FileJson as __L_FileJson, Plane as __L_Plane, Train as __L_Train, Bus as __L_Bus, Activity as __L_Activity, Bike as __L_Bike, Car as __L_Car, MapPin as __L_MapPin, Bath as __L_Bath, Gamepad2 as __L_Gamepad2, Home as __L_Home, BookOpen as __L_BookOpen, Laptop as __L_Laptop, ChefHat as __L_ChefHat, UtensilsCrossed as __L_UtensilsCrossed, ShoppingBag as __L_ShoppingBag, Footprints as __L_Footprints, Film as __L_Film, Music as __L_Music, Users as __L_Users, HandHeart as __L_HandHeart, Brush as __L_Brush, Coffee as __L_Coffee, Smile as __L_Smile, Link2 as __L_Link2, Upload as __L_Upload, Cloud as __L_Cloud, CloudOff as __L_CloudOff, RefreshCw as __L_RefreshCw, HardDrive as __L_HardDrive, Eye as __L_Eye, Undo2 as __L_Undo2, History as __L_History, Home as __L_HomeIcon, CheckCircle2 as __L_CheckCircle2, CreditCard as __L_CreditCard, Rocket as __L_Rocket, ChevronRight as __L_ChevronRight, ChevronLeft as __L_ChevronLeft, Sparkles as __L_Sparkles, Ticket as __L_Ticket, PartyPopper as __L_PartyPopper, Trophy as __L_Trophy, Fuel as __L_Fuel, Store as __L_Store, MessageSquare as __L_MessageSquare, Sunrise as __L_Sunrise, Cookie as __L_Cookie, PiggyBank as __L_PiggyBank, Percent as __L_Percent, ListChecks as __L_ListChecks, Star as __L_Star, XCircle as __L_XCircle, Brain as __L_Brain, ClipboardCheck as __L_ClipboardCheck, GraduationCap as __L_GraduationCap, ArrowLeftRight as __L_ArrowLeftRight, Zap as __L_Zap, Smartphone as __L_Smartphone, Shirt as __L_Shirt, Wrench as __L_Wrench, Gift as __L_Gift, Shield as __L_Shield, X as __L_X, AlarmClock as __L_AlarmClock, BedDouble as __L_BedDouble, Droplets as __L_Droplets, Apple as __L_Apple, Pill as __L_Pill, ShoppingCart as __L_ShoppingCart, Sprout as __L_Sprout, Coins as __L_Coins, Tv as __L_Tv } from "lucide-react";
+
+// ---- Soft icon colours ----
+// Every lucide icon is wrapped so only its glyph colour is softened: saturated accent colours are blended toward white
+// (gently in light mode, a bit more in dark mode so they stay clear on dark cards). Hue, size, stroke, tile backgrounds,
+// text, white-on-solid icons and neutral ink/grey icons are left exactly as they were.
+let LT_DARK = false; // set by the app each render so the softening follows the theme
+const LT_ACCENT_VARS = { light: { "var(--brass)": "#2F6FED", "var(--teal)": "#22C55E", "var(--coral)": "#EF4444" }, dark: { "var(--brass)": "#4C86FF", "var(--teal)": "#30D158", "var(--coral)": "#FF453A" } };
+const LT_SOFT_CACHE = { light: {}, dark: {} };
+function ltSoftIconColor(c) {
+  if (typeof c !== "string") return c;
+  const mode = LT_DARK ? "dark" : "light", cache = LT_SOFT_CACHE[mode];
+  if (cache[c] !== undefined) return cache[c];
+  const key = c.trim();
+  const hex = key.indexOf("var(") === 0 ? (LT_ACCENT_VARS[mode][key] || null) : key;
+  let out = c;
+  if (hex && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(hex)) {
+    let h = hex.slice(1); if (h.length === 3) h = h.split("").map((x) => x + x).join("");
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    if (Math.max(r, g, b) - Math.min(r, g, b) > 24 && L < 0.9) { // skip white, black and greys
+      const t = LT_DARK ? Math.min(0.42, Math.max(0.04, 0.5 - L)) : Math.min(0.34, Math.max(0.05, 0.44 - L * 0.95));
+      const mix = (v) => Math.round(v + (255 - v) * t).toString(16).padStart(2, "0");
+      out = "#" + mix(r) + mix(g) + mix(b);
+    }
+  }
+  cache[c] = out;
+  return out;
+}
+const __softIcon = (Comp) => function SoftIcon(props) {
+  let p = props;
+  if (typeof p.color === "string") p = { ...p, color: ltSoftIconColor(p.color) };
+  if (p.style && typeof p.style.color === "string") p = { ...p, style: { ...p.style, color: ltSoftIconColor(p.style.color) } };
+  return <Comp {...p} />;
+};
+const CalendarDays = __softIcon(__L_CalendarDays);
+const LayoutGrid = __softIcon(__L_LayoutGrid);
+const TrendingUp = __softIcon(__L_TrendingUp);
+const Plus = __softIcon(__L_Plus);
+const Trash2 = __softIcon(__L_Trash2);
+const Check = __softIcon(__L_Check);
+const Wallet = __softIcon(__L_Wallet);
+const Briefcase = __softIcon(__L_Briefcase);
+const HeartPulse = __softIcon(__L_HeartPulse);
+const Settings2 = __softIcon(__L_Settings2);
+const Play = __softIcon(__L_Play);
+const Square = __softIcon(__L_Square);
+const ArrowUp = __softIcon(__L_ArrowUp);
+const ArrowDown = __softIcon(__L_ArrowDown);
+const ArrowRight = __softIcon(__L_ArrowRight);
+const Sun = __softIcon(__L_Sun);
+const Building2 = __softIcon(__L_Building2);
+const Dumbbell = __softIcon(__L_Dumbbell);
+const Moon = __softIcon(__L_Moon);
+const Droplet = __softIcon(__L_Droplet);
+const Receipt = __softIcon(__L_Receipt);
+const Target = __softIcon(__L_Target);
+const Clock = __softIcon(__L_Clock);
+const Pencil = __softIcon(__L_Pencil);
+const ChevronUp = __softIcon(__L_ChevronUp);
+const ChevronDown = __softIcon(__L_ChevronDown);
+const Bell = __softIcon(__L_Bell);
+const BellOff = __softIcon(__L_BellOff);
+const Flame = __softIcon(__L_Flame);
+const Download = __softIcon(__L_Download);
+const FileJson = __softIcon(__L_FileJson);
+const Plane = __softIcon(__L_Plane);
+const Train = __softIcon(__L_Train);
+const Bus = __softIcon(__L_Bus);
+const Activity = __softIcon(__L_Activity);
+const Bike = __softIcon(__L_Bike);
+const Car = __softIcon(__L_Car);
+const MapPin = __softIcon(__L_MapPin);
+const Bath = __softIcon(__L_Bath);
+const Gamepad2 = __softIcon(__L_Gamepad2);
+const Home = __softIcon(__L_Home);
+const BookOpen = __softIcon(__L_BookOpen);
+const Laptop = __softIcon(__L_Laptop);
+const ChefHat = __softIcon(__L_ChefHat);
+const UtensilsCrossed = __softIcon(__L_UtensilsCrossed);
+const ShoppingBag = __softIcon(__L_ShoppingBag);
+const Footprints = __softIcon(__L_Footprints);
+const Film = __softIcon(__L_Film);
+const Music = __softIcon(__L_Music);
+const Users = __softIcon(__L_Users);
+const HandHeart = __softIcon(__L_HandHeart);
+const Brush = __softIcon(__L_Brush);
+const Coffee = __softIcon(__L_Coffee);
+const Smile = __softIcon(__L_Smile);
+const Link2 = __softIcon(__L_Link2);
+const Upload = __softIcon(__L_Upload);
+const Cloud = __softIcon(__L_Cloud);
+const CloudOff = __softIcon(__L_CloudOff);
+const RefreshCw = __softIcon(__L_RefreshCw);
+const HardDrive = __softIcon(__L_HardDrive);
+const Eye = __softIcon(__L_Eye);
+const Undo2 = __softIcon(__L_Undo2);
+const History = __softIcon(__L_History);
+const HomeIcon = __softIcon(__L_HomeIcon);
+const CheckCircle2 = __softIcon(__L_CheckCircle2);
+const CreditCard = __softIcon(__L_CreditCard);
+const Rocket = __softIcon(__L_Rocket);
+const ChevronRight = __softIcon(__L_ChevronRight);
+const ChevronLeft = __softIcon(__L_ChevronLeft);
+const Sparkles = __softIcon(__L_Sparkles);
+const Ticket = __softIcon(__L_Ticket);
+const PartyPopper = __softIcon(__L_PartyPopper);
+const Trophy = __softIcon(__L_Trophy);
+const Fuel = __softIcon(__L_Fuel);
+const Store = __softIcon(__L_Store);
+const MessageSquare = __softIcon(__L_MessageSquare);
+const Sunrise = __softIcon(__L_Sunrise);
+const Cookie = __softIcon(__L_Cookie);
+const PiggyBank = __softIcon(__L_PiggyBank);
+const Percent = __softIcon(__L_Percent);
+const ListChecks = __softIcon(__L_ListChecks);
+const Star = __softIcon(__L_Star);
+const XCircle = __softIcon(__L_XCircle);
+const Brain = __softIcon(__L_Brain);
+const ClipboardCheck = __softIcon(__L_ClipboardCheck);
+const GraduationCap = __softIcon(__L_GraduationCap);
+const ArrowLeftRight = __softIcon(__L_ArrowLeftRight);
+const Zap = __softIcon(__L_Zap);
+const Smartphone = __softIcon(__L_Smartphone);
+const Shirt = __softIcon(__L_Shirt);
+const Wrench = __softIcon(__L_Wrench);
+const Gift = __softIcon(__L_Gift);
+const Shield = __softIcon(__L_Shield);
+const X = __softIcon(__L_X);
+const AlarmClock = __softIcon(__L_AlarmClock);
+const BedDouble = __softIcon(__L_BedDouble);
+const Droplets = __softIcon(__L_Droplets);
+const Apple = __softIcon(__L_Apple);
+const Pill = __softIcon(__L_Pill);
+const ShoppingCart = __softIcon(__L_ShoppingCart);
+const Sprout = __softIcon(__L_Sprout);
+const Coins = __softIcon(__L_Coins);
+const Tv = __softIcon(__L_Tv);
 
 const INK = "var(--ink)";
 const INK_DIM = "var(--ink-dim)";
@@ -2309,7 +2435,7 @@ function RoutineIconTile({ icon, size = 20, style = {}, title }) {
   const I = ICON_MAP[icon];
   if (!I) return <RoutineActivityIcon icon={icon} size={size} style={style} title={title} />;
   const col = iconGroupColor(icon), box = Math.round(size * 1.75), label = title || iconLabel(icon);
-  return <span role="img" aria-label={label} title={label} style={{ width: box, height: box, borderRadius: Math.round(box * 0.28), background: hexA(col, 0.14), color: col, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, ...style }}><I size={size} strokeWidth={2} /></span>;
+  return <span role="img" aria-label={label} title={label} style={{ width: box, height: box, borderRadius: Math.round(box * 0.28), background: hexA(col, 0.14), color: ltSoftIconColor(col), display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, ...style }}><I size={size} strokeWidth={2} /></span>;
 }
 function IconPickerRow({ value, onChange }) {
   const [open, setOpen] = useState(false);
@@ -2318,7 +2444,7 @@ function IconPickerRow({ value, onChange }) {
     <div>
       <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Icon</div>
       <button type="button" onClick={() => setOpen(true)} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", height: 56, padding: "0 12px", background: PANEL_2, border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", color: INK }}>
-        <span style={{ width: 36, height: 36, borderRadius: 10, background: hexA(col, 0.14), color: col, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Cur size={20} strokeWidth={2} /></span>
+        <span style={{ width: 36, height: 36, borderRadius: 10, background: hexA(col, 0.14), color: ltSoftIconColor(col), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Cur size={20} strokeWidth={2} /></span>
         <span style={{ flex: 1, textAlign: "left", fontSize: 15 }}>{ICON_MAP[value] ? iconLabel(value) : "Choose an icon"}</span>
         <span style={{ fontSize: 14, color: BRASS }}>Change</span>
         <ChevronRight size={18} color={INK_FAINT} />
@@ -2336,7 +2462,7 @@ function IconPickerRow({ value, onChange }) {
                 <div style={{ fontSize: 12, color: INK_FAINT, marginBottom: 6 }}>{g.label}</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 6 }}>
                   {g.names.map((n) => { const I = ICON_MAP[n]; const sel = value === n; return (
-                    <button key={n} type="button" aria-label={iconLabel(n)} onClick={() => { onChange(n); setOpen(false); }} style={{ aspectRatio: "1", minHeight: 44, borderRadius: 10, border: "none", background: hexA(g.color, 0.14), color: g.color, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: sel ? `0 0 0 2px ${BRASS}` : "none" }}><I size={20} strokeWidth={2} /></button>
+                    <button key={n} type="button" aria-label={iconLabel(n)} onClick={() => { onChange(n); setOpen(false); }} style={{ aspectRatio: "1", minHeight: 44, borderRadius: 10, border: "none", background: hexA(g.color, 0.14), color: ltSoftIconColor(g.color), display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: sel ? `0 0 0 2px ${BRASS}` : "none" }}><I size={20} strokeWidth={2} /></button>
                   ); })}
                 </div>
               </div>
@@ -3554,6 +3680,7 @@ function LifeTracker() {
     } catch (e) { return undefined; }
   }, []);
   const darkMode = darkPref === "on" || (darkPref === "system" && systemDark);
+  LT_DARK = darkMode;
   const [notifMode, setNotifMode] = useState(() => { const v = readPersistedSync("notifMode", "on"); return v === "dnd" || v === "mute" || v === "system" ? v : "on"; });
   const notifModeRef = useRef(notifMode);
   notifModeRef.current = notifMode;
