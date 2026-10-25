@@ -10453,33 +10453,11 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                 const CARD = { padding: "2px 14px", borderRadius: 20 };
                 const Tile = ({ I, c }) => <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: c, display: "flex", alignItems: "center", justifyContent: "center" }}><I size={18} color="#fff" strokeWidth={2.2} /></span>;
                 const isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-                const styleRows = [{ k: "daily", label: "Daily activities", I: Sunrise, c: "#FF9500" }, { k: "plans", label: "My Day plans", I: CalendarDays, c: "#2F6FED" }, { k: "trips", label: "Trips", I: Plane, c: "#0D9488" }];
                 const soundRows = [{ kind: "alarm", title: "Alarm sound", I: AlarmClock, c: "#FF3B30" }, { kind: "notification", title: "Notification sound", I: Bell, c: "#F59E0B" }];
                 const soundLabel = (c) => c.id === "default" ? "Phone default" : c.id === "custom" || c.id === "device" ? (c.name || "Phone sound") : ((SOUND_CHOICES.find((x) => x.id === c.id) || {}).label || "Phone default");
                 const actionBtn = { width: "100%", padding: "11px 10px", borderRadius: 10, border: "none", background: BRASS, color: "#FFFFFF", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
                 const showStatus = notifBlocked || isNativeApp;
                 return (<>
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={GL}>Reminder type</div>
-                    <Card style={CARD}>
-                      {styleRows.map((row, i) => (
-                        <div key={row.k} style={{ padding: "11px 0", borderTop: i > 0 ? `1px solid ${LINE}` : "none" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                            <Tile I={row.I} c={row.c} />
-                            <span style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{ display: "block", fontSize: 15, fontWeight: 650, color: INK }}>{row.label}</span>
-                              <span style={{ display: "block", fontSize: 12.5, color: INK_FAINT, marginTop: 1 }}>{reminderStyle[row.k] === "alarm" ? "Alarm" : "Notification"}</span>
-                            </span>
-                          </div>
-                          <div style={{ display: "flex", borderRadius: 9, overflow: "hidden", border: `1px solid ${BRASS}`, marginTop: 10 }}>
-                            {[{ v: "notification", t: "Notification" }, { v: "alarm", t: "Alarm" }].map((o) => (
-                              <button key={o.v} onClick={() => setReminderStyle((r) => ({ ...r, [row.k]: o.v }))} style={{ flex: 1, border: "none", padding: "9px 4px", minHeight: 38, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", background: reminderStyle[row.k] === o.v ? BRASS : "transparent", color: reminderStyle[row.k] === o.v ? "#FFFFFF" : BRASS }}>{o.t}</button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </Card>
-                  </div>
                   <div style={{ marginBottom: 16 }}>
                     <div style={GL}>Sounds</div>
                     <Card style={CARD}>
