@@ -521,6 +521,7 @@ import {
   Fuel, Store, MessageSquare, Sunrise, Cookie, PiggyBank, Percent, ListChecks,
   Star, XCircle, Brain, ClipboardCheck, GraduationCap, ArrowLeftRight,
   Zap, Smartphone, Shirt, Wrench, Gift, Shield, X,
+  AlarmClock, BedDouble, Droplets, Apple, Pill, ShoppingCart, Sprout, Coins, Tv,
 } from "lucide-react";
 
 const INK = "var(--ink)";
@@ -2259,7 +2260,55 @@ const ICON_MAP = {
   Bike, Car, Bath, Gamepad2, Home, BookOpen, Laptop, ChefHat, UtensilsCrossed,
   ShoppingBag, Footprints, Film, Music, Users, HandHeart, Brush, Coffee, Smile,
 };
+Object.assign(ICON_MAP, { AlarmClock, BedDouble, Droplets, HeartPulse, Apple, Pill, Pencil, Briefcase, GraduationCap, ShoppingCart, Sprout, Wallet, PiggyBank, CreditCard, TrendingUp, Coins, Tv, Smartphone, Star, Sparkles, Shirt });
 const ICON_NAMES = Object.keys(ICON_MAP);
+const ICON_GROUPS = [
+  { label: "Morning", color: "#FF9500", names: ["Sun", "AlarmClock", "Coffee", "BedDouble", "Sparkles", "Droplets"] },
+  { label: "Health", color: "#34C759", names: ["Dumbbell", "HeartPulse", "Droplet", "Apple", "Pill", "Footprints"] },
+  { label: "Work and study", color: "#0071E3", names: ["BookOpen", "Laptop", "GraduationCap", "Pencil", "Briefcase", "Target"] },
+  { label: "Home", color: "#A2845E", names: ["Home", "ShoppingCart", "UtensilsCrossed", "Shirt", "Brush", "Sprout"] },
+  { label: "Money", color: "#E5A100", names: ["Wallet", "PiggyBank", "Receipt", "CreditCard", "TrendingUp", "Coins"] },
+  { label: "Evening", color: "#AF52DE", names: ["Moon", "Music", "Tv", "Smartphone", "Bath", "Star"] },
+];
+(() => { const used = new Set(); ICON_GROUPS.forEach((g) => g.names.forEach((n) => used.add(n))); const rest = ICON_NAMES.filter((n) => !used.has(n)); if (rest.length) ICON_GROUPS.push({ label: "Other", color: "#8E8E93", names: rest }); })();
+function iconGroupColor(name) { const g = ICON_GROUPS.find((x) => x.names.includes(name)); return g ? g.color : "#8E8E93"; }
+function iconLabel(n) { return String(n || "").replace(/([a-z])([A-Z])/g, "$1 $2"); }
+function IconPickerRow({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const Cur = ICON_MAP[value] || Activity, col = iconGroupColor(value);
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Icon</div>
+      <button type="button" onClick={() => setOpen(true)} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", height: 56, padding: "0 12px", background: PANEL_2, border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", color: INK }}>
+        <span style={{ width: 36, height: 36, borderRadius: 10, background: hexA(col, 0.14), color: col, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Cur size={20} strokeWidth={2} /></span>
+        <span style={{ flex: 1, textAlign: "left", fontSize: 15 }}>{ICON_MAP[value] ? iconLabel(value) : "Choose an icon"}</span>
+        <span style={{ fontSize: 14, color: BRASS }}>Change</span>
+        <ChevronRight size={18} color={INK_FAINT} />
+      </button>
+      {open && (
+        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 20060, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "78dvh", overflowY: "auto", background: PANEL, borderRadius: "20px 20px 0 0", padding: "8px 16px calc(16px + env(safe-area-inset-bottom, 0px))", boxSizing: "border-box" }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: LINE, margin: "0 auto 10px" }} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Choose an icon</div>
+              <button type="button" aria-label="Close" onClick={() => setOpen(false)} style={{ background: "transparent", border: "none", padding: 6, cursor: "pointer", display: "flex", color: INK_DIM }}><X size={20} /></button>
+            </div>
+            {ICON_GROUPS.map((g) => (
+              <div key={g.label} style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, color: INK_FAINT, marginBottom: 6 }}>{g.label}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 6 }}>
+                  {g.names.map((n) => { const I = ICON_MAP[n]; const sel = value === n; return (
+                    <button key={n} type="button" aria-label={iconLabel(n)} onClick={() => { onChange(n); setOpen(false); }} style={{ aspectRatio: "1", minHeight: 44, borderRadius: 10, border: "none", background: hexA(g.color, 0.14), color: g.color, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: sel ? `0 0 0 2px ${BRASS}` : "none" }}><I size={20} strokeWidth={2} /></button>
+                  ); })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 const TYPE_OPTIONS = [
   { value: "instant", label: "Instant \u00b7 one button" },
   { value: "duration", label: "Duration \u00b7 start / stop timer" },
@@ -6551,39 +6600,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                     <Select value={itemForm.type} onChange={(e) => setItemForm((f) => ({ ...f, type: e.target.value }))}>
                       {TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </Select>
-                    <div>
-                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 6 }}>Icon</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 7, width: "100%", boxSizing: "border-box" }}>
-                        {ICON_NAMES.map((name) => {
-                          const sel = itemForm.icon === name;
-                          return (
-                            <button
-                              key={name}
-                              type="button"
-                              aria-label={name}
-                              title={name}
-                              onClick={() => setItemForm((f) => ({ ...f, icon: name }))}
-                              style={{
-                                position: "relative",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                height: 54,
-                                minWidth: 0,
-                                borderRadius: 11,
-                                background: sel ? "rgba(0,113,227,0.12)" : PANEL_2,
-                                border: `1px solid ${sel ? BRASS : LINE}`,
-                                cursor: "pointer",
-                                overflow: "hidden"
-                              }}
-                            >
-                              <RoutineActivityIcon icon={name} size={24} />
-                              {sel && <div style={{ position: "absolute", top: 4, right: 4, width: 14, height: 14, borderRadius: "50%", background: BRASS, display: "flex", alignItems: "center", justifyContent: "center" }}><Check size={9} color={BG} /></div>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <IconPickerRow value={itemForm.icon} onChange={(name) => setItemForm((f) => ({ ...f, icon: name }))} />
 
                     {itemForm.type === "interval" && (
                       <>
