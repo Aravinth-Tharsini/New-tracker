@@ -3168,6 +3168,11 @@ function TimeInput({ value, onChange, style, allowClear, placeholder, travel, fm
     </div>
   );
 }
+function AddFormOnly({ children }) {
+  const ref = useRef(null);
+  useEffect(() => { const t = setTimeout(() => { try { if (ref.current) ref.current.scrollIntoView({ block: "start" }); } catch (e) {} }, 40); return () => clearTimeout(t); }, []);
+  return <div ref={ref} data-add-form="1">{children}</div>;
+}
 function IconBtn({ onClick, children, title }) { return <button onClick={onClick} title={title} aria-label={title} style={{ background: PANEL_2, border: "none", borderRadius: 12, padding: "0 11px", height: 38, color: BRASS, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>{children}</button>; }
 function IconAction({ onClick, children, disabled, tone, style, title }) {
   return (
@@ -6620,6 +6625,10 @@ function LifeTracker() {
            scrolling past that point. This variant keeps the same fade/slide-in feel with no
            height cap and no overflow clipping. */
         .planner-tab-enter { animation: plannerTabEnter .38s cubic-bezier(.22,.8,.25,1) both; }
+        /* Add-entry focus mode: with a NEW-entry form open, hide every other element in the planner area (lists, history,
+           summaries). Elements stay mounted, so no data or state is touched; closing the form shows them again. */
+        .planner-tab-enter:has([data-add-form]) *:not([data-add-form]):not(:has([data-add-form])):not([data-add-form] *) { display: none !important; }
+        [data-add-form] { scroll-margin-top: 8px; }
         @keyframes plannerTabEnter {
           from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }
@@ -8316,7 +8325,7 @@ function LifeTracker() {
                     </div>
                   </div>
                   <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Train, bus, car, bike, flight, or other trips. They'll appear on the Daily tab as soon as you add them, and highlight once your chosen reminder lead time kicks in.</div>
-                  {showAddTravel && !showTravelHistory && !editingTravelId && travelFormCard}
+                  {showAddTravel && !showTravelHistory && !editingTravelId && <AddFormOnly>{travelFormCard}</AddFormOnly>}
                   {showTravelHistory && travelHistoryPlans.length > 0 && (
                     <div className="history-panel-enter" style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                       {travelHistoryPlans.length === 0 ? (
@@ -8417,7 +8426,7 @@ function LifeTracker() {
                     </button>
                   </div>
                   <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Only items with their required fields filled in show up on the Daily tab.</div>
-                  {itemForm && !itemForm.id && itemFormCard}
+                  {itemForm && !itemForm.id && <AddFormOnly>{itemFormCard}</AddFormOnly>}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {dailyItems.map((item, idx) => {
                       const valid = isItemValid(item);
@@ -8464,7 +8473,7 @@ function LifeTracker() {
 
                     </div>
                   </div>
-                  {shoppingForm && !shoppingForm.id && shoppingFormCard}
+                  {shoppingForm && !shoppingForm.id && <AddFormOnly>{shoppingFormCard}</AddFormOnly>}
                   {historyExpanded && shoppingHistoryLists.length > 0 && (
                     <div className="history-open-anim" style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                       {shoppingHistoryLists.slice(0, historyVisibleCount).map((l) => {
@@ -8555,7 +8564,7 @@ function LifeTracker() {
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>{sortedMyDayEvents.some((e) => e.completed) && <button onClick={() => setShowMyDayHistory((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4, background: showMyDayHistory ? TEAL : "transparent", border: `1px solid ${showMyDayHistory ? TEAL : BRASS_DIM}`, color: showMyDayHistory ? "#FFFFFF" : BRASS, borderRadius: 7, padding: "4px 8px", fontSize: 14, cursor: "pointer", transition: "all .25s ease" }}><History size={14} /> History</button>}</div>
               </div>
               <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Meetings and any other special activity for a day. Set a reminder and edit the plan any time.</div>
-              {showAddMyDay && !editingMyDayId && myDayFormCard}
+              {showAddMyDay && !editingMyDayId && <AddFormOnly>{myDayFormCard}</AddFormOnly>}
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                 {sortedMyDayEvents.filter((e) => !e.completed).map((e) => {
                   const isRecurring = e.repeatDays && e.repeatDays.length > 0;
@@ -8707,7 +8716,7 @@ function LifeTracker() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <SectionLabel>Reminder due</SectionLabel>
                   </div>
-                  {showAddRepayment && !(editingRepaymentId && repayments.some((r) => r.id === editingRepaymentId && !r.paid)) && repaymentFormCard}
+                  {showAddRepayment && !(editingRepaymentId && repayments.some((r) => r.id === editingRepaymentId && !r.paid)) && <AddFormOnly>{repaymentFormCard}</AddFormOnly>}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {sortedRepayments.filter((r) => !r.paid).map((r) => {
                       const cls = repaymentCategoryClass(r.category);
@@ -8882,7 +8891,7 @@ function LifeTracker() {
                   })()}
                 </Card>
               )}
-              {showAddGoal && !editingGoalId && goalFormCard}
+              {showAddGoal && !editingGoalId && <AddFormOnly>{goalFormCard}</AddFormOnly>}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {categoryGoals.filter((g) => !g.done).map((g) => {
                   const allocated = isFinanceGoalsTab ? (financeAllocations[g.id] || 0) : null;
