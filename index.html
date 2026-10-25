@@ -5394,12 +5394,31 @@ frequency: myDayFormFreq, monthDay: myDayFormFreq === "Monthly" ? (parseInt(myDa
     if (wasEditingId) scrollBackToItemCard(wasEditingId); else ltScrollTop();
   };
 
+  // ---- Global Back rule: Back always returns to the page the user actually came from ----
+  // A "jump" is any programmatic page change (Home cards, Next up, View all, Quick Add, edit-in-Planner, header date -> Progress ...).
+  // Each jump pushes the page it left (with its scroll position and open Today/Planner/Settings level) onto navStack.
+  // Back first closes the levels opened on the page it landed on, then returns to the page on top of navStack.
+  // Bottom-bar taps and swipes switch between peer main pages: they start a fresh trail and never add history of their own.
+  const [navStack, setNavStack] = useState([]);
+  const navFlagRef = useRef({ viaTab: false, returning: false });
+  const lastSnapRef = useRef({ expandedDailyCategory: null, catTab: null, moreSection: null });
+  const scrollMemRef = useRef({});
+  const pageNowRef = useRef(page);
+  const pagePrevRef = useRef(page);
+  pageNowRef.current = page;
+  useEffect(() => {
+    const onScroll = () => { scrollMemRef.current[pageNowRef.current] = window.pageYOffset || document.documentElement.scrollTop || 0; };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   // Bottom-nav switch: leaving a section closes whatever was open inside it (Planner category,
   // opened My Day plan / edit form, shopping/goal forms, expanded Today card) so coming back
   // always lands on that section's main page instead of the previously opened activity.
   const switchSection = (target) => {
     if (target === page) { if (target === "datalink") setMoreSection(null); return; }
     if (target === "datalink") setMoreSection(null);
+    navFlagRef.current.viaTab = true; setNavStack([]);
     setCatTab(null);
     setExpandedDailyCategory(null);
     setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm());
@@ -5420,6 +5439,7 @@ frequency: myDayFormFreq, monthDay: myDayFormFreq === "Monthly" ? (parseInt(myDa
   const handleBackRef = useRef(null);
   handleBackRef.current = () => {
       if (updateOverlay) return true; // the update screen cannot be skipped
+      if (navStack.length > 0 && baseDepth <= navStack[navStack.length - 1].arrival) return returnToOrigin();
       if (tree3d) { setTree3d(null); return true; }
       if (pendingImportData) { cancelImport(); return true; }
       if (showHolidays) { setShowHolidays(false); return true; }
@@ -5440,12 +5460,61 @@ frequency: myDayFormFreq, monthDay: myDayFormFreq === "Monthly" ? (parseInt(myDa
       if (page === "categories" && catTab) { setCatTab(null); return true; }
       return false;
   };
-  const backDepth = (updateOverlay ? 1 : 0) + (tree3d ? 1 : 0) + (pendingImportData ? 1 : 0) + (showHolidays ? 1 : 0)
+  const baseDepth = (updateOverlay ? 1 : 0) + (tree3d ? 1 : 0) + (pendingImportData ? 1 : 0) + (showHolidays ? 1 : 0)
     + ((itemForm || addingGroup || addingSubTo) ? 1 : 0) + ((showAddMyDay || editingMyDayId) ? 1 : 0) + ((showAddGoal || editingGoalId) ? 1 : 0)
     + ((showAddTravel || editingTravelId) ? 1 : 0) + ((showAddRepayment || editingRepaymentId) ? 1 : 0) + (shoppingForm ? 1 : 0)
     + (bikeServiceForm ? 1 : 0) + (selectedStreakId ? 1 : 0) + (showQuickCapture ? 1 : 0)
     + (page === "datalink" && moreSection ? (moreSection === "sheet" ? 2 : 1) : 0)
     + (page === "daily" && expandedDailyCategory ? 1 : 0) + (page === "categories" && catTab ? 1 : 0);
+  // One extra history level while a return-to-previous-page is pending, so phone Back / browser Back always has an entry to use.
+  const backDepth = baseDepth + (navStack.length > 0 ? 1 : 0);
+  const closeAllSubpages = () => {
+    setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm());
+    setShoppingForm(null); setPreviewShoppingId(null); setExpandedDailyShoppingId(null);
+    setShowAddGoal(false); setEditingGoalId(null); setSelectedGoalId(null); setGoalForm(blankGoalForm());
+    setShowAddTravel(false); setEditingTravelId(null); setTravelForm(blankTravelForm());
+    setShowAddRepayment(false); setEditingRepaymentId(null); setRepaymentForm(blankRepaymentForm());
+    setBikeServiceForm(null);
+    setItemForm(null); setAddingGroup(false); setAddingSubTo(null);
+    setSelectedStreakId(null); setShowQuickCapture(false); setShowHolidays(false);
+  };
+  // Go back to the page on top of the trail: close what the jump opened, restore the origin's open level, then its scroll position.
+  const returnToOrigin = () => {
+    const top = navStack[navStack.length - 1];
+    if (!top) return false;
+    if (top.page !== page) navFlagRef.current.returning = true;
+    closeAllSubpages();
+    setCatTab(top.snap.catTab); setExpandedDailyCategory(top.snap.expandedDailyCategory); setMoreSection(top.snap.moreSection);
+    setNavStack((st) => st.slice(0, -1));
+    setPage(top.page);
+    const y = top.scroll || 0;
+    if (y > 0) {
+      const go = () => ltInstant(() => window.scrollTo(0, y));
+      requestAnimationFrame(go); setTimeout(go, 120); setTimeout(go, 420);
+    }
+    return true;
+  };
+  // In-app Back buttons use the same rule: below the landing level it returns to the origin page, otherwise it closes one level as before.
+  const navBack = (closeFn) => () => {
+    const top = navStack[navStack.length - 1];
+    if (top && baseDepth <= top.arrival) { returnToOrigin(); return; }
+    closeFn();
+  };
+  useEffect(() => {
+    const prev = pagePrevRef.current;
+    if (prev === page) return;
+    pagePrevRef.current = page;
+    const f = navFlagRef.current;
+    if (f.viaTab) { f.viaTab = false; return; }
+    if (f.returning) { f.returning = false; return; }
+    const entry = { page: prev, scroll: scrollMemRef.current[prev] || 0, snap: { ...lastSnapRef.current }, arrival: baseDepth };
+    setNavStack((st) => {
+      const at = st.findIndex((e) => e.page === page);
+      if (at >= 0) return st.slice(0, at); // heading to a page already on the trail: unwind, never loop
+      return [...st, entry].slice(-8);
+    });
+  }, [page]);
+  useEffect(() => { lastSnapRef.current = { expandedDailyCategory, catTab, moreSection }; });
   const histEntryRef = useRef(false);
   const histIgnoreRef = useRef(0);
   const [histTick, setHistTick] = useState(0);
@@ -6030,7 +6099,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
   const travelFormCard = (
                   <div ref={travelFormRef} data-entry-form="1">
                     <Card style={{ marginBottom: 9 }}>
-                      <FormHeader onBack={cancelTravelForm}>{editingTravelId ? "Edit trip" : "New trip"}</FormHeader>
+                      <FormHeader onBack={navBack(cancelTravelForm)}>{editingTravelId ? "Edit trip" : "New trip"}</FormHeader>
                       <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                         <Select value={travelForm.mode} onChange={(e) => setTravelForm({ ...travelForm, mode: e.target.value })}>
                           <option value="Train">Train</option>
@@ -6164,7 +6233,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
   const goalFormCard = (
                   <div ref={goalFormRef} data-entry-form="1">
                 <Card style={{ marginBottom: 9 }}>
-                  <FormHeader onBack={cancelGoalForm}>{editingGoalId ? "Edit goal" : "New goal"}</FormHeader>
+                  <FormHeader onBack={navBack(cancelGoalForm)}>{editingGoalId ? "Edit goal" : "New goal"}</FormHeader>
                   <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <FL t="Goal title"><TextField placeholder="Goal title" value={goalForm.title} onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })} /></FL>
                     {isRoutineCategory && (
@@ -6311,7 +6380,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
   const repaymentFormCard = (
                   <div ref={repaymentFormRef} data-entry-form="1">
                     <Card style={{ marginBottom: 9 }}>
-                      <FormHeader onBack={cancelRepaymentForm}>{editingRepaymentId ? "Edit reminder" : "New reminder"}</FormHeader>
+                      <FormHeader onBack={navBack(cancelRepaymentForm)}>{editingRepaymentId ? "Edit reminder" : "New reminder"}</FormHeader>
                       <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                         <Select value={repaymentForm.category} onChange={(e) => { const cat = e.target.value; setRepaymentForm({ ...blankRepaymentForm(), category: cat, frequency: cat === "Insurance Renewal" ? "Yearly" : "Monthly" }); }}>
                           {REPAYMENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -6470,7 +6539,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
 
   const bikeServiceFormCard = bikeServiceForm && (
     <Card style={{ marginBottom: 9 }}>
-      <FormHeader onBack={cancelBikeServiceForm}>Log service</FormHeader>
+      <FormHeader onBack={navBack(cancelBikeServiceForm)}>Log service</FormHeader>
       <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <TextField type="number" placeholder="Odometer reading (km)" value={bikeServiceForm.odometer} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, odometer: e.target.value })} style={{ fontFamily: mono }} />
         <TextField type="number" placeholder="Cost" value={bikeServiceForm.cost} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, cost: e.target.value })} style={{ fontFamily: mono }} />
@@ -6493,7 +6562,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
   const myDayFormCard = (
                   <div ref={myDayFormRef} data-entry-form="1">
                 <Card style={{ marginBottom: 9 }}>
-                  <FormHeader onBack={cancelMyDayForm}>{editingMyDayId ? "Edit plan" : "New plan"}</FormHeader>
+                  <FormHeader onBack={navBack(cancelMyDayForm)}>{editingMyDayId ? "Edit plan" : "New plan"}</FormHeader>
                   <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <Select value={myDayForm.type} onChange={(e) => setMyDayForm({ ...myDayForm, type: e.target.value })}>
                       {MYDAY_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -6552,7 +6621,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
   const shoppingFormCard = !shoppingForm ? null : (
                   <div ref={shoppingFormRef} data-entry-form="1">
                 <Card>
-                  <FormHeader onBack={closeShoppingForm}>{shoppingForm.id ? "Edit shopping list" : "New shopping list"}</FormHeader>
+                  <FormHeader onBack={navBack(closeShoppingForm)}>{shoppingForm.id ? "Edit shopping list" : "New shopping list"}</FormHeader>
                   <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <div style={{ flex: "1 1 160px" }}>
@@ -6667,7 +6736,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
   const itemFormCard = !itemForm ? null : (
                   <div ref={itemFormRef} data-entry-form="1">
                 <Card>
-                  <FormHeader onBack={closeItemForm}>{itemForm.id ? "Edit routine" : "New routine"}</FormHeader>
+                  <FormHeader onBack={navBack(closeItemForm)}>{itemForm.id ? "Edit routine" : "New routine"}</FormHeader>
                   <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <FL t="Name"><TextField placeholder="Name" value={itemForm.name} onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))} /></FL>
                     <Select value={itemForm.type} onChange={(e) => setItemForm((f) => ({ ...f, type: e.target.value }))}>
@@ -6754,7 +6823,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
   // Main-page swipe is locked whenever anything is open on top of a main page: any popup, sheet, form, detail,
   // opened category or More option (same list Back uses, so lock/unlock always matches), plus inline history edit forms.
   // Closing it (save / cancel / Back) makes this false again, which unlocks swiping automatically.
-  const swipeLocked = backDepth > 0 || !!editingHistoryExpense || !!editingHistoryRepay;
+  const swipeLocked = baseDepth > 0 || !!editingHistoryExpense || !!editingHistoryRepay;
   const onSwipeStart = (e) => {
     swipeRef.current = null;
     if (alarmScreen || swipeLocked || !e.touches || e.touches.length !== 1) return;
@@ -7305,17 +7374,6 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                   <Sparkles size={12} color={darkMode ? "#FFD9A0" : "#B9741E"} strokeWidth={2.2} style={{ flexShrink: 0, marginTop: 1.5 }} />
                   <div style={{ fontSize: 11.5, fontWeight: 650, color: INK, lineHeight: 1.35, fontStyle: "italic" }}>{dailyMotivation}</div>
                 </div>
-                {totalActivities > 0 && (
-                  <div style={{ marginTop: 9 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 5 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: INK }}>{completedActivities} of {totalActivities} done</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, fontFamily: mono, color: BRASS }}>{progressPercentLabel}%</span>
-                    </div>
-                    <div style={{ height: 6, borderRadius: 3, background: darkMode ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.65)", overflow: "hidden" }}>
-                      <div style={{ width: `${Math.max(0, Math.min(100, progressPercent))}%`, height: "100%", borderRadius: 3, background: `linear-gradient(90deg, ${BRASS} 0%, ${TEAL} 100%)`, transition: "width .5s ease" }} />
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -7852,7 +7910,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                 const statMode = cat.id === "expense" ? "expense" : cat.id === "shopping" ? "reminder" : (cat.id === "myday" || cat.id === "trip") ? "counts" : "progress";
                 return (
                   <div key={cat.id} className={`cat-grid-item ${expanded ? "is-open-row" : (expandedDailyCategory ? "is-collapsed" : "")}`}>
-                    <button onClick={() => setExpandedDailyCategory(null)} style={{ display: "flex", alignItems: "center", gap: 9, background: "transparent", border: "none", padding: "2px 0 14px", cursor: "pointer", width: "100%", textAlign: "left", fontFamily: "inherit", color: INK }}>
+                    <button onClick={navBack(() => setExpandedDailyCategory(null))} style={{ display: "flex", alignItems: "center", gap: 9, background: "transparent", border: "none", padding: "2px 0 14px", cursor: "pointer", width: "100%", textAlign: "left", fontFamily: "inherit", color: INK }}>
                       <ChevronLeft size={18} color={INK_FAINT} style={{ flexShrink: 0 }} />
                       <div style={{ position: "relative", width: 32, height: 32, borderRadius: 10, background: hexA(accent, darkMode ? 0.22 : 0.12), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <CatIcon size={16} color={accent} />
@@ -8505,7 +8563,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                 const ActiveIcon = activeCat?.icon;
                 const activeMeta = PLANNER_CATEGORY_META[catTab] || { fg: BRASS, bg: "rgba(0,113,227,0.10)" };
                 return (
-                  <button onClick={() => setCatTab(null)} style={{ display: "flex", alignItems: "center", gap: 9, background: "transparent", border: "none", padding: "2px 0 14px", cursor: "pointer", width: "100%" }}>
+                  <button onClick={navBack(() => setCatTab(null))} style={{ display: "flex", alignItems: "center", gap: 9, background: "transparent", border: "none", padding: "2px 0 14px", cursor: "pointer", width: "100%" }}>
                     <ChevronLeft size={18} color={INK_FAINT} style={{ flexShrink: 0 }} />
                     <div style={{ width: 32, height: 32, borderRadius: 10, background: activeMeta.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       {ActiveIcon && <ActiveIcon size={16} color={activeMeta.fg} />}
@@ -10180,7 +10238,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
               <div className="progress-section-title">
                 {selectedStreakId ? `Last 30 days — ${streakList.find(s=>s.id===selectedStreakId)?.name||""}` : "Last 30 days"}
               </div>
-              {selectedStreakId && <button onClick={()=>setSelectedStreakId(null)}
+              {selectedStreakId && <button onClick={navBack(() => setSelectedStreakId(null))}
                 style={{background:"transparent",border:"none",color:BRASS,fontSize:12,fontWeight:750,cursor:"pointer",padding:0}}>Show all</button>}
             </div>
             <Card style={{marginBottom:12,padding:11}}>
@@ -10414,7 +10472,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
               {(() => {
                 const TITLES = { darkmode: "Dark mode", notifmode: "Notification mode", update: "App update", reminders: "Reminders & alarms", push: "Push notifications", storage: "Storage & backup", sheet: "Google Sheet sync" };
                 return (
-                  <button onClick={() => setMoreSection(moreSection === "sheet" ? "storage" : null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: "2px 0 12px", cursor: "pointer", color: BRASS, fontFamily: "inherit" }}>
+                  <button onClick={navBack(() => setMoreSection(moreSection === "sheet" ? "storage" : null))} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: "2px 0 12px", cursor: "pointer", color: BRASS, fontFamily: "inherit" }}>
                     <ChevronLeft size={22} strokeWidth={2.4} />
                     <span style={{ fontSize: 19, fontWeight: 800, color: INK, letterSpacing: "-.01em" }}>{TITLES[moreSection] || "Settings"}</span>
                   </button>
