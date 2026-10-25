@@ -2273,6 +2273,12 @@ const ICON_GROUPS = [
 (() => { const used = new Set(); ICON_GROUPS.forEach((g) => g.names.forEach((n) => used.add(n))); const rest = ICON_NAMES.filter((n) => !used.has(n)); if (rest.length) ICON_GROUPS.push({ label: "Other", color: "#8E8E93", names: rest }); })();
 function iconGroupColor(name) { const g = ICON_GROUPS.find((x) => x.names.includes(name)); return g ? g.color : "#8E8E93"; }
 function iconLabel(n) { return String(n || "").replace(/([a-z])([A-Z])/g, "$1 $2"); }
+function RoutineIconTile({ icon, size = 20, style = {}, title }) {
+  const I = ICON_MAP[icon];
+  if (!I) return <RoutineActivityIcon icon={icon} size={size} style={style} title={title} />;
+  const col = iconGroupColor(icon), box = Math.round(size * 1.75), label = title || iconLabel(icon);
+  return <span role="img" aria-label={label} title={label} style={{ width: box, height: box, borderRadius: Math.round(box * 0.28), background: hexA(col, 0.14), color: col, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, ...style }}><I size={size} strokeWidth={2} /></span>;
+}
 function IconPickerRow({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const Cur = ICON_MAP[value] || Activity, col = iconGroupColor(value);
@@ -3185,6 +3191,13 @@ function Select(props) { return <select {...props} style={{ background: PANEL_2,
 
 let ltFormCount = 0, ltFormCleanup = null;
 function ltInstant(fn) { const de = document.documentElement, prev = de.style.scrollBehavior; de.style.scrollBehavior = "auto"; try { fn(); } catch (e) {} de.style.scrollBehavior = prev; }
+function ltRevealForm(el) {
+  if (!el) return;
+  ltInstant(() => {
+    const top = el.getBoundingClientRect().top + (window.pageYOffset || 0);
+    if (top < 420) window.scrollTo(0, 0); else el.scrollIntoView({ block: "start" });
+  });
+}
 function ltScrollTop() { requestAnimationFrame(() => setTimeout(() => ltInstant(() => window.scrollTo(0, 0)), 220)); }
 function ltRevealField(el) {
   const vv = window.visualViewport, vh = vv ? vv.height : window.innerHeight, off = vv ? vv.offsetTop : 0;
@@ -3345,7 +3358,7 @@ function TimeInput({ value, onChange, style, allowClear, placeholder, travel, fm
 }
 function AddFormOnly({ children }) {
   const ref = useRef(null);
-  useEffect(() => { const t = setTimeout(() => { try { if (ref.current) ltInstant(() => ref.current.scrollIntoView({ block: "start" })); } catch (e) {} }, 40); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => { try { if (ref.current) ltRevealForm(ref.current); } catch (e) {} }, 40); return () => clearTimeout(t); }, []);
   return <div ref={ref} data-add-form="1" data-entry-form="1">{children}</div>;
 }
 function FrequencyPicker({ freq, onFreq, options, days, onToggleDay, monthDay, onMonthDay, yearDate, onYearDate, hint }) {
@@ -4155,7 +4168,7 @@ function LifeTracker() {
   const [shoppingForm, setShoppingForm] = useState(null);
   const shoppingFormRef = useRef(null);
   const shoppingCardRefs = useRef({});
-  const scrollToShoppingForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (shoppingFormRef.current) ltInstant(() => shoppingFormRef.current.scrollIntoView({ block: "start" })); }, 120); }); };
+  const scrollToShoppingForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (shoppingFormRef.current) ltRevealForm(shoppingFormRef.current); }, 120); }); };
   const scrollBackToShoppingCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = shoppingCardRefs.current[id]; if (el) ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
   const [previewShoppingId, setPreviewShoppingId] = useState(null);
   const [expandedDailyShoppingId, setExpandedDailyShoppingId] = useState(null);
@@ -4412,7 +4425,7 @@ function LifeTracker() {
   const [selectedGoalId, setSelectedGoalId] = useState(null);
   const goalFormRef = useRef(null);
   const goalCardRefs = useRef({});
-  const scrollToGoalForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (goalFormRef.current) ltInstant(() => goalFormRef.current.scrollIntoView({ block: "start" })); }, 60); }); };
+  const scrollToGoalForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (goalFormRef.current) ltRevealForm(goalFormRef.current); }, 60); }); };
   const scrollBackToGoalCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = goalCardRefs.current[id]; if (el) ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
   const goalMonthOptionsRef = () => { const arr = []; const nowD = new Date(); for (let i = -3; i <= 12; i++) arr.push(monthKey(new Date(nowD.getFullYear(), nowD.getMonth() + i, 1))); return arr; };
   const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", goalType: "Skill Learning", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalValue: "2", periodUnit: "hours", intervalAmount: "1", intervalUnit: "session", requiredDurationValue: "20", requiredDurationUnit: "minutes", reminderEnabled: false, reminderMinutes: "15", notes: "" });
@@ -4525,7 +4538,7 @@ function LifeTracker() {
   const [editingRepaymentId, setEditingRepaymentId] = useState(null);
   const repaymentFormRef = useRef(null);
   const repaymentCardRefs = useRef({});
-  const scrollToRepaymentForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (repaymentFormRef.current) ltInstant(() => repaymentFormRef.current.scrollIntoView({ block: "start" })); }, 60); }); };
+  const scrollToRepaymentForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (repaymentFormRef.current) ltRevealForm(repaymentFormRef.current); }, 60); }); };
   const scrollBackToRepaymentCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = repaymentCardRefs.current[id]; if (el) ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
   const blankRepaymentForm = () => ({
     category: REPAYMENT_CATEGORIES[0], name: "", remarks: "",
@@ -5133,7 +5146,7 @@ function LifeTracker() {
     setShowAddTravel(true);
     requestAnimationFrame(() => {
       setTimeout(() => {
-        if (travelFormRef.current) ltInstant(() => travelFormRef.current.scrollIntoView({ block: "start" }));
+        if (travelFormRef.current) ltRevealForm(travelFormRef.current);
       }, 60);
     });
   };
@@ -5211,7 +5224,7 @@ function LifeTracker() {
   const [editingMyDayId, setEditingMyDayId] = useState(null);
   const myDayFormRef = useRef(null);
   const myDayCardRefs = useRef({});
-  const scrollToMyDayForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (myDayFormRef.current) ltInstant(() => myDayFormRef.current.scrollIntoView({ block: "start" })); }, 120); }); };
+  const scrollToMyDayForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (myDayFormRef.current) ltRevealForm(myDayFormRef.current); }, 120); }); };
   const scrollBackToMyDayCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = myDayCardRefs.current[id]; if (el) ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
   const blankMyDayForm = () => ({ reminderType: "", type: "Meeting", title: "", eventDate: dateKey(), eventTime: "", location: "", notes: "", repeatDays: [], frequency: "Once", monthDay: "", yearDate: "", reminderOffsets: ["none"], reminderEnabled: true, reminderMinutes: "15" });
   const [myDayForm, setMyDayForm] = useState(blankMyDayForm());
@@ -5302,7 +5315,7 @@ frequency: myDayFormFreq, monthDay: myDayFormFreq === "Monthly" ? (parseInt(myDa
   const [newSubName, setNewSubName] = useState("");
   const itemFormRef = useRef(null);
   const itemCardRefs = useRef({});
-  const scrollToItemForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (itemFormRef.current) ltInstant(() => itemFormRef.current.scrollIntoView({ block: "start" })); }, 60); }); };
+  const scrollToItemForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (itemFormRef.current) ltRevealForm(itemFormRef.current); }, 60); }); };
   const scrollBackToItemCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = itemCardRefs.current[id]; if (el) ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
   const openNewItemForm = () => setItemForm(blankItemForm());
   const openEditItemForm = (item) => {
@@ -7396,7 +7409,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
               border: `2px solid ${hexA(accent, 0.25)}`,
             }}>
-              <RoutineActivityIcon icon={item.icon} size={size} title={item.name} />
+              <RoutineIconTile icon={item.icon} size={size} title={item.name} />
             </div>
           );
           const streakBadge = streaks[item.id] > 0 && (
@@ -7536,7 +7549,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                     </>
                   ) : (
                     <>
-                      <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
+                      <RoutineIconTile icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
                       <div style={{ fontFamily: mono, fontSize: 25, color: BRASS, fontWeight: 600, marginBottom: targetMs ? 4 : 10 }}>
                         {fmtElapsed(now - new Date(rec.startTime))}{targetMs ? <span style={{ fontSize: 16, color: INK_FAINT }}> / {fmtElapsed(targetMs)}</span> : null}
                       </div>
@@ -7572,7 +7585,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                   </>
                 ) : (
                   <>
-                    <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: targetMs ? 3 : 10 }}>Start when {item.name.toLowerCase()} begins</div>
+                    <RoutineIconTile icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} /><div style={{ fontSize: 16, color: INK_DIM, marginBottom: targetMs ? 3 : 10 }}>Start when {item.name.toLowerCase()} begins</div>
                     {targetMs && <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 10 }}>Target &middot; {item.requiredDurationValue} {item.requiredDurationUnit}</div>}
                     {item.scheduledTime && (() => {
                       const status = timingStatus(item.scheduledTime, now);
@@ -7625,7 +7638,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                     </div>
                   ) : (
                     <>
-                      <RoutineActivityIcon icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
+                      <RoutineIconTile icon={item.icon} size={26} title={item.name} style={{ marginBottom: 8 }} />
                       {isFinite(repeatLimit) && (
                         <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 4 }}>{Math.min(logs.length, repeatLimit)} of {repeatLimit} today &middot; every {periodLabel}</div>
                       )}
@@ -8312,7 +8325,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                           className="daily-input-tab"
                         >
                           <div style={{ width: 54, height: 54, borderRadius: "50%", background: active ? hexA(accent, darkMode ? 0.26 : 0.14) : PANEL, display: "flex", alignItems: "center", justifyContent: "center", border: `2.5px solid ${ringColor}`, boxShadow: active ? `0 4px 14px ${hexA(accent, 0.25)}` : "0 1px 3px rgba(20,30,45,.06)", transition: "border-color .18s ease, background .18s ease, box-shadow .18s ease" }}>
-                            <RoutineActivityIcon icon={item.icon} size={21} title={item.name} />
+                            <RoutineIconTile icon={item.icon} size={21} title={item.name} />
                           </div>
                           <div style={{ fontSize: 11.5, fontWeight: active ? 750 : 600, color: active ? accent : INK_DIM, maxWidth: 66, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
                         </button>
@@ -8604,7 +8617,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                       return (
                         <div key={item.id} ref={(el) => { itemCardRefs.current[item.id] = el; }}>
                         <Card style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          <RoutineActivityIcon icon={item.icon} size={18} title={item.name} style={{ flexShrink: 0, marginRight: 4 }} />
+                          <RoutineIconTile icon={item.icon} size={18} title={item.name} style={{ flexShrink: 0, marginRight: 4 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 15 }}>{item.name || <span style={{ color: INK_FAINT }}>(unnamed)</span>}</div>
                             <div style={{ fontSize: 13, color: valid ? TEAL : CORAL, marginTop: 2 }}>{item.type} &middot; {valid ? "on Daily tab" : "incomplete \u2014 hidden"}</div>
