@@ -3868,7 +3868,7 @@ function LifeTracker() {
   soundPrefsRef.current = soundPrefs;
   const previewRef = useRef({ ctx: null, audio: null });
   const [soundMsg, setSoundMsg] = useState("");
-  const [soundTab, setSoundTab] = useState("alarm");
+  const [soundTab, setSoundTab] = useState("");
   const stopPreview = () => {
     const pr = previewRef.current;
     try { if (pr.audio) { pr.audio.pause(); pr.audio = null; } } catch (e) {}
@@ -10427,108 +10427,158 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                 const cur = isDark ? darkPref : notifMode;
                 const pick = (v) => { if (isDark) setDarkPref(v); else { setNotifMode(v); if (!remindersEnabled) toggleReminders(); } };
                 return (<>
-                  <Card style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, marginBottom: 2 }}>{isDark ? "Theme" : "Mode"}</div>
-                    {opts.map((o, i) => {
-                      const on = cur === o.v;
-                      return (
-                        <button key={o.v} onClick={() => pick(o.v)} role="radio" aria-checked={on} style={{ width: "100%", display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
-                          <span style={{ flexShrink: 0, marginTop: 1, width: 22, height: 22, borderRadius: 11, border: `2px solid ${on ? BRASS : INK_FAINT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <span style={{ width: 11, height: 11, borderRadius: 6, background: BRASS }} />}</span>
-                          <span style={{ flex: 1, minWidth: 0 }}>
-                            <span style={{ display: "block", fontSize: 15, fontWeight: on ? 700 : 600 }}>{o.t}</span>
-                            <span style={{ display: "block", fontSize: 13, color: INK_FAINT, marginTop: 2, lineHeight: 1.4 }}>{o.d}</span>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </Card>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, margin: "0 6px 7px" }}>{isDark ? "Theme" : "Mode"}</div>
+                    <Card style={{ padding: "2px 14px", borderRadius: 20 }}>
+                      {opts.map((o, i) => {
+                        const on = cur === o.v;
+                        const OI = (isDark ? { on: Moon, off: Sun, system: Smartphone } : { on: Bell, dnd: Moon, mute: BellOff, system: Smartphone })[o.v] || Bell;
+                        const oc = (isDark ? { on: "#5856D6", off: "#FF9500", system: "#2F6FED" } : { on: "#22C55E", dnd: "#5856D6", mute: "#FF9500", system: "#2F6FED" })[o.v] || "#2F6FED";
+                        return (
+                          <button key={o.v} onClick={() => pick(o.v)} role="radio" aria-checked={on} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "11px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit", color: INK }}>
+                            <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: oc, display: "flex", alignItems: "center", justifyContent: "center" }}><OI size={18} color="#fff" strokeWidth={2.2} /></span>
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ display: "block", fontSize: 15, fontWeight: 650 }}>{o.t}</span>
+                              <span style={{ display: "block", fontSize: 12.5, color: INK_FAINT, marginTop: 1 }}>{o.d}</span>
+                            </span>
+                            <span style={{ flexShrink: 0, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <Check size={21} color={BRASS} strokeWidth={2.8} />}</span>
+                          </button>
+                        );
+                      })}
+                    </Card>
+                  </div>
                   {isDark ? (
-                    <Card style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 13, color: INK_FAINT, lineHeight: 1.45 }}>Showing now: <b style={{ color: INK }}>{darkMode ? "Dark" : "Light"}</b>{darkPref === "system" ? " (from your phone)" : ""}.</div>
-                    </Card>
+                    <div style={{ textAlign: "center", fontSize: 12, color: INK_FAINT }}>Showing now: <b style={{ color: INK }}>{darkMode ? "Dark" : "Light"}</b>{darkPref === "system" ? " (from your phone)" : ""}</div>
                   ) : notifBlocked ? (
-                    <Card style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 13, color: CORAL, lineHeight: 1.4 }}>Notifications are blocked in phone Settings.</div>
-                    </Card>
+                    <div style={{ textAlign: "center", fontSize: 12, color: CORAL }}>Notifications are blocked in phone Settings.</div>
                   ) : null}
                 </>);
               })()}
-              {moreSection === "reminders" && (<>
-          <Card style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Reminder type</div>
-            <div style={{ fontSize: 12.5, color: INK_FAINT, margin: "2px 0 6px" }}>Default for new reminders</div>
-            {[{ k: "daily", label: "Daily activities" }, { k: "plans", label: "My Day plans" }, { k: "trips", label: "Trips" }].map((row, ri) => (
-              <div key={row.k} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "9px 0", borderTop: ri > 0 ? `1px solid ${LINE}` : "none" }}>
-                <div style={{ fontSize: 14.5, fontWeight: 600, color: INK }}>{row.label}</div>
-                <div style={{ display: "flex", borderRadius: 9, overflow: "hidden", border: `1.5px solid ${BRASS}`, flexShrink: 0 }}>
-                  {[{ v: "notification", t: "Notification" }, { v: "alarm", t: "Alarm" }].map((o) => (
-                    <button key={o.v} onClick={() => setReminderStyle((r) => ({ ...r, [row.k]: o.v }))} style={{ border: "none", padding: "9px 13px", minHeight: 38, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", background: reminderStyle[row.k] === o.v ? BRASS : "transparent", color: reminderStyle[row.k] === o.v ? "#FFFFFF" : BRASS }}>{o.t}</button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </Card>
-          <Card style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 10 }}>Sounds</div>
-            <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: `1.5px solid ${BRASS}` }}>
-              {[{ kind: "alarm", label: "Alarm" }, { kind: "notification", label: "Notification" }].map((t) => (
-                <button key={t.kind} onClick={() => { stopPreview(); setSoundMsg(""); setSoundTab(t.kind); }} style={{ flex: 1, border: "none", padding: "10px 8px", minHeight: 42, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", background: soundTab === t.kind ? BRASS : "transparent", color: soundTab === t.kind ? "#FFFFFF" : BRASS }}>{t.label}</button>
-              ))}
-            </div>
-            {[{ kind: soundTab }].map((grp) => {
-              const cur = soundFor(soundPrefs, null, grp.kind);
-              const rowsTop = [{ id: "default", label: "Default (phone\u2019s sound)" }, ...(cur.id === "device" ? [{ id: "device:" + cur.uri, label: cur.name || "Phone sound", uri: cur.uri }] : []), ...(cur.id === "custom" ? [{ id: "custom", label: cur.name || "Your sound" }] : [])];
-              const rowsTones = SOUND_CHOICES.filter((x) => x.id !== "default");
-              const isOn = (r) => r.uri ? (cur.id === "device" && cur.uri === r.uri) : cur.id === r.id;
-              const toChoice = (r) => r.id === "custom" ? cur : r.uri ? { id: "device", uri: r.uri, name: r.label } : { id: r.id };
-              const renderRow = (r, i) => {
-                const on = isOn(r);
-                return (
-                  <div key={r.id} style={{ display: "flex", alignItems: "center", borderTop: i > 0 ? `1px solid ${LINE}` : "none" }}>
-                    <button onClick={() => chooseSound(grp.kind, toChoice(r))} role="radio" aria-checked={on} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12, padding: "12px 0", minHeight: 46, background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
-                      <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 11, border: `2px solid ${on ? BRASS : INK_FAINT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <span style={{ width: 11, height: 11, borderRadius: 6, background: BRASS }} />}</span>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: on ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
-                    </button>
-                    <button onClick={() => playChoice(toChoice(r), grp.kind)} aria-label={"Play " + r.label} style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, minWidth: 64, minHeight: 36, fontSize: 13, fontWeight: 700, color: BRASS, background: "rgba(0,113,227,0.10)", border: "none", borderRadius: 18, cursor: "pointer", fontFamily: "inherit" }}><Play size={13} /> Play</button>
+              {moreSection === "reminders" && (() => {
+                const GL = { fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, margin: "0 6px 7px" };
+                const CARD = { padding: "2px 14px", borderRadius: 20 };
+                const Tile = ({ I, c }) => <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: c, display: "flex", alignItems: "center", justifyContent: "center" }}><I size={18} color="#fff" strokeWidth={2.2} /></span>;
+                const isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+                const styleRows = [{ k: "daily", label: "Daily activities", I: Sunrise, c: "#FF9500" }, { k: "plans", label: "My Day plans", I: CalendarDays, c: "#2F6FED" }, { k: "trips", label: "Trips", I: Plane, c: "#0D9488" }];
+                const soundRows = [{ kind: "alarm", title: "Alarm sound", I: AlarmClock, c: "#FF3B30" }, { kind: "notification", title: "Notification sound", I: Bell, c: "#F59E0B" }];
+                const soundLabel = (c) => c.id === "default" ? "Phone default" : c.id === "custom" || c.id === "device" ? (c.name || "Phone sound") : ((SOUND_CHOICES.find((x) => x.id === c.id) || {}).label || "Phone default");
+                const actionBtn = { width: "100%", padding: "11px 10px", borderRadius: 10, border: "none", background: BRASS, color: "#FFFFFF", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
+                const showStatus = notifBlocked || isNativeApp;
+                return (<>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={GL}>Reminder type</div>
+                    <Card style={CARD}>
+                      {styleRows.map((row, i) => (
+                        <div key={row.k} style={{ padding: "11px 0", borderTop: i > 0 ? `1px solid ${LINE}` : "none" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <Tile I={row.I} c={row.c} />
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ display: "block", fontSize: 15, fontWeight: 650, color: INK }}>{row.label}</span>
+                              <span style={{ display: "block", fontSize: 12.5, color: INK_FAINT, marginTop: 1 }}>{reminderStyle[row.k] === "alarm" ? "Alarm" : "Notification"}</span>
+                            </span>
+                          </div>
+                          <div style={{ display: "flex", borderRadius: 9, overflow: "hidden", border: `1px solid ${BRASS}`, marginTop: 10 }}>
+                            {[{ v: "notification", t: "Notification" }, { v: "alarm", t: "Alarm" }].map((o) => (
+                              <button key={o.v} onClick={() => setReminderStyle((r) => ({ ...r, [row.k]: o.v }))} style={{ flex: 1, border: "none", padding: "9px 4px", minHeight: 38, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", background: reminderStyle[row.k] === o.v ? BRASS : "transparent", color: reminderStyle[row.k] === o.v ? "#FFFFFF" : BRASS }}>{o.t}</button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </Card>
                   </div>
-                );
-              };
-              return (
-                <div key={grp.kind} style={{ marginTop: 6 }}>
-                  {rowsTop.map(renderRow)}
-                  <label style={{ display: "block", margin: "6px 0 4px", textAlign: "center", padding: "11px 10px", borderRadius: 10, border: `1.5px solid ${BRASS}`, color: BRASS, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                    Choose from phone
-                    <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pickCustomSound(grp.kind, f); }} />
-                  </label>
-                  <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, padding: "12px 0 2px" }}>Suggested</div>
-                  {rowsTones.map(renderRow)}
-                </div>
-              );
-            })}
-            {soundMsg ? <div style={{ fontSize: 13, color: CORAL, marginTop: 8, lineHeight: 1.4 }}>{soundMsg}</div> : null}
-          </Card>
-          {notifBlocked && (
-            <Card style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: CORAL }}>Notifications are blocked</div>
-              <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 4, lineHeight: 1.4 }}>Turn them on: Phone Settings &rarr; Apps &rarr; Life Tracker &rarr; Notifications.</div>
-            </Card>
-          )}
-          {window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() && (
-            <Card style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 700, color: exactAlarmOk ? INK : CORAL }}>{exactAlarmOk ? "Exact timing is on" : "Exact timing is off"}</div>
-              {!exactAlarmOk && (
-                <button onClick={async () => { const LN = nativeLN(); try { if (LN && LN.changeExactNotificationSetting) await LN.changeExactNotificationSetting(); } catch (e) {} }} style={{ marginTop: 10, width: "100%", padding: "12px 10px", borderRadius: 10, border: "none", background: BRASS, color: "#FFFFFF", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Allow exact alarms</button>
-              )}
-              {nativeAR() && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 700, color: batteryOk ? INK : CORAL }}>{batteryOk ? "Background running is allowed" : "Battery saver may stop alarms"}</div>
-                  {!batteryOk && <button onClick={async () => { try { await nativeAR().openBatterySettings(); } catch (e) {} }} style={{ marginTop: 8, width: "100%", padding: "12px 10px", borderRadius: 10, border: "none", background: BRASS, color: "#FFFFFF", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Allow background running</button>}
-                </div>
-              )}
-              <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 10, lineHeight: 1.4 }}>Tip: set phone Battery to <b>Unrestricted</b> for this app.</div>
-            </Card>
-          )}
-              </>)}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={GL}>Sounds</div>
+                    <Card style={CARD}>
+                      {soundRows.map((sr, i) => {
+                        const open = soundTab === sr.kind;
+                        const cur = soundFor(soundPrefs, null, sr.kind);
+                        const top = [{ id: "default", label: "Default (phone\u2019s sound)" }, ...(cur.id === "device" ? [{ id: "device:" + cur.uri, label: cur.name || "Phone sound", uri: cur.uri }] : []), ...(cur.id === "custom" ? [{ id: "custom", label: cur.name || "Your sound" }] : [])];
+                        const tones = SOUND_CHOICES.filter((x) => x.id !== "default");
+                        const isOn = (r) => r.uri ? (cur.id === "device" && cur.uri === r.uri) : cur.id === r.id;
+                        const toChoice = (r) => r.id === "custom" ? cur : r.uri ? { id: "device", uri: r.uri, name: r.label } : { id: r.id };
+                        const renderRow = (r, j) => {
+                          const on = isOn(r);
+                          return (
+                            <div key={r.id} style={{ display: "flex", alignItems: "center", borderTop: j > 0 ? `1px solid ${LINE}` : "none" }}>
+                              <button onClick={() => chooseSound(sr.kind, toChoice(r))} role="radio" aria-checked={on} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, padding: "10px 0", minHeight: 44, background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
+                                <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? BRASS : INK_FAINT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <span style={{ width: 10, height: 10, borderRadius: 5, background: BRASS }} />}</span>
+                                <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: on ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+                              </button>
+                              <button onClick={() => playChoice(toChoice(r), sr.kind)} aria-label={"Play " + r.label} style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, minWidth: 62, minHeight: 34, fontSize: 13, fontWeight: 700, color: BRASS, background: "rgba(0,113,227,0.10)", border: "none", borderRadius: 17, cursor: "pointer", fontFamily: "inherit" }}><Play size={13} /> Play</button>
+                            </div>
+                          );
+                        };
+                        return (
+                          <div key={sr.kind} style={{ borderTop: i > 0 ? `1px solid ${LINE}` : "none" }}>
+                            <button onClick={() => { stopPreview(); setSoundMsg(""); setSoundTab(open ? "" : sr.kind); }} aria-expanded={open} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "11px 0", background: "transparent", border: "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit", color: INK }}>
+                              <Tile I={sr.I} c={sr.c} />
+                              <span style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ display: "block", fontSize: 15, fontWeight: 650 }}>{sr.title}</span>
+                                <span style={{ display: "block", fontSize: 12.5, color: INK_FAINT, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{soundLabel(cur)}</span>
+                              </span>
+                              <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0, transform: open ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+                            </button>
+                            {open && (
+                              <div style={{ padding: "0 0 10px 48px" }}>
+                                {top.map(renderRow)}
+                                <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, margin: "6px 0 2px", padding: "11px 10px", minHeight: 44, borderRadius: 10, border: `1.5px solid ${BRASS}`, color: BRASS, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                                  <Upload size={16} /> Choose from phone
+                                  <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pickCustomSound(sr.kind, f); }} />
+                                </label>
+                                <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, padding: "12px 0 2px" }}>Suggested</div>
+                                {tones.map(renderRow)}
+                                {soundMsg ? <div style={{ fontSize: 13, color: CORAL, marginTop: 8, lineHeight: 1.4 }}>{soundMsg}</div> : null}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </Card>
+                  </div>
+                  {showStatus && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={GL}>Status</div>
+                      <Card style={CARD}>
+                        {notifBlocked && (
+                          <div style={{ padding: "11px 0" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              <Tile I={BellOff} c={CORAL} />
+                              <span style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ display: "block", fontSize: 15, fontWeight: 650 }}>Notifications are blocked</span>
+                                <span style={{ display: "block", fontSize: 12.5, color: CORAL, marginTop: 1 }}>Phone Settings &rarr; Apps &rarr; Life Tracker</span>
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {isNativeApp && (
+                          <div style={{ padding: "11px 0", borderTop: notifBlocked ? `1px solid ${LINE}` : "none" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              <Tile I={Clock} c={exactAlarmOk ? "#22C55E" : CORAL} />
+                              <span style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ display: "block", fontSize: 15, fontWeight: 650 }}>Exact timing</span>
+                                <span style={{ display: "block", fontSize: 12.5, color: exactAlarmOk ? INK_FAINT : CORAL, marginTop: 1 }}>{exactAlarmOk ? "On" : "Off"}</span>
+                              </span>
+                            </div>
+                            {!exactAlarmOk && <button onClick={async () => { const LN = nativeLN(); try { if (LN && LN.changeExactNotificationSetting) await LN.changeExactNotificationSetting(); } catch (e) {} }} style={{ ...actionBtn, marginTop: 10 }}>Allow exact alarms</button>}
+                          </div>
+                        )}
+                        {isNativeApp && nativeAR() && (
+                          <div style={{ padding: "11px 0", borderTop: `1px solid ${LINE}` }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              <Tile I={Zap} c={batteryOk ? "#22C55E" : CORAL} />
+                              <span style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ display: "block", fontSize: 15, fontWeight: 650 }}>Background running</span>
+                                <span style={{ display: "block", fontSize: 12.5, color: batteryOk ? INK_FAINT : CORAL, marginTop: 1 }}>{batteryOk ? "Allowed" : "Battery saver may stop alarms"}</span>
+                              </span>
+                            </div>
+                            {!batteryOk && <button onClick={async () => { try { await nativeAR().openBatterySettings(); } catch (e) {} }} style={{ ...actionBtn, marginTop: 10 }}>Allow background running</button>}
+                          </div>
+                        )}
+                      </Card>
+                    </div>
+                  )}
+                </>);
+              })()}
               {moreSection === "storage" && (<>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
             <button onClick={() => setDataMode("offline")} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "11px 8px", borderRadius: 10, background: dataMode === "offline" ? "rgba(0,113,227,0.10)" : PANEL, border: `1.5px solid ${dataMode === "offline" ? BRASS : LINE}`, cursor: "pointer" }}>
