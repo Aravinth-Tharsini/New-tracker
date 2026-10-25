@@ -2109,6 +2109,22 @@ const SOUND_PATTERNS = {
   gentle: { type: "sine", vol: 0.35, notes: [[523, 0, 0.5], [659, 0.3, 0.5], [784, 0.6, 0.8]] },
 };
 const SOUND_CUSTOM_MAX_BYTES = 1000000;
+// Each section that can ring has its own alarm sound and its own notification sound. Nothing is set until the person
+// chooses one, so every section starts on the phone's own sound.
+const SOUND_SECTIONS = [
+  { k: "plans", label: "My Day" },
+  { k: "daily", label: "Routine" },
+  { k: "trips", label: "Trips" },
+  { k: "shopping", label: "Shopping" },
+  { k: "repay", label: "Finance (payments)" },
+];
+// A section's saved choice. Falls back to the older single shared choice (kept so nothing saved is lost), then to the phone default.
+function soundFor(prefs, sec, kind) {
+  const c = prefs && prefs.sections && sec && prefs.sections[sec] && prefs.sections[sec][kind];
+  if (c && c.id) return c;
+  const g = prefs && prefs[kind];
+  return g && g.id ? g : { id: "default" };
+}
 function playSoundPattern(ctx, id) {
   const pat = SOUND_PATTERNS[id]; if (!ctx || !pat) return;
   if (ctx.state === "suspended" && ctx.resume) ctx.resume().catch(() => {});
@@ -3848,6 +3864,7 @@ function LifeTracker() {
   // Sound choices for alarms and notifications (More > Reminders & alarms > Sounds).
   const [soundPrefs, setSoundPrefs] = useState(() => ({ alarm: { id: "default" }, notification: { id: "default" }, ...(readPersistedSync("soundPrefs", {}) || {}) }));
   useEffect(() => { if (loaded) window.storage.set("soundPrefs", JSON.stringify(soundPrefs), false).catch(() => {}); }, [soundPrefs, loaded]);
+  const soundSig = JSON.stringify(Object.keys((soundPrefs && soundPrefs.sections) || {}).sort().map((k) => [k, ["alarm", "notification"].map((t) => { const c = soundPrefs.sections[k] && soundPrefs.sections[k][t]; return c ? (c.id + ":" + (c.uri || "")) : ""; })]));
   const soundPrefsRef = useRef(soundPrefs);
   soundPrefsRef.current = soundPrefs;
   const previewRef = useRef({ ctx: null, audio: null });
@@ -3855,11 +3872,19 @@ function LifeTracker() {
   const stopPreview = () => {
     const pr = previewRef.current;
     try { if (pr.audio) { pr.audio.pause(); pr.audio = null; } } catch (e) {}
+    try { const AR = nativeAR(); if (AR && AR.stopPreview) AR.stopPreview().catch(() => {}); } catch (e) {}
   };
   const playChoice = (choice, kind) => {
     stopPreview();
     const pr = previewRef.current;
     try {
+      // Phone sounds / the phone default: previewed by the native plugin when this APK has it; otherwise falls back safely to the in-app preview.
+      const ARp = nativeAR();
+      if (ARp && ARp.previewRingtone && (choice.id === "device" || choice.id === "default")) {
+        ARp.previewRingtone({ uri: choice.id === "device" ? (choice.uri || "") : "", kind: kind === "alarm" ? "alarm" : "notification" }).catch(() => {});
+        return;
+      }
+      if (choice.id === "device") return;
       if (choice.id === "custom" && choice.data) { pr.audio = new Audio(choice.data); pr.audio.play().catch(() => {}); return; }
       if (!pr.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) pr.ctx = new AC(); }
       if (!pr.ctx) return;
@@ -3878,26 +3903,40 @@ function LifeTracker() {
       playSoundPattern(pr.ctx, choice.id);
     } catch (e) {}
   };
-  const chooseSound = (kind, choice) => {
+  // Saves a sound for ONE section + type (alarm or notification) only. Other sections are never touched.
+  const chooseSound = (kind, choice, sec) => {
     setSoundMsg("");
-    setSoundPrefs((p) => ({ ...p, [kind]: choice }));
+    setSoundPrefs((p) => {
+      if (!sec) return { ...p, [kind]: choice };
+      const secs = p.sections || {};
+      return { ...p, sections: { ...secs, [sec]: { ...(secs[sec] || {}), [kind]: choice } } };
+    });
     playChoice(choice, kind);
   };
-  const pickCustomSound = (kind, file) => {
+  const [soundOpenSec, setSoundOpenSec] = useState("");
+  const [deviceSounds, setDeviceSounds] = useState({ alarm: [], notification: [] });
+  useEffect(() => {
+    if (!soundOpenSec) return;
+    const AR = nativeAR(); if (!AR || !AR.getRingtones) return;
+    ["alarm", "notification"].forEach((k) => {
+      try { AR.getRingtones({ kind: k }).then((r) => { const l = ((r && r.ringtones) || []).filter((x) => x && x.uri && x.title).slice(0, 60); setDeviceSounds((d) => ({ ...d, [k]: l })); }).catch(() => {}); } catch (e) {}
+    });
+  }, [soundOpenSec]);
+  const pickCustomSound = (kind, file, sec) => {
     if (!file) return;
     if (file.type && !/^audio\//.test(file.type)) { setSoundMsg("Please choose an audio file."); return; }
     if (file.size > SOUND_CUSTOM_MAX_BYTES) { setSoundMsg("That file is too big. Choose a short sound under 1 MB."); return; }
     const fr = new FileReader();
-    fr.onload = () => chooseSound(kind, { id: "custom", name: file.name, data: String(fr.result || "") });
+    fr.onload = () => chooseSound(kind, { id: "custom", name: file.name, data: String(fr.result || "") }, sec);
     fr.onerror = () => setSoundMsg("Could not read that file.");
     fr.readAsDataURL(file);
   };
   // Notification sound: "Default" leaves the phone's own notification sound alone. A chosen sound plays with in-app notifications.
-  const notify = (title, opts) => {
+  const notify = (title, opts, sec) => {
     const m = notifModeRef.current;
     const n = new Notification(title, (m === "on" || m === "system") ? opts : { ...opts, silent: true });
     try {
-      if (m === "on") { const c = soundPrefsRef.current && soundPrefsRef.current.notification; if (c && c.id !== "default") playChoice(c, "notification"); }
+      if (m === "on") { const c = soundFor(soundPrefsRef.current, sec, "notification"); if (c && c.id !== "default") playChoice(c, "notification"); }
       else if (m === "mute" && navigator.vibrate) navigator.vibrate([200, 100, 200]);
     } catch (e) {}
     return n;
@@ -5596,7 +5635,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
           const FOLLOW_UP_WINDOW = nowMs + 3 * 86400000;
           for (const m of mains) {
             const dc = decor(m.cat, m.item);
-            if (AR && dc.alarm && notifMode === "on") { if (ring.length < 200) ring.push({ id: ring.length + 1, at: m.at.getTime(), title: m.title, body: m.body, kind: m.cat, itemId: (m.item && m.item.id) || "", key: m.key }); continue; }
+            if (AR && dc.alarm && notifMode === "on") { if (ring.length < 200) { const sc = soundFor(soundPrefsRef.current, m.cat, "alarm"); ring.push({ id: ring.length + 1, at: m.at.getTime(), title: m.title, body: m.body, kind: m.cat, itemId: (m.item && m.item.id) || "", key: m.key, sound: sc.id === "device" ? "device" : "default", soundUri: sc.id === "device" ? (sc.uri || "") : "" }); } continue; }
             if (list.length >= MAX_ALARMS) continue;
             list.push({ id: nid, title: m.title, body: m.body, schedule: { at: m.at, allowWhileIdle: true }, channelId: dc.channelId, extra: dc.extra });
             // A real alarm keeps ringing: two more rings, 1 and 2 minutes later, until the alarm is opened / answered.
@@ -5624,7 +5663,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
     }, 1200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [travelPlans, dailyItems, myDayEvents, shoppingLists, repayments, today, reminderStyle, dailySig, exactAlarmOk, notifBlocked, notifMode]);
+  }, [travelPlans, dailyItems, myDayEvents, shoppingLists, repayments, today, reminderStyle, dailySig, exactAlarmOk, notifBlocked, notifMode, soundSig]);
 
   // Tapping an alarm in the notification panel opens the full-screen alarm screen.
   useEffect(() => {
@@ -5767,7 +5806,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
     if (!alarmScreen) return undefined;
     let ctx = null, step = 0;
     const nm = notifModeRef.current;
-    const sp = nm === "system" ? { id: "default" } : ((soundPrefsRef.current && soundPrefsRef.current.alarm) || { id: "default" });
+    const sp = nm === "system" ? { id: "default" } : soundFor(soundPrefsRef.current, alarmScreen.kind, "alarm");
     let customAudio = null;
     if (nm === "on" && sp.id === "custom" && sp.data) {
       try { customAudio = new Audio(sp.data); customAudio.loop = true; customAudio.addEventListener("error", () => { customAudio = null; }); } catch (e) { customAudio = null; }
@@ -5815,7 +5854,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
       const body = atRiskStreakItems.length > 0
         ? `${atRiskStreakItems[0].name}'s ${streaks[atRiskStreakItems[0].id]}-day streak ends tonight${pendingCount > 1 ? ` \u00b7 ${pendingCount} things left today` : ""}.`
         : `${pendingCount} thing${pendingCount === 1 ? "" : "s"} left today \u2014 quick catch-up?`;
-      notify("Before the day ends\u2026", { body });
+      notify("Before the day ends\u2026", { body }, "daily");
     } catch (e) {}
   }, [now, remindersEnabled, lastEveningNudgeDate, today, validItems, atRiskStreakItems, streaks, dailyLogs]);
 
@@ -5846,7 +5885,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
       if (due && notifiedRef.current[item.id] !== dueKey) {
         notifiedRef.current[item.id] = dueKey;
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          try { notify(`${item.name} is due`, { body: `Time to log ${item.amount} ${item.unit}` }); } catch (e) {}
+          try { notify(`${item.name} is due`, { body: `Time to log ${item.amount} ${item.unit}` }, "daily"); } catch (e) {}
         }
       }
     });
@@ -5867,7 +5906,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
       if (!done && now >= dueAt && notifiedRef.current[`missed:${item.id}`] !== notifyKey) {
         notifiedRef.current[`missed:${item.id}`] = notifyKey;
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          try { notify(`${item.name} not done yet`, { body: `Scheduled for ${fmtTimeString12(item.scheduledTime)} \u2014 tap to log it.` }); } catch (e) {}
+          try { notify(`${item.name} not done yet`, { body: `Scheduled for ${fmtTimeString12(item.scheduledTime)} \u2014 tap to log it.` }, "daily"); } catch (e) {}
         }
       }
     });
@@ -5887,7 +5926,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
           notifiedRef.current[`travel:${plan.id}:${offset}`] = notifyKey;
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
             const label = (REMINDER_OPTIONS.find((o) => o.value === offset) || {}).label || "";
-            try { notify(`Upcoming trip: ${plan.fromLocation} \u2192 ${plan.toLocation}`, { body: `${plan.mode} on ${formatDMY(plan.travelDate)}${plan.travelTime ? ` at ${fmtTimeString12(plan.travelTime, plan.timeFormat)}` : ""} \u2014 ${label.toLowerCase()}` }); } catch (e) {}
+            try { notify(`Upcoming trip: ${plan.fromLocation} \u2192 ${plan.toLocation}`, { body: `${plan.mode} on ${formatDMY(plan.travelDate)}${plan.travelTime ? ` at ${fmtTimeString12(plan.travelTime, plan.timeFormat)}` : ""} \u2014 ${label.toLowerCase()}` }, "trips"); } catch (e) {}
           }
         }
       });
@@ -5913,7 +5952,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             notifiedRef.current[`mydayoffset:${ev.id}:${offset}`] = notifyKey;
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
               const label = (REMINDER_OPTIONS.find((o) => o.value === offset) || {}).label || "";
-              try { notify(`${ev.type}: ${ev.title}`, { body: `${formatDMY(ev.eventDate)}${ev.eventTime ? ` at ${fmtTimeString12(ev.eventTime)}` : ""} \u2014 ${label.toLowerCase()}` }); } catch (e) {}
+              try { notify(`${ev.type}: ${ev.title}`, { body: `${formatDMY(ev.eventDate)}${ev.eventTime ? ` at ${fmtTimeString12(ev.eventTime)}` : ""} \u2014 ${label.toLowerCase()}` }, "plans"); } catch (e) {}
             }
           }
         });
@@ -5929,7 +5968,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
       if (now >= remindAt && now < eventDT && notifiedRef.current[`myday:${ev.id}`] !== notifyKey) {
         notifiedRef.current[`myday:${ev.id}`] = notifyKey;
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          try { notify(`${ev.type}: ${ev.title}`, { body: `Starts at ${fmtTimeString12(ev.eventTime)}${ev.location ? ` \u00b7 ${ev.location}` : ""}` }); } catch (e) {}
+          try { notify(`${ev.type}: ${ev.title}`, { body: `Starts at ${fmtTimeString12(ev.eventTime)}${ev.location ? ` \u00b7 ${ev.location}` : ""}` }, "plans"); } catch (e) {}
         }
       }
     });
@@ -10436,27 +10475,45 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
           </Card>
           <Card style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Sounds</div>
-            <div style={{ fontSize: 13, color: INK_FAINT, margin: "4px 0 6px", lineHeight: 1.4 }}>Default keeps the normal sound. Or pick a tone, or an audio file from your phone. Tap a row to choose it and hear it.</div>
-            {[{ kind: "alarm", label: "Alarm sound" }, { kind: "notification", label: "Notification sound" }].map((grp) => {
-              const cur = soundPrefs[grp.kind] || { id: "default" };
-              const rows = [...SOUND_CHOICES, ...(cur.id === "custom" ? [{ id: "custom", label: cur.name || "Your sound" }] : [])];
+            <div style={{ fontSize: 13, color: INK_FAINT, margin: "4px 0 6px", lineHeight: 1.4 }}>Each section has its own alarm and notification sound. Default uses your phone&#8217;s sound. Tap a section, then tap a sound to choose it and hear it.</div>
+            {SOUND_SECTIONS.map((sec, si) => {
+              const open = soundOpenSec === sec.k;
+              const lab = (kind) => { const c = soundFor(soundPrefs, sec.k, kind); return c.id === "default" ? "Phone default" : (c.name || (SOUND_CHOICES.find((x) => x.id === c.id) || {}).label || "Phone sound"); };
               return (
-                <div key={grp.kind} style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, marginBottom: 4 }}>{grp.label}</div>
-                  {rows.map((r, i) => {
-                    const on = cur.id === r.id;
+                <div key={sec.k} style={{ borderTop: si > 0 ? `1px solid ${LINE}` : "none" }}>
+                  <button onClick={() => { stopPreview(); setSoundOpenSec(open ? "" : sec.k); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 0", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "block", fontSize: 14.5, fontWeight: 700 }}>{sec.label}</span>
+                      <span style={{ display: "block", fontSize: 12, color: INK_FAINT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Alarm: {lab("alarm")} &middot; Notification: {lab("notification")}</span>
+                    </span>
+                    <ChevronDown size={16} style={{ flexShrink: 0, color: INK_FAINT, transform: open ? "rotate(180deg)" : "none" }} />
+                  </button>
+                  {open && [{ kind: "alarm", label: "Alarm sound" }, { kind: "notification", label: "Notification sound" }].map((grp) => {
+                    const cur = soundFor(soundPrefs, sec.k, grp.kind);
+                    const dev = (deviceSounds[grp.kind] || []).map((d) => ({ id: "device:" + d.uri, label: d.title, uri: d.uri }));
+                    const rows = [{ id: "default", label: "Default (phone\u2019s sound)" }, ...(cur.id === "device" && !dev.some((d) => d.uri === cur.uri) ? [{ id: "device:" + cur.uri, label: cur.name || "Phone sound", uri: cur.uri }] : []), ...dev, ...SOUND_CHOICES.filter((x) => x.id !== "default"), ...(cur.id === "custom" ? [{ id: "custom", label: cur.name || "Your sound" }] : [])];
+                    const isOn = (r) => r.uri ? (cur.id === "device" && cur.uri === r.uri) : cur.id === r.id;
+                    const toChoice = (r) => r.id === "custom" ? cur : r.uri ? { id: "device", uri: r.uri, name: r.label } : { id: r.id };
                     return (
-                      <button key={r.id} onClick={() => chooseSound(grp.kind, r.id === "custom" ? cur : { id: r.id })} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
-                        <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? BRASS : INK_FAINT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <span style={{ width: 10, height: 10, borderRadius: 5, background: BRASS }} />}</span>
-                        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: on ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}{r.id === "default" && grp.kind === "notification" ? " (phone\u2019s sound)" : ""}</span>
-                        {!(r.id === "default" && grp.kind === "notification") && <span onClick={(e) => { e.stopPropagation(); playChoice(r.id === "custom" ? cur : { id: r.id }, grp.kind); }} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, fontSize: 12.5, fontWeight: 600, color: BRASS, padding: "4px 8px" }}><Play size={13} /> Play</span>}
-                      </button>
+                      <div key={grp.kind} style={{ margin: "2px 0 12px 4px" }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, marginBottom: 4 }}>{grp.label}</div>
+                        {rows.map((r, i) => {
+                          const on = isOn(r);
+                          return (
+                            <button key={r.id} onClick={() => chooseSound(grp.kind, toChoice(r), sec.k)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
+                              <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? BRASS : INK_FAINT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <span style={{ width: 10, height: 10, borderRadius: 5, background: BRASS }} />}</span>
+                              <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: on ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+                              <span onClick={(e) => { e.stopPropagation(); playChoice(toChoice(r), grp.kind); }} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, fontSize: 12.5, fontWeight: 600, color: BRASS, padding: "4px 8px" }}><Play size={13} /> Play</span>
+                            </button>
+                          );
+                        })}
+                        <label style={{ display: "block", marginTop: 8, textAlign: "center", padding: "9px 10px", borderRadius: 10, border: `1.5px solid ${BRASS}`, color: BRASS, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                          Choose from phone
+                          <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pickCustomSound(grp.kind, f, sec.k); }} />
+                        </label>
+                      </div>
                     );
                   })}
-                  <label style={{ display: "block", marginTop: 8, textAlign: "center", padding: "9px 10px", borderRadius: 10, border: `1.5px solid ${BRASS}`, color: BRASS, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                    Choose from phone
-                    <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pickCustomSound(grp.kind, f); }} />
-                  </label>
                 </div>
               );
             })}
