@@ -1243,8 +1243,8 @@ function HomeSlides({ stats, focus }) {
                 {cards.map((sl) => {
                   const SIcon = sl.icon; const val = String(sl.value == null ? "" : sl.value);
                   return (
-                    <button key={sl.key} onClick={sl.onClick || undefined} style={{ minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 3, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 20, padding: "12px 4px 11px", cursor: sl.onClick ? "pointer" : "default", fontFamily: "inherit", boxShadow: CARD_SHADOW, color: INK }}>
-                      <div style={{ width: 38, height: 38, borderRadius: 12, background: sl.bg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 3 }}><SIcon size={19} color={sl.fg} /></div>
+                    <button key={sl.key} onClick={sl.onClick || undefined} style={{ minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 3, background: PANEL, border: "none", borderRadius: 20, padding: "12px 4px 11px", cursor: sl.onClick ? "pointer" : "default", fontFamily: "inherit", boxShadow: CARD_SHADOW, color: INK }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 11, background: sl.fg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 3 }}><SIcon size={18} color="#fff" strokeWidth={2.2} /></div>
                       <div style={{ fontSize: 11.5, fontWeight: 600, color: INK_DIM, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sl.label}</div>
                       <div style={{ fontSize: val.length > 7 ? 13 : val.length > 5 ? 16 : 20, fontFamily: mono, fontWeight: 800, color: sl.fg, lineHeight: 1.15, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{val}</div>
                       <div style={{ fontSize: 10, color: INK_FAINT, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sl.sub}</div>
@@ -1808,7 +1808,7 @@ function ProgressXPCard({ pct, done, total, dailyLogs, dailyItems, today, onOpen
   const msg = total === 0 ? "Add an activity to get started" : pct >= 100 ? "Perfect day, amazing!" : pct >= 75 ? "Almost there, finish strong!" : pct >= 40 ? "Good going, keep it up!" : pct > 0 ? "Nice start, keep it up!" : "Let's get the first one done";
   const todayXp = calc.validToday * XP_PER_TASK;
   return (
-    <Card style={{ marginBottom: 12, padding: 0, overflow: "hidden", borderRadius: 22, border: `1px solid ${LINE}`, background: `linear-gradient(135deg, ${hexA(TEAL, 0.07)} 0%, ${PANEL} 55%)` }}>
+    <Card style={{ marginBottom: 12, padding: 0, overflow: "hidden", borderRadius: 20 }}>
       <style>{`@keyframes ltTreeSway{0%,100%{transform:rotate(-1deg)}50%{transform:rotate(1.2deg)}}@keyframes ltTreeGlow{0%,100%{opacity:.8}50%{opacity:1}}.lt-tree-sway{animation:ltTreeSway 6s ease-in-out infinite}.lt-tree-glow{animation:ltTreeGlow 4s ease-in-out infinite}@media (prefers-reduced-motion: reduce){.lt-tree-sway,.lt-tree-glow{animation:none}}`}</style>
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px 8px 10px" }}>
         <div role="button" aria-label="Open your life tree in full screen" onClick={() => onOpenTree && onOpenTree({ g, v, level: xp.level, title: xp.title, stage: treeStage(g), toNext: xp.toNext, pct: xp.pct, xp: xp.xp, next: xp.next })} style={{ position: "relative", cursor: "pointer", width: 96, height: 90, flexShrink: 0, borderRadius: 16, background: `linear-gradient(180deg, ${hexA(TEAL, 0.14)} 0%, ${hexA(TEAL, 0.03)} 100%)`, overflow: "hidden" }}>
@@ -3150,13 +3150,13 @@ function AreaBarRow({ icon: Icon, accent, label, pct, isLast }) {
 // badge (count pill or % ring) + chevron. Shared by the Home page's attention list.
 function AttentionRow({ icon: Icon, accent, title, subtitle, badge, onClick, isLast }) {
   return (
-    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", background: "transparent", border: "none", borderBottom: isLast ? "none" : `1px solid ${LINE}`, cursor: "pointer", textAlign: "left", width: "100%" }}>
-      <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 10, background: hexA(accent, 0.14), display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Icon size={17} color={accent} strokeWidth={2.2} />
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", background: "transparent", border: "none", borderBottom: isLast ? "none" : `1px solid ${LINE}`, cursor: "pointer", textAlign: "left", width: "100%", fontFamily: "inherit" }}>
+      <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon size={18} color="#fff" strokeWidth={2.2} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 700, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
-        <div style={{ fontSize: 12.5, color: INK_DIM, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{subtitle}</div>
+        <div style={{ fontSize: 15, fontWeight: 650, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{subtitle}</div>
       </div>
       {badge}
       <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
@@ -3165,9 +3165,9 @@ function AttentionRow({ icon: Icon, accent, title, subtitle, badge, onClick, isL
 }
 function HomeSectionHead({ icon: Icon, label, count, action, onAction }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "0 4px 7px" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "0 6px 7px" }}>
       <Icon size={14} color={BRASS} strokeWidth={2.3} />
-      <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_DIM }}>{label}</span>
+      <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT }}>{label}</span>
       {count > 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: BRASS, background: hexA(BRASS, 0.12), borderRadius: 99, padding: "1px 7px" }}>{count}</span>}
       <span style={{ flex: 1 }} />
       {action && <button onClick={onAction} style={{ background: "transparent", border: "none", padding: 0, fontSize: 12.5, fontWeight: 700, color: BRASS, cursor: "pointer" }}>{action}</button>}
@@ -7243,7 +7243,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
         ];
         return <div key="dashboard-page" className="page-smooth-enter" style={{ padding: "6px 16px 16px", flex: 1, width: "100%" }}>
           <div className="notificationStickyBar">
-            <div style={{ position: "relative", overflow: "hidden", borderRadius: 18, marginBottom: 8, padding: "10px 13px 9px", background: welcomeRibbonGradient(now, darkMode), transition: "background 2.5s ease", border: `1px solid ${LINE}`, boxShadow: darkMode ? "0 8px 18px rgba(0,0,0,0.30)" : "0 6px 14px rgba(15,23,42,0.08)" }}>
+            <div style={{ position: "relative", overflow: "hidden", borderRadius: 20, marginBottom: 12, padding: "12px 14px 11px", background: welcomeRibbonGradient(now, darkMode), transition: "background 2.5s ease", border: "none", boxShadow: darkMode ? "0 8px 18px rgba(0,0,0,0.30)" : "0 6px 14px rgba(15,23,42,0.08)" }}>
               {/* Atmosphere layer: realistic soft-lit sky that cross-fades between sun / cloud /
                   moon / star elements as ribbonAtmosphereFor(now) changes through the day, instead
                   of the old flat sun-and-hills illustration. */}
@@ -7336,9 +7336,9 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                   const overdue = String(eff) < nowHHMM;
                   return (
                     <button key={act.id} onClick={() => { setExpandedDailyCategory(act.category); setActiveTab(act.id); setPage("daily"); }}
-                      style={{ flex: "0 0 auto", width: 152, scrollSnapAlign: "start", textAlign: "left", cursor: "pointer", color: INK, fontFamily: "inherit", padding: "10px 12px", borderRadius: 18, border: `1px solid ${overdue ? hexA(CORAL, 0.35) : LINE}`, background: `linear-gradient(145deg, ${hexA(overdue ? CORAL : accent, 0.09)} 0%, ${PANEL} 70%)`, boxShadow: CARD_SHADOW }}>
+                      style={{ flex: "0 0 auto", width: 164, scrollSnapAlign: "start", textAlign: "left", cursor: "pointer", color: INK, fontFamily: "inherit", padding: "12px 14px", borderRadius: 20, border: overdue ? `1px solid ${hexA(CORAL, 0.35)}` : "none", background: PANEL, boxShadow: CARD_SHADOW }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                        <span style={{ width: 28, height: 28, borderRadius: 9, background: hexA(overdue ? CORAL : accent, 0.16), display: "flex", alignItems: "center", justifyContent: "center" }}><ActIcon size={15} color={overdue ? CORAL : accent} strokeWidth={2.2} /></span>
+                        <span style={{ width: 32, height: 32, borderRadius: 10, background: overdue ? CORAL : accent, display: "flex", alignItems: "center", justifyContent: "center" }}><ActIcon size={16} color="#fff" strokeWidth={2.2} /></span>
                         <span style={{ fontSize: 12, fontFamily: mono, fontWeight: 800, color: overdue ? CORAL : BRASS }}>{eff ? fmtTimeString12(eff) : ""}</span>
                       </div>
                       <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.name}</div>
@@ -7414,7 +7414,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             return (
               <div style={{ marginBottom: 12 }}>
                 <HomeSectionHead icon={Bell} label="Upcoming attention" count={attentionItems.length} action="View all" onAction={() => setPage("daily")} />
-                <Card style={{ padding: "2px 12px", borderRadius: 20, border: `1px solid ${LINE}`, background: `linear-gradient(135deg, ${hexA(BRASS, 0.05)} 0%, ${PANEL} 60%)` }}>
+                <Card style={{ padding: "2px 14px", borderRadius: 20 }}>
                   {attentionItems.slice(0, 4).map((it, idx, arr) => (
                     <AttentionRow key={it.key} icon={it.icon} accent={it.accent} title={it.title} subtitle={it.subtitle} badge={it.badge} onClick={it.onClick} isLast={idx === arr.length - 1} />
                   ))}
