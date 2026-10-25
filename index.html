@@ -3199,7 +3199,7 @@ function ltRevealForm(el) {
     if (top < 420) window.scrollTo(0, 0); else el.scrollIntoView({ block: "start" });
   });
 }
-function ltScrollTop() { if (!LT_AUTO_SCROLL) return; requestAnimationFrame(() => setTimeout(() => ltInstant(() => window.scrollTo(0, 0)), 220)); }
+function ltScrollTop() { requestAnimationFrame(() => { setTimeout(() => ltInstant(() => window.scrollTo(0, 0)), 150); setTimeout(() => ltInstant(() => window.scrollTo(0, 0)), 420); }); }
 function ltRevealField(el) {
   if (!LT_AUTO_SCROLL) return;
   const vv = window.visualViewport, vh = vv ? vv.height : window.innerHeight, off = vv ? vv.offsetTop : 0;
@@ -4171,7 +4171,7 @@ function LifeTracker() {
   const shoppingFormRef = useRef(null);
   const shoppingCardRefs = useRef({});
   const scrollToShoppingForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (shoppingFormRef.current) ltRevealForm(shoppingFormRef.current); }, 120); }); };
-  const scrollBackToShoppingCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = shoppingCardRefs.current[id]; if (el) LT_AUTO_SCROLL && ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
+  const scrollBackToShoppingCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = shoppingCardRefs.current[id]; if (el) ltScrollTop(); }, 260); }); };
   const [previewShoppingId, setPreviewShoppingId] = useState(null);
   const [expandedDailyShoppingId, setExpandedDailyShoppingId] = useState(null);
   // Keep Today → Shopping compact by default. The full item list opens only after the user taps that shopping card.
@@ -4428,7 +4428,7 @@ function LifeTracker() {
   const goalFormRef = useRef(null);
   const goalCardRefs = useRef({});
   const scrollToGoalForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (goalFormRef.current) ltRevealForm(goalFormRef.current); }, 60); }); };
-  const scrollBackToGoalCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = goalCardRefs.current[id]; if (el) LT_AUTO_SCROLL && ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
+  const scrollBackToGoalCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = goalCardRefs.current[id]; if (el) ltScrollTop(); }, 260); }); };
   const goalMonthOptionsRef = () => { const arr = []; const nowD = new Date(); for (let i = -3; i <= 12; i++) arr.push(monthKey(new Date(nowD.getFullYear(), nowD.getMonth() + i, 1))); return arr; };
   const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", goalType: "Skill Learning", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalValue: "2", periodUnit: "hours", intervalAmount: "1", intervalUnit: "session", requiredDurationValue: "20", requiredDurationUnit: "minutes", reminderEnabled: false, reminderMinutes: "15", notes: "" });
   const [goalForm, setGoalForm] = useState(blankGoalForm());
@@ -4541,7 +4541,7 @@ function LifeTracker() {
   const repaymentFormRef = useRef(null);
   const repaymentCardRefs = useRef({});
   const scrollToRepaymentForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (repaymentFormRef.current) ltRevealForm(repaymentFormRef.current); }, 60); }); };
-  const scrollBackToRepaymentCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = repaymentCardRefs.current[id]; if (el) LT_AUTO_SCROLL && ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
+  const scrollBackToRepaymentCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = repaymentCardRefs.current[id]; if (el) ltScrollTop(); }, 260); }); };
   const blankRepaymentForm = () => ({
     category: REPAYMENT_CATEGORIES[0], name: "", remarks: "",
     loanAmount: "", interestRate: "", interestRateUnit: "annum", durationValue: "", durationUnit: "Months",
@@ -5163,7 +5163,7 @@ function LifeTracker() {
       requestAnimationFrame(() => {
         setTimeout(() => {
           const el = travelCardRefs.current[wasEditingId];
-          if (el) LT_AUTO_SCROLL && ltInstant(() => el.scrollIntoView({ block: "center" }));
+          if (el) ltScrollTop();
         }, 260);
       });
     } else ltScrollTop();
@@ -5227,7 +5227,7 @@ function LifeTracker() {
   const myDayFormRef = useRef(null);
   const myDayCardRefs = useRef({});
   const scrollToMyDayForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (myDayFormRef.current) ltRevealForm(myDayFormRef.current); }, 120); }); };
-  const scrollBackToMyDayCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = myDayCardRefs.current[id]; if (el) LT_AUTO_SCROLL && ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
+  const scrollBackToMyDayCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = myDayCardRefs.current[id]; if (el) ltScrollTop(); }, 260); }); };
   const blankMyDayForm = () => ({ reminderType: "", type: "Meeting", title: "", eventDate: dateKey(), eventTime: "", location: "", notes: "", repeatDays: [], frequency: "Once", monthDay: "", yearDate: "", reminderOffsets: ["none"], reminderEnabled: true, reminderMinutes: "15" });
   const [myDayForm, setMyDayForm] = useState(blankMyDayForm());
   const toggleMyDayRepeatDay = (day) => setMyDayForm((f) => ({ ...f, repeatDays: f.repeatDays.includes(day) ? f.repeatDays.filter((d) => d !== day) : [...f.repeatDays, day] }));
@@ -5318,7 +5318,7 @@ frequency: myDayFormFreq, monthDay: myDayFormFreq === "Monthly" ? (parseInt(myDa
   const itemFormRef = useRef(null);
   const itemCardRefs = useRef({});
   const scrollToItemForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (itemFormRef.current) ltRevealForm(itemFormRef.current); }, 60); }); };
-  const scrollBackToItemCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = itemCardRefs.current[id]; if (el) LT_AUTO_SCROLL && ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
+  const scrollBackToItemCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = itemCardRefs.current[id]; if (el) ltScrollTop(); }, 260); }); };
   const openNewItemForm = () => setItemForm(blankItemForm());
   const openEditItemForm = (item) => {
     setItemForm({
