@@ -400,40 +400,40 @@ button:active, [role="button"]:active {
 
 <style id="progress-dashboard-redesign">
   .progress-shell{width:100%;max-width:100%;padding:6px 16px 20px;overflow:visible}
-  .progress-hero{position:relative;overflow:hidden;border-radius:22px;padding:18px;margin-bottom:12px;border:1px solid var(--line);
-    background:linear-gradient(135deg,rgba(200,138,18,.14),rgba(200,138,18,.04) 58%,var(--panel) 100%)}
+  .progress-hero{position:relative;overflow:hidden;border-radius:20px;padding:18px;margin-bottom:12px;border:none;box-shadow:var(--card-shadow);
+    background:linear-gradient(135deg,rgba(47,111,237,.12),rgba(47,111,237,.04) 58%,var(--panel) 100%)}
   .progress-hero-title{font-size:22px;font-weight:850;line-height:1.16;letter-spacing:-.02em}
   .progress-hero-sub{font-size:12.5px;color:var(--ink-dim);margin-top:7px;line-height:1.45;max-width:260px}
   .progress-period-card{display:flex;align-items:center;gap:9px;margin-bottom:10px;padding:9px 11px}
   .progress-tabs-card{padding:7px;margin-bottom:12px}
-  .progress-section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 7px}
-  .progress-section-title{font-size:15px;font-weight:800;letter-spacing:-.01em;color:var(--ink)}
+  .progress-section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 6px 7px}
+  .progress-section-title{font-size:11.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint)}
   .progress-stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-  .progress-stat{min-height:78px;display:flex;align-items:center;gap:9px;padding:11px}
-  .progress-stat-icon{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:0 0 38px}
+  .progress-stat{min-height:78px;display:flex;align-items:center;gap:11px;padding:12px 14px}
+  .progress-stat-icon{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 38px}
   .progress-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);font-weight:800}
   .progress-stat-value{font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:18px;font-weight:850;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .progress-stat-sub{font-size:10.5px;color:var(--ink-faint);margin-top:1px}
-  .progress-trend-card{padding:12px;margin-bottom:12px}
+  .progress-trend-card{padding:14px;margin-bottom:12px}
   .progress-trend-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
   .progress-delta{font-size:11.5px;font-weight:800;border-radius:999px;padding:4px 8px;white-space:nowrap}
   .progress-insight-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-  .progress-mini{padding:11px}
+  .progress-mini{padding:12px 14px}
   .progress-mini-value{font-size:16px;font-weight:850;margin-top:3px}
   .progress-mini-sub{font-size:11px;color:var(--ink-faint);margin-top:2px;line-height:1.35}
   .progress-empty{padding:18px 10px;text-align:center;color:var(--ink-faint);font-size:13px;line-height:1.45}
-  .progress-list-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--line)}
+  .progress-list-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
   .progress-list-row:first-child{border-top:none}
   .progress-list-main{min-width:0;flex:1}
-  .progress-list-title{font-size:13.5px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .progress-list-meta{font-size:10.5px;color:var(--ink-faint);margin-top:2px}
+  .progress-list-title{font-size:14.5px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .progress-list-meta{font-size:11.5px;color:var(--ink-faint);margin-top:2px}
   .progress-pill{font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:11px;font-weight:800;white-space:nowrap}
   .progress-area-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
   .progress-year-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
   @media(max-width:380px){
     .progress-shell{padding-left:12px;padding-right:12px}
     .progress-stat{padding:9px;gap:7px}
-    .progress-stat-icon{width:34px;height:34px;flex-basis:34px}
+    .progress-stat-icon{width:32px;height:32px;flex-basis:32px}
     .progress-stat-value{font-size:16px}
   }
 </style>
@@ -3313,7 +3313,7 @@ function SegmentedControl({ options, value, onChange, variant = "primary" }) {
         return (
           <button key={o.id} onClick={() => onChange(o.id)} style={{
             flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-            background: active ? (variant === "primary" ? `linear-gradient(135deg, ${BRASS} 0%, #0058B8 100%)` : PANEL) : "transparent",
+            background: active ? (variant === "primary" ? `linear-gradient(135deg, ${BRASS} 0%, #1E4FCB 100%)` : PANEL) : "transparent",
             color: active ? (variant === "primary" ? "#FFFFFF" : BRASS) : INK_DIM,
             border: "none", borderRadius: 980, padding: "9px 8px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: disp,
             boxShadow: active ? (variant === "primary" ? `0 3px 10px ${hexA(BRASS, 0.35)}` : CARD_SHADOW) : "none",
@@ -9894,7 +9894,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             </div>
             {!isCustom && <button onClick={downloadProgressPdf}
               style={{marginTop:14,width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,
-                background:`linear-gradient(135deg, ${BRASS} 0%, #0058B8 100%)`,border:"none",color:"#fff",
+                background:`linear-gradient(135deg, ${BRASS} 0%, #1E4FCB 100%)`,border:"none",color:"#fff",
                 borderRadius:980,padding:"11px 12px",fontSize:14.5,fontFamily:disp,fontWeight:750,cursor:"pointer",
                 boxShadow:`0 6px 16px ${hexA(BRASS,0.30)}`}}>
               <Download size={16} /> Download Progress PDF
@@ -10020,8 +10020,8 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             <div className="progress-stat-grid">
               {glanceStats.map((s,i)=>(
                 <Card key={s.key} className="progress-stat" style={{animation:`statCardIn .35s ease ${i*.04}s both`}}>
-                  <div className="progress-stat-icon" style={{background:hexA(BRASS,0.14)}}>
-                    <s.icon size={17} color={BRASS} strokeWidth={2} />
+                  <div className="progress-stat-icon" style={{background:BRASS}}>
+                    <s.icon size={18} color="#fff" strokeWidth={2.2} />
                   </div>
                   <div style={{minWidth:0}}>
                     <div className="progress-stat-label">{s.label}</div>
@@ -10042,8 +10042,8 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             <Card style={{marginBottom:12,padding:"5px 12px"}}>
               {achievements.length ? achievements.map((a,i)=>(
                 <div key={a.id} className="progress-list-row">
-                  <div style={{width:32,height:32,borderRadius:9,background:hexA("#FF9500",0.14),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    <a.rankIcon size={16} color="#FF9500" />
+                  <div style={{width:36,height:36,borderRadius:11,background:"#FF9500",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <a.rankIcon size={18} color="#fff" strokeWidth={2.2} />
                   </div>
                   <div className="progress-list-main">
                     <div className="progress-list-title">{a.name}</div>
@@ -10132,17 +10132,17 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             <div className="progress-section-head"><div className="progress-section-title">{fmtPeriod}</div></div>
             <div className="progress-stat-grid" style={{gridTemplateColumns:"1fr 1fr 1fr"}}>
               <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
-                <div className="progress-stat-icon" style={{background:"rgba(34,197,94,0.14)"}}><Wallet size={16} color="#22C55E" /></div>
+                <div className="progress-stat-icon" style={{background:"#22C55E"}}><Wallet size={18} color="#fff" strokeWidth={2.2} /></div>
                 <div className="progress-stat-label">Income</div>
                 <div className="progress-stat-value" style={{color:"#22C55E",fontSize:15}}>{inr(periodIncome)}</div>
               </Card>
               <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
-                <div className="progress-stat-icon" style={{background:hexA(CORAL,0.14)}}><Receipt size={16} color={CORAL} /></div>
+                <div className="progress-stat-icon" style={{background:CORAL}}><Receipt size={18} color="#fff" strokeWidth={2.2} /></div>
                 <div className="progress-stat-label">Expense</div>
                 <div className="progress-stat-value" style={{color:CORAL,fontSize:15}}>{inr(periodExpense)}</div>
               </Card>
               <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
-                <div className="progress-stat-icon" style={{background:hexA(BRASS,0.14)}}><PiggyBank size={16} color={BRASS} /></div>
+                <div className="progress-stat-icon" style={{background:BRASS}}><PiggyBank size={18} color="#fff" strokeWidth={2.2} /></div>
                 <div className="progress-stat-label">Savings</div>
                 <div className="progress-stat-value" style={{color:BRASS,fontSize:15}}>{inr(periodSavings)}</div>
               </Card>
@@ -10280,19 +10280,19 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
 
             <div className="progress-stat-grid" style={{gridTemplateColumns:"1fr 1fr 1fr"}}>
               <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
-                <div className="progress-stat-icon" style={{background:"rgba(255,149,0,0.14)"}}><Flame size={16} color="#FF9500" /></div>
+                <div className="progress-stat-icon" style={{background:"#FF9500"}}><Flame size={18} color="#fff" strokeWidth={2.2} /></div>
                 <div className="progress-stat-label">Current Streak</div>
                 <div className="progress-stat-value" style={{color:"#FF9500",fontSize:16}}>{currentTopStreak}</div>
                 <div className="progress-stat-sub">days</div>
               </Card>
               <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
-                <div className="progress-stat-icon" style={{background:hexA(BRASS,0.14)}}><Trophy size={16} color={BRASS} /></div>
+                <div className="progress-stat-icon" style={{background:BRASS}}><Trophy size={18} color="#fff" strokeWidth={2.2} /></div>
                 <div className="progress-stat-label">Best Streak</div>
                 <div className="progress-stat-value" style={{color:BRASS,fontSize:16}}>{bestStreakEver}</div>
                 <div className="progress-stat-sub">days</div>
               </Card>
               <Card className="progress-stat" style={{flexDirection:"column",alignItems:"flex-start",gap:6}}>
-                <div className="progress-stat-icon" style={{background:hexA(CORAL,0.14)}}><XCircle size={16} color={CORAL} /></div>
+                <div className="progress-stat-icon" style={{background:CORAL}}><XCircle size={18} color="#fff" strokeWidth={2.2} /></div>
                 <div className="progress-stat-label">Missed</div>
                 <div className="progress-stat-value" style={{color:CORAL,fontSize:16}}>{missedToday}</div>
                 <div className="progress-stat-sub">habits</div>
@@ -10379,7 +10379,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             {areaStats.length>0 && areaStats.every(a=>a.total>0&&a.pct>=100) && (
               <Card style={{marginBottom:12,display:"flex",alignItems:"center",gap:11,padding:12,
                 background:`linear-gradient(120deg,${hexA(TEAL,.14)} 0%,${hexA(BRASS,.08)} 100%)`}}>
-                <div style={{width:38,height:38,borderRadius:12,background:hexA(TEAL,.18),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <div style={{width:36,height:36,borderRadius:11,background:hexA(TEAL,.18),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                   <span style={{fontSize:19}}>🎉</span>
                 </div>
                 <div>
