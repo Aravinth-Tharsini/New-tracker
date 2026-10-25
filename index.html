@@ -7464,9 +7464,8 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
           const rec = field(item.id);
           const iconWrap = (size, boxSize) => (
             <div style={{
-              width: boxSize, height: boxSize, borderRadius: "50%", background: hexA(accent, darkMode ? 0.20 : 0.11),
+              width: boxSize, height: boxSize, borderRadius: Math.round(boxSize * 0.3), background: hexA(accent, darkMode ? 0.20 : 0.11),
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-              border: `2px solid ${hexA(accent, 0.25)}`,
             }}>
               <RoutineIconTile icon={item.icon} size={size} title={item.name} />
             </div>
@@ -7479,7 +7478,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
 
           if (item.type === "instant") {
             return (
-              <Card key={item.id} style={{ textAlign: compact ? "left" : "center", padding: compact ? "16px" : "28px 18px 26px", borderRadius: compact ? 20 : 24, boxShadow: "0 6px 22px rgba(20,30,45,.06)", borderTop: `3px solid ${accent}` }}>
+              <Card key={item.id} style={{ textAlign: compact ? "left" : "center", padding: compact ? "16px" : "28px 18px 26px", borderRadius: compact ? 20 : 24 }}>
                 {rec.status === "done" ? (
                   <>
                     <div style={{ display: "flex", alignItems: "center", gap: compact ? 12 : 0, flexDirection: compact ? "row" : "column" }}>
@@ -7564,7 +7563,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
           if (item.type === "duration") {
             const targetMs = requiredDurationMs(item);
             return (
-              <Card key={item.id} style={{ textAlign: compact ? "left" : "center", padding: compact ? "16px" : "19px 12px", borderRadius: compact ? 20 : 16, borderTop: `3px solid ${accent}` }}>
+              <Card key={item.id} style={{ textAlign: compact ? "left" : "center", padding: compact ? "16px" : "19px 12px", borderRadius: 20 }}>
                 {rec.status === "done" ? (
                   <>
                     <div style={{ display: "flex", alignItems: "center", gap: compact ? 12 : 0, flexDirection: compact ? "row" : "column" }}>
@@ -7683,7 +7682,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             const statusLine = complete ? "All done for today" : due ? "An interval is due" : `Next at ${fmtTime(new Date(nextDueMs).toISOString())}`;
             return (
               <div key={item.id}>
-                <Card style={{ textAlign: compact ? "left" : "center", padding: compact ? "16px" : "19px 12px", borderRadius: compact ? 20 : 16, marginBottom: 9, borderTop: `3px solid ${accent}` }}>
+                <Card style={{ textAlign: compact ? "left" : "center", padding: compact ? "16px" : "19px 12px", borderRadius: compact ? 20 : 16, marginBottom: 9 }}>
                   {compact ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                       {iconWrap(24, 52)}
@@ -7738,9 +7737,65 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             </div>
           ) : (
             <div className="today-category-grid" style={{ padding: "0 16px" }}>
+              {!expandedDailyCategory && (() => {
+                const totalAttention = categoryStats.reduce((n, c) => n + (c.attentionCount > 0 ? c.attentionCount : 0), 0);
+                const groups = [
+                  { label: "Daily", ids: ["myday", "activity", "shopping"] },
+                  { label: "Money", ids: ["expense"] },
+                  { label: "Growth & Life", ids: ["career", "health", "trip"] },
+                ];
+                const known = groups.reduce((a, g) => a.concat(g.ids), []);
+                const extra = categoryStats.filter((c) => !known.includes(c.cat.id)).map((c) => c.cat.id);
+                if (extra.length) groups[2].ids = groups[2].ids.concat(extra);
+                return (
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: 16, padding: "14px 16px", marginBottom: 14, background: darkMode ? "rgba(10,132,255,0.16)" : "rgba(0,113,227,0.10)" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 17, fontWeight: 750, color: INK, fontFamily: disp, lineHeight: 1.25 }}>{now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</div>
+                        <div style={{ fontSize: 13.5, color: INK_DIM, marginTop: 2 }}>{totalAttention > 0 ? `${totalAttention} need${totalAttention === 1 ? "s" : ""} your attention` : "All caught up"}</div>
+                      </div>
+                      <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: "50%", background: "radial-gradient(circle at 35% 35%, #FFE7B0, #F5B84B)" }} />
+                    </div>
+                    {groups.map((gr) => {
+                      const rows = gr.ids.map((id) => categoryStats.find((c) => c.cat.id === id)).filter(Boolean);
+                      if (!rows.length) return null;
+                      return (
+                        <div key={gr.label} style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, margin: "0 6px 7px" }}>{gr.label}</div>
+                          <Card style={{ padding: "2px 14px", borderRadius: 20 }}>
+                            {rows.map((c, i) => {
+                              const RIcon = c.CatIcon;
+                              const showBar = !(c.cat.id === "expense" || c.cat.id === "shopping" || c.cat.id === "myday" || c.cat.id === "trip") && c.trackableCount > 0;
+                              return (
+                                <button key={c.cat.id} onClick={() => setExpandedDailyCategory(c.cat.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "11px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit", color: INK }}>
+                                  <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: c.accent, display: "flex", alignItems: "center", justifyContent: "center" }}><RIcon size={18} color="#fff" strokeWidth={2.2} /></span>
+                                  <span style={{ flex: 1, minWidth: 0 }}>
+                                    <span style={{ display: "block", fontSize: 15, fontWeight: 650 }}>{c.cat.label}</span>
+                                    <span style={{ display: "block", fontSize: 12.5, color: INK_FAINT, marginTop: 1, lineHeight: 1.35 }}>{c.countLabel}</span>
+                                    {showBar && (
+                                      <span style={{ display: "block", height: 4, borderRadius: 999, background: hexA(c.accent, darkMode ? 0.24 : 0.16), overflow: "hidden", marginTop: 6 }}>
+                                        <span style={{ display: "block", height: "100%", width: `${Math.round((c.doneCount / c.trackableCount) * 100)}%`, background: c.accent, borderRadius: 999, transition: "width .4s ease" }} />
+                                      </span>
+                                    )}
+                                  </span>
+                                  {c.attentionCount > 0 && (
+                                    <span style={{ flexShrink: 0, minWidth: 22, height: 22, borderRadius: 999, background: CORAL, color: "#FFFFFF", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px", fontFamily: mono }}>{c.attentionCount > 9 ? "9+" : c.attentionCount}</span>
+                                  )}
+                                  <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0 }} />
+                                </button>
+                              );
+                            })}
+                          </Card>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {categoryStats.map((cs) => {
                 const { cat, expanded, CatIcon, itemsForCat, pendingItemsForCat, skippedItemsForCat, visiblePendingItemsForCat, todaysExpenseCount, todaysExpenseTotal, visibleTrips, visibleMyDay, shoppingDueCount, expenseDueCount, totalCount, doneCount, countLabel, trackableCount, attentionCount, accent } = cs;
+                if (!expanded) return null;
                 const badge = attentionCount > 0 && (
                   <div style={{ position: "absolute", top: -7, right: -7, minWidth: 22, height: 22, borderRadius: 999, background: CORAL, color: "#FFFFFF", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid " + BG, fontFamily: mono }}>
                     {attentionCount > 9 ? "9+" : attentionCount}
@@ -7752,92 +7807,17 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                 const statMode = cat.id === "expense" ? "expense" : cat.id === "shopping" ? "reminder" : (cat.id === "myday" || cat.id === "trip") ? "counts" : "progress";
                 return (
                   <div key={cat.id} className={`cat-grid-item ${expanded ? "is-open-row" : (expandedDailyCategory ? "is-collapsed" : "")}`}>
-                    {!expanded ? (
-                      <button
-                        className="today-cardv2"
-                        onClick={() => setExpandedDailyCategory(cat.id)}
-                        style={{ background: hexA(accent, darkMode ? 0.16 : 0.08) }}
-                      >
-                        <div className="today-cardv2-icon-wrap" style={{ background: hexA(accent, darkMode ? 0.26 : 0.16) }}>
-                          <CatIcon size={24} color={accent} strokeWidth={2.2} />
-                          {badge}
-                        </div>
-                        <div className="today-cardv2-title" style={{ color: INK, fontFamily: disp }}>{cat.label}</div>
-                        <div className="today-cardv2-desc">{PLANNER_CATEGORY_META[cat.id]?.desc || TODAY_CARD_META[cat.id]?.desc || ""}</div>
-                        <div className="today-cardv2-divider" />
-                        {statMode === "counts" && (() => {
-                          const secondNum = cat.id === "myday" ? visibleMyDay.length : visibleTrips.length;
-                          const SecondIcon = cat.id === "myday" ? CheckCircle2 : Bell;
-                          return (
-                            <div className="today-cardv2-stats">
-                              <div className="today-cardv2-stat">
-                                <CalendarDays size={14} color={accent} strokeWidth={2.2} />
-                                <div className="today-cardv2-statnum" style={{ color: INK }}>{totalCount}</div>
-                                <div className="today-cardv2-statlabel">Planned</div>
-                              </div>
-                              <div className="today-cardv2-stat-divider" />
-                              <div className="today-cardv2-stat">
-                                <SecondIcon size={14} color={accent} strokeWidth={2.2} />
-                                <div className="today-cardv2-statnum" style={{ color: INK }}>{secondNum}</div>
-                                <div className="today-cardv2-statlabel">Today</div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                        {statMode === "expense" && (
-                          <div className="today-cardv2-stats">
-                            <div className="today-cardv2-stat">
-                              <Receipt size={14} color={accent} strokeWidth={2.2} />
-                              <div className="today-cardv2-statnum" style={{ color: INK }}>{todaysExpenseCount}</div>
-                              <div className="today-cardv2-statlabel">Logged</div>
-                            </div>
-                            <div className="today-cardv2-stat-divider" />
-                            <div className="today-cardv2-stat">
-                              <span style={{ fontSize: 13, fontWeight: 800, color: accent }}>&#8377;</span>
-                              <div className="today-cardv2-statnum" style={{ color: accent }}>{inr(todaysExpenseTotal).replace("\u20b9", "")}</div>
-                              <div className="today-cardv2-statlabel">Total</div>
-                            </div>
-                          </div>
-                        )}
-                        {statMode === "reminder" && (
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <Bell size={16} color={accent} strokeWidth={2.2} />
-                            <div>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>{shoppingDueCount > 0 ? `${shoppingDueCount} Reminder${shoppingDueCount === 1 ? "" : "s"}` : "No reminders"}</div>
-                              {shoppingDueCount > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: accent }}>Today</div>}
-                            </div>
-                          </div>
-                        )}
-                        {statMode === "progress" && (
-                          <div>
-                            <div style={{ fontSize: 14, color: INK }}><span style={{ fontWeight: 750 }}>{doneCount}/{trackableCount}</span> <span style={{ color: INK_DIM }}>done</span></div>
-                            <div style={{ marginTop: 8, height: 5, borderRadius: 999, background: hexA(accent, darkMode ? 0.22 : 0.16), overflow: "hidden" }}>
-                              <div style={{ height: "100%", width: `${trackableCount > 0 ? Math.round((doneCount / trackableCount) * 100) : 0}%`, background: accent, borderRadius: 999, transition: "width .4s ease" }} />
-                            </div>
-                          </div>
-                        )}
-                        <div className="today-cardv2-arrow" style={{ background: hexA(accent, 0.16), color: accent }}>
-                          <ArrowRight size={18} strokeWidth={2.4} />
-                        </div>
-                      </button>
-                    ) : (
-                      <div className="today-expanded-header">
-                        <button
-                          className="today-focus-card is-open"
-                          onClick={() => setExpandedDailyCategory(null)}
-                          style={{ background: hexA(accent, darkMode ? 0.20 : 0.10), cursor: "pointer" }}
-                        >
-                          <div className="today-focus-icon" style={{ position: "relative", display: "grid", placeItems: "center", flexShrink: 0, "--icon-tint": hexA(accent, darkMode ? 0.24 : 0.14), "--icon-tint-border": hexA(accent, 0.3) }}>
-                            <CatIcon size={32} color={accent} strokeWidth={2.2} />
-                            {badge}
-                          </div>
-                        </button>
-                        <div className="today-expanded-header-text">
-                          <div className="today-expanded-header-title">{cat.label}</div>
-                          <div className="today-expanded-header-sub">{countLabel}</div>
-                        </div>
+                    <button onClick={() => setExpandedDailyCategory(null)} style={{ display: "flex", alignItems: "center", gap: 9, background: "transparent", border: "none", padding: "2px 0 14px", cursor: "pointer", width: "100%", textAlign: "left", fontFamily: "inherit", color: INK }}>
+                      <ChevronLeft size={18} color={INK_FAINT} style={{ flexShrink: 0 }} />
+                      <div style={{ position: "relative", width: 32, height: 32, borderRadius: 10, background: hexA(accent, darkMode ? 0.22 : 0.12), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <CatIcon size={16} color={accent} />
+                        {badge}
                       </div>
-                    )}
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ display: "block", fontSize: 16, fontWeight: 700, color: INK, fontFamily: disp }}>{cat.label}</span>
+                        <span style={{ display: "block", fontSize: 12.5, color: INK_FAINT, marginTop: 1 }}>{countLabel}</span>
+                      </span>
+                    </button>
                     {expanded && cat.id === "trip" && (
                       <div className="today-expand-enter" style={{ marginTop: 8, paddingTop: 2 }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -8283,7 +8263,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                       <div className="today-expand-enter" style={{ marginTop: 7, paddingTop: 2 }}>
               {/* Progress header: a single glance at how far through today's category you are,
                   replacing the need to count status pills across the old tile row. */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14, padding: "10px 13px", borderRadius: 14, background: hexA(accent, darkMode ? 0.14 : 0.07) }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14, padding: "12px 14px", borderRadius: 16, background: hexA(accent, darkMode ? 0.14 : 0.07) }}>
                 <div style={{ fontSize: 13, fontWeight: 750, color: INK, flexShrink: 0 }}>{doneCount} <span style={{ color: INK_DIM, fontWeight: 600 }}>of {trackableCount} done</span></div>
                 <div style={{ flex: 1, height: 6, background: hexA(accent, darkMode ? 0.22 : 0.14), borderRadius: 999, overflow: "hidden" }}>
                   <div style={{ width: `${trackableCount ? Math.round((doneCount / trackableCount) * 100) : 0}%`, height: "100%", background: accent, borderRadius: 999, transition: "width .3s ease" }} />
