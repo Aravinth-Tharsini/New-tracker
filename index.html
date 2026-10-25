@@ -6750,13 +6750,17 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
       try { el.animate([{ opacity: 0, transform: `translateX(${dir * 36}px)` }, { opacity: 1, transform: "translateX(0)" }], { duration: 280, easing: "cubic-bezier(.22,.8,.25,1)" }); } catch (e) {}
     });
   }, [page]);
+  // Main-page swipe is locked whenever anything is open on top of a main page: any popup, sheet, form, detail,
+  // opened category or More option (same list Back uses, so lock/unlock always matches), plus inline history edit forms.
+  // Closing it (save / cancel / Back) makes this false again, which unlocks swiping automatically.
+  const swipeLocked = backDepth > 0 || !!editingHistoryExpense || !!editingHistoryRepay;
   const onSwipeStart = (e) => {
     swipeRef.current = null;
-    if (alarmScreen || !e.touches || e.touches.length !== 1) return;
+    if (alarmScreen || swipeLocked || !e.touches || e.touches.length !== 1) return;
     // Don't hijack typing, sliders, date pickers, side-scrolling rows, or popups/sheets.
     for (let el = e.target; el && el !== e.currentTarget; el = el.parentElement) {
       const tag = el.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable) return;
       const cs = window.getComputedStyle(el);
       if (cs.position === "fixed") return;
       if ((cs.overflowX === "auto" || cs.overflowX === "scroll") && el.scrollWidth > el.clientWidth + 2) return;
@@ -6766,7 +6770,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
   };
   const onSwipeEnd = (e) => {
     const st = swipeRef.current; swipeRef.current = null;
-    if (!st || !e.changedTouches || !e.changedTouches.length) return;
+    if (!st || swipeLocked || !e.changedTouches || !e.changedTouches.length) return;
     const t = e.changedTouches[0]; const dx = t.clientX - st.x, dy = t.clientY - st.y;
     if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.6 || Date.now() - st.t > 700) return;
     const i = SWIPE_ORDER.indexOf(page); if (i < 0) return;
