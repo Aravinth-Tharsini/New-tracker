@@ -7749,26 +7749,55 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                 if (extra.length) groups[2].ids = groups[2].ids.concat(extra);
                 return (
                   <div style={{ gridColumn: "1 / -1" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: 16, padding: "14px 16px", marginBottom: 14, background: darkMode ? "rgba(10,132,255,0.16)" : "rgba(0,113,227,0.10)" }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 17, fontWeight: 750, color: INK, fontFamily: disp, lineHeight: 1.25 }}>{now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</div>
-                        <div style={{ fontSize: 13.5, color: INK_DIM, marginTop: 2 }}>{totalAttention > 0 ? `${totalAttention} need${totalAttention === 1 ? "s" : ""} your attention` : "All caught up"}</div>
-                      </div>
-                      <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: "50%", background: "radial-gradient(circle at 35% 35%, #FFE7B0, #F5B84B)" }} />
-                    </div>
+                    {(() => {
+                      const dn = categoryStats.reduce((n, c) => n + (c.trackableCount > 0 ? c.doneCount : 0), 0);
+                      const tt = categoryStats.reduce((n, c) => n + c.trackableCount, 0);
+                      const pct = tt > 0 ? Math.round((dn / tt) * 100) : 0;
+                      const hr = now.getHours();
+                      const greet = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
+                      const R = 27, C = 2 * Math.PI * R;
+                      const chip = { display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, fontWeight: 700, color: "#FFFFFF", background: "rgba(255,255,255,0.20)", borderRadius: 999, padding: "5px 11px" };
+                      return (
+                        <div style={{ position: "relative", overflow: "hidden", borderRadius: 22, padding: "18px 18px 16px", marginBottom: 18, color: "#FFFFFF", background: darkMode ? "linear-gradient(135deg, #1E6FD9 0%, #0A3F8F 100%)" : "linear-gradient(135deg, #2B9CFF 0%, #0058B8 100%)", boxShadow: "0 8px 24px rgba(0,88,184,0.28)" }}>
+                          <div style={{ position: "absolute", right: -30, top: -30, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,0.10)" }} />
+                          <div style={{ position: "absolute", right: 40, bottom: -50, width: 100, height: 100, borderRadius: "50%", background: "rgba(255,255,255,0.07)" }} />
+                          <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.85 }}>{greet}</div>
+                              <div style={{ fontSize: 22, fontWeight: 800, fontFamily: disp, letterSpacing: "-0.01em", lineHeight: 1.2, marginTop: 2 }}>{now.toLocaleDateString("en-GB", { weekday: "long" })}</div>
+                              <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.9, marginTop: 1 }}>{now.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</div>
+                            </div>
+                            <div style={{ position: "relative", width: 68, height: 68, flexShrink: 0 }}>
+                              <svg width="68" height="68" viewBox="0 0 68 68" style={{ transform: "rotate(-90deg)" }}>
+                                <circle cx="34" cy="34" r={R} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="7" />
+                                <circle cx="34" cy="34" r={R} fill="none" stroke="#FFFFFF" strokeWidth="7" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - pct / 100)} style={{ transition: "stroke-dashoffset .5s ease" }} />
+                              </svg>
+                              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 800, fontFamily: mono }}>{pct}%</div>
+                            </div>
+                          </div>
+                          <div style={{ position: "relative", display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+                            <span style={chip}><Bell size={13} strokeWidth={2.4} /> {totalAttention > 0 ? `${totalAttention} need${totalAttention === 1 ? "s" : ""} attention` : "All caught up"}</span>
+                            {tt > 0 && <span style={chip}><Check size={13} strokeWidth={2.8} /> {dn} of {tt} done</span>}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {groups.map((gr) => {
                       const rows = gr.ids.map((id) => categoryStats.find((c) => c.cat.id === id)).filter(Boolean);
                       if (!rows.length) return null;
                       return (
                         <div key={gr.label} style={{ marginBottom: 14 }}>
-                          <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, margin: "0 6px 7px" }}>{gr.label}</div>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "0 6px 7px" }}>
+                            <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT }}>{gr.label}</span>
+                            {(() => { const gp = rows.reduce((n, c) => n + (c.attentionCount > 0 ? c.attentionCount : 0), 0); return gp > 0 ? <span style={{ fontSize: 12, fontWeight: 700, color: CORAL }}>{gp} pending</span> : null; })()}
+                          </div>
                           <Card style={{ padding: "2px 14px", borderRadius: 20 }}>
                             {rows.map((c, i) => {
                               const RIcon = c.CatIcon;
                               const showBar = !(c.cat.id === "expense" || c.cat.id === "shopping" || c.cat.id === "myday" || c.cat.id === "trip") && c.trackableCount > 0;
                               return (
                                 <button key={c.cat.id} onClick={() => setExpandedDailyCategory(c.cat.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "11px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit", color: INK }}>
-                                  <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: c.accent, display: "flex", alignItems: "center", justifyContent: "center" }}><RIcon size={18} color="#fff" strokeWidth={2.2} /></span>
+                                  <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: c.accent, boxShadow: `0 3px 8px ${hexA(c.accent, 0.30)}`, display: "flex", alignItems: "center", justifyContent: "center" }}><RIcon size={18} color="#fff" strokeWidth={2.2} /></span>
                                   <span style={{ flex: 1, minWidth: 0 }}>
                                     <span style={{ display: "block", fontSize: 15, fontWeight: 650 }}>{c.cat.label}</span>
                                     <span style={{ display: "block", fontSize: 12.5, color: INK_FAINT, marginTop: 1, lineHeight: 1.35 }}>{c.countLabel}</span>
