@@ -675,7 +675,8 @@ function timeOfDayLabel(hhmmStr) {
   if (!hhmmStr) return "";
   const h = Number(hhmmStr.split(":")[0]);
   if (isNaN(h)) return "";
-  if (h < 5) return "Night";
+  if (h < 4) return "Night";
+  if (h < 7) return "Early Morning";
   if (h < 12) return "Morning";
   if (h < 17) return "Afternoon";
   if (h < 21) return "Evening";
