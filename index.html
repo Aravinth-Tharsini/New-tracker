@@ -176,6 +176,8 @@ button{touch-action:manipulation;}
 html {
   scroll-behavior: smooth;
 }
+[data-entry-form]{scroll-margin-top:calc(72px + env(safe-area-inset-top,0px));}
+.lt-form-open .lt-hide-on-form{display:none !important;}
 
 button, [role="button"], a {
   -webkit-tap-highlight-color: transparent !important;
@@ -3131,6 +3133,66 @@ function InsightsHeroArt({ accent = BRASS }) {
 }
 function TextField(props) { return <input {...props} style={{ background: PANEL_2, border: "none", borderRadius: 12, padding: "10px 11px", color: INK, fontSize: 16, outline: "none", minWidth: 0, boxSizing: "border-box", width: "100%", ...props.style }} />; }
 function Select(props) { return <select {...props} style={{ background: PANEL_2, border: "none", borderRadius: 10, color: INK, fontSize: 16, padding: "10px 8px", outline: "none", minWidth: 0, boxSizing: "border-box", width: "100%", ...props.style }}>{props.children}</select>; }
+
+let ltFormCount = 0, ltFormCleanup = null;
+function ltInstant(fn) { const de = document.documentElement, prev = de.style.scrollBehavior; de.style.scrollBehavior = "auto"; try { fn(); } catch (e) {} de.style.scrollBehavior = prev; }
+function ltScrollTop() { requestAnimationFrame(() => setTimeout(() => ltInstant(() => window.scrollTo(0, 0)), 220)); }
+function ltRevealField(el) {
+  const vv = window.visualViewport, vh = vv ? vv.height : window.innerHeight, off = vv ? vv.offsetTop : 0;
+  const bar = document.querySelector("[data-form-bar]"), barH = bar ? bar.getBoundingClientRect().height : 0;
+  const form = el.closest("[data-entry-form]"), topLim = (form ? parseFloat(getComputedStyle(form).scrollMarginTop) || 80 : 80) + 8;
+  const r = el.getBoundingClientRect(), bottomLim = off + vh - barH - 12;
+  const d = r.bottom > bottomLim ? r.bottom - bottomLim : r.top < topLim ? r.top - topLim : 0;
+  if (Math.abs(d) > 1) ltInstant(() => window.scrollBy(0, d));
+}
+function ltInstallFormViewport() {
+  const de = document.documentElement, vv = window.visualViewport; let timer = null;
+  const inForm = (el) => el && el.matches && el.matches("input:not([type=checkbox]):not([type=radio]),select,textarea") && el.closest(".fx-form");
+  const ensure = () => { clearTimeout(timer); timer = setTimeout(() => { const el = document.activeElement; if (inForm(el)) ltRevealField(el); }, 160); };
+  const setKb = () => { const kb = vv ? Math.max(0, Math.round(de.clientHeight - (vv.height + vv.offsetTop))) : 0; de.style.setProperty("--kb", kb + "px"); };
+  const onFocus = (e) => { if (inForm(e.target)) { setKb(); clearTimeout(timer); timer = setTimeout(() => { if (inForm(document.activeElement)) { setKb(); ltRevealField(document.activeElement); } }, 320); } };
+  const onVv = () => { setKb(); ensure(); };
+  document.addEventListener("focusin", onFocus);
+  if (vv) vv.addEventListener("resize", onVv);
+  de.classList.add("lt-form-open"); setKb();
+  return () => { clearTimeout(timer); document.removeEventListener("focusin", onFocus); if (vv) vv.removeEventListener("resize", onVv); de.classList.remove("lt-form-open"); de.style.removeProperty("--kb"); };
+}
+function FormBar({ saveLabel, onSave, onCancel, check }) {
+  const [err, setErr] = useState("");
+  useEffect(() => { if (ltFormCount++ === 0) ltFormCleanup = ltInstallFormViewport(); return () => { if (--ltFormCount === 0 && ltFormCleanup) { ltFormCleanup(); ltFormCleanup = null; } }; }, []);
+  const blur = () => { try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {} };
+  const trySave = () => { const m = check ? check() : ""; if (m) { setErr(m); return; } setErr(""); blur(); onSave(); };
+  const doCancel = () => { blur(); onCancel(); };
+  return (
+    <div data-form-bar="1" style={{ position: "sticky", bottom: "var(--kb, 0px)", zIndex: 5, background: BG, borderTop: `1px solid ${LINE}`, margin: "8px -4px -4px", padding: "10px 4px calc(10px + env(safe-area-inset-bottom, 0px))" }}>
+      {err ? <div role="alert" style={{ color: "#FF3B30", fontSize: 14, fontWeight: 600, marginBottom: 8, textAlign: "center" }}>{err}</div> : null}
+      <button type="button" onClick={trySave} style={{ width: "100%", minHeight: 48, background: BRASS, border: "none", borderRadius: 980, color: "#FFFFFF", fontSize: 17, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{saveLabel}</button>
+      <button type="button" onClick={doCancel} style={{ width: "100%", minHeight: 40, marginTop: 4, background: "transparent", border: "none", color: INK_DIM, fontSize: 15, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+    </div>
+  );
+}
+
+function FormHeader({ onBack, children }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+      <style>{".fx-form input:not([type=checkbox]):not([type=radio]),.fx-form select{min-height:44px}"}</style>
+      <button type="button" aria-label="Back" onClick={onBack} style={{ background: "transparent", border: "none", padding: 6, margin: "-6px 0 -6px -6px", cursor: "pointer", display: "flex", color: INK }}><ChevronLeft size={24} /></button>
+      <div style={{ fontSize: 20, fontWeight: 800, color: INK, fontFamily: disp, letterSpacing: "-0.01em" }}>{children}</div>
+    </div>
+  );
+}
+function FL({ t, children }) {
+  return <div><div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>{t}</div>{children}</div>;
+}
+function MoreOptions({ children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button type="button" onClick={() => setOpen(!open)} style={{ background: "transparent", border: "none", padding: "6px 0", color: BRASS, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{open ? "Hide options" : "More options"}</button>
+      <div style={{ display: open ? "flex" : "none", flexDirection: "column", gap: 12 }}>{children}</div>
+    </div>
+  );
+}
 // ---- Time entry: one tappable field + one shared picker (see <ClockHost/>) so every time input uses the global format. ----
 const WHEEL_H = 42;
 const WHEEL_ROWS = 3;
@@ -3234,8 +3296,8 @@ function TimeInput({ value, onChange, style, allowClear, placeholder, travel, fm
 }
 function AddFormOnly({ children }) {
   const ref = useRef(null);
-  useEffect(() => { const t = setTimeout(() => { try { if (ref.current) ref.current.scrollIntoView({ block: "start" }); } catch (e) {} }, 40); return () => clearTimeout(t); }, []);
-  return <div ref={ref} data-add-form="1">{children}</div>;
+  useEffect(() => { const t = setTimeout(() => { try { if (ref.current) ltInstant(() => ref.current.scrollIntoView({ block: "start" })); } catch (e) {} }, 40); return () => clearTimeout(t); }, []);
+  return <div ref={ref} data-add-form="1" data-entry-form="1">{children}</div>;
 }
 function FrequencyPicker({ freq, onFreq, options, days, onToggleDay, monthDay, onMonthDay, yearDate, onYearDate, hint }) {
   const opts = options || ["Daily", "Weekly", "Monthly", "Yearly"];
@@ -4044,8 +4106,8 @@ function LifeTracker() {
   const [shoppingForm, setShoppingForm] = useState(null);
   const shoppingFormRef = useRef(null);
   const shoppingCardRefs = useRef({});
-  const scrollToShoppingForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (shoppingFormRef.current) shoppingFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 120); }); };
-  const scrollBackToShoppingCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = shoppingCardRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }); };
+  const scrollToShoppingForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (shoppingFormRef.current) ltInstant(() => shoppingFormRef.current.scrollIntoView({ block: "start" })); }, 120); }); };
+  const scrollBackToShoppingCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = shoppingCardRefs.current[id]; if (el) ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
   const [previewShoppingId, setPreviewShoppingId] = useState(null);
   const [expandedDailyShoppingId, setExpandedDailyShoppingId] = useState(null);
   // Keep Today → Shopping compact by default. The full item list opens only after the user taps that shopping card.
@@ -4062,7 +4124,7 @@ function LifeTracker() {
     setCatTab("shopping");
     setPage("categories");
   };
-  const closeShoppingForm = () => { const wasEditingId = shoppingForm && shoppingForm.id; setShoppingForm(null); if (wasEditingId) scrollBackToShoppingCard(wasEditingId); };
+  const closeShoppingForm = () => { const wasEditingId = shoppingForm && shoppingForm.id; setShoppingForm(null); if (wasEditingId) scrollBackToShoppingCard(wasEditingId); else ltScrollTop(); };
   const updateShoppingItem = (itemId, patch) => setShoppingForm((f) => ({ ...f, items: f.items.map((it) => (it.id !== itemId ? it : { ...it, ...patch })) }));
   const addShoppingItem = () => setShoppingForm((f) => ({ ...f, items: [...f.items, blankShoppingItem()] }));
   const removeShoppingItem = (itemId) => setShoppingForm((f) => ({ ...f, items: f.items.filter((it) => it.id !== itemId) }));
@@ -4083,7 +4145,7 @@ function LifeTracker() {
     }
     const wasEditingShoppingId = shoppingForm.id;
     setShoppingForm(null);
-    if (wasEditingShoppingId) scrollBackToShoppingCard(wasEditingShoppingId);
+    if (wasEditingShoppingId) scrollBackToShoppingCard(wasEditingShoppingId); else ltScrollTop();
   };
   // Delete permanently removes a list. Done/Cancel keep the list in Shopping History.
   const deleteShoppingList = (id) => setShoppingLists((prev) => prev.filter((l) => l.id !== id));
@@ -4301,8 +4363,8 @@ function LifeTracker() {
   const [selectedGoalId, setSelectedGoalId] = useState(null);
   const goalFormRef = useRef(null);
   const goalCardRefs = useRef({});
-  const scrollToGoalForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (goalFormRef.current) goalFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 60); }); };
-  const scrollBackToGoalCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = goalCardRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }); };
+  const scrollToGoalForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (goalFormRef.current) ltInstant(() => goalFormRef.current.scrollIntoView({ block: "start" })); }, 60); }); };
+  const scrollBackToGoalCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = goalCardRefs.current[id]; if (el) ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
   const goalMonthOptionsRef = () => { const arr = []; const nowD = new Date(); for (let i = -3; i <= 12; i++) arr.push(monthKey(new Date(nowD.getFullYear(), nowD.getMonth() + i, 1))); return arr; };
   const blankGoalForm = () => ({ title: "", month: curMonth, sequence: "", targetAmount: "", goalType: "Skill Learning", startDate: "", expectedYear: "", frequency: "Daily", daysPerWeek: "3", specificDays: [], startTime: "", sessionMinutes: "30", trackingType: "instant", intervalValue: "2", periodUnit: "hours", intervalAmount: "1", intervalUnit: "session", requiredDurationValue: "20", requiredDurationUnit: "minutes", reminderEnabled: false, reminderMinutes: "15", notes: "" });
   const [goalForm, setGoalForm] = useState(blankGoalForm());
@@ -4358,12 +4420,12 @@ function LifeTracker() {
     setGoalForm(blankGoalForm());
     setEditingGoalId(null);
     setShowAddGoal(false);
-    if (wasEditingGoalId) scrollBackToGoalCard(wasEditingGoalId);
+    if (wasEditingGoalId) scrollBackToGoalCard(wasEditingGoalId); else ltScrollTop();
   };
   const cancelGoalForm = () => {
     const wasEditingGoalId = editingGoalId;
     setShowAddGoal(false); setEditingGoalId(null); setGoalForm(blankGoalForm());
-    if (wasEditingGoalId) scrollBackToGoalCard(wasEditingGoalId);
+    if (wasEditingGoalId) scrollBackToGoalCard(wasEditingGoalId); else ltScrollTop();
   };
   const deleteGoal = (id) => { setGoals((prev) => prev.filter((g) => g.id !== id)); setSelectedGoalId((prev) => prev === id ? null : prev); };
   const toggleGoalDone = (id) => {
@@ -4414,8 +4476,8 @@ function LifeTracker() {
   const [editingRepaymentId, setEditingRepaymentId] = useState(null);
   const repaymentFormRef = useRef(null);
   const repaymentCardRefs = useRef({});
-  const scrollToRepaymentForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (repaymentFormRef.current) repaymentFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 60); }); };
-  const scrollBackToRepaymentCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = repaymentCardRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }); };
+  const scrollToRepaymentForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (repaymentFormRef.current) ltInstant(() => repaymentFormRef.current.scrollIntoView({ block: "start" })); }, 60); }); };
+  const scrollBackToRepaymentCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = repaymentCardRefs.current[id]; if (el) ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
   const blankRepaymentForm = () => ({
     category: REPAYMENT_CATEGORIES[0], name: "", remarks: "",
     loanAmount: "", interestRate: "", interestRateUnit: "annum", durationValue: "", durationUnit: "Months",
@@ -4452,7 +4514,7 @@ function LifeTracker() {
   const cancelRepaymentForm = () => {
     const wasEditingId = editingRepaymentId;
     setShowAddRepayment(false); setEditingRepaymentId(null); setRepaymentForm(blankRepaymentForm());
-    if (wasEditingId) scrollBackToRepaymentCard(wasEditingId);
+    if (wasEditingId) scrollBackToRepaymentCard(wasEditingId); else ltScrollTop();
   };
   const addRepayment = () => {
     const cls = repaymentCategoryClass(repaymentForm.category);
@@ -4542,7 +4604,7 @@ function LifeTracker() {
     setRepaymentForm(blankRepaymentForm());
     setEditingRepaymentId(null);
     setShowAddRepayment(false);
-    if (wasEditingRepaymentId) scrollBackToRepaymentCard(wasEditingRepaymentId);
+    if (wasEditingRepaymentId) scrollBackToRepaymentCard(wasEditingRepaymentId); else ltScrollTop();
   };
   const deleteRepayment = (id) => setRepayments((prev) => prev.filter((r) => r.id !== id));
   const advanceDueDate = (dueDate, frequency, dueDayStart) => {
@@ -4593,7 +4655,7 @@ function LifeTracker() {
   const [bikeServiceForm, setBikeServiceForm] = useState(null); // { repaymentId, odometer, cost, parts, otherPart, serviceCenter, notes }
   const [expandedBikeHistoryId, setExpandedBikeHistoryId] = useState(null);
   const openBikeServiceForm = (r) => setBikeServiceForm({ repaymentId: r.id, odometer: r.nextDueOdometer != null ? String(r.nextDueOdometer) : "", cost: "", parts: [], otherPart: "", serviceCenter: "", notes: "" });
-  const cancelBikeServiceForm = () => setBikeServiceForm(null);
+  const cancelBikeServiceForm = () => { const rid = bikeServiceForm && bikeServiceForm.repaymentId; setBikeServiceForm(null); if (rid) scrollBackToRepaymentCard(rid); };
   const toggleBikeServicePart = (part) => setBikeServiceForm((f) => f && ({ ...f, parts: f.parts.includes(part) ? f.parts.filter((p) => p !== part) : [...f.parts, part] }));
   const saveBikeService = () => {
     if (!bikeServiceForm) return;
@@ -4622,6 +4684,7 @@ function LifeTracker() {
     }
     celebrate("Service logged!");
     setBikeServiceForm(null);
+    if (rId) scrollBackToRepaymentCard(rId);
   };
   const sortedRepayments = [...repayments].sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
   const todaysRepaymentReminders = useMemo(() => sortedRepayments.filter((r) => isRepaymentRelevantToday(r, today)), [sortedRepayments, today]);
@@ -5021,7 +5084,7 @@ function LifeTracker() {
     setShowAddTravel(true);
     requestAnimationFrame(() => {
       setTimeout(() => {
-        if (travelFormRef.current) travelFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (travelFormRef.current) ltInstant(() => travelFormRef.current.scrollIntoView({ block: "start" }));
       }, 60);
     });
   };
@@ -5036,10 +5099,10 @@ function LifeTracker() {
       requestAnimationFrame(() => {
         setTimeout(() => {
           const el = travelCardRefs.current[wasEditingId];
-          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 60);
+          if (el) ltInstant(() => el.scrollIntoView({ block: "center" }));
+        }, 260);
       });
-    }
+    } else ltScrollTop();
   };
   const addTravelPlan = () => {
     if (!travelForm.fromLocation.trim() || !travelForm.toLocation.trim() || !travelForm.travelDate) return;
@@ -5099,8 +5162,8 @@ function LifeTracker() {
   const [editingMyDayId, setEditingMyDayId] = useState(null);
   const myDayFormRef = useRef(null);
   const myDayCardRefs = useRef({});
-  const scrollToMyDayForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (myDayFormRef.current) myDayFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 120); }); };
-  const scrollBackToMyDayCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = myDayCardRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }); };
+  const scrollToMyDayForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (myDayFormRef.current) ltInstant(() => myDayFormRef.current.scrollIntoView({ block: "start" })); }, 120); }); };
+  const scrollBackToMyDayCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = myDayCardRefs.current[id]; if (el) ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
   const blankMyDayForm = () => ({ reminderType: "", type: "Meeting", title: "", eventDate: dateKey(), eventTime: "", location: "", notes: "", repeatDays: [], frequency: "Once", monthDay: "", yearDate: "", reminderOffsets: ["none"], reminderEnabled: true, reminderMinutes: "15" });
   const [myDayForm, setMyDayForm] = useState(blankMyDayForm());
   const toggleMyDayRepeatDay = (day) => setMyDayForm((f) => ({ ...f, repeatDays: f.repeatDays.includes(day) ? f.repeatDays.filter((d) => d !== day) : [...f.repeatDays, day] }));
@@ -5119,7 +5182,7 @@ function LifeTracker() {
   const cancelMyDayForm = () => {
     const wasEditingId = editingMyDayId;
     setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm());
-    if (wasEditingId) scrollBackToMyDayCard(wasEditingId);
+    if (wasEditingId) scrollBackToMyDayCard(wasEditingId); else ltScrollTop();
   };
   const myDayFormFreq = (() => { const f = myDayForm.frequency || (myDayForm.repeatDays && myDayForm.repeatDays.length ? "Weekly" : "Once"); return f === "Weekly" && !(myDayForm.repeatDays && myDayForm.repeatDays.length) ? "Once" : f; })();
   const addMyDayEvent = () => {
@@ -5190,8 +5253,8 @@ frequency: myDayFormFreq, monthDay: myDayFormFreq === "Monthly" ? (parseInt(myDa
   const [newSubName, setNewSubName] = useState("");
   const itemFormRef = useRef(null);
   const itemCardRefs = useRef({});
-  const scrollToItemForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (itemFormRef.current) itemFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 60); }); };
-  const scrollBackToItemCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = itemCardRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }); };
+  const scrollToItemForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (itemFormRef.current) ltInstant(() => itemFormRef.current.scrollIntoView({ block: "start" })); }, 60); }); };
+  const scrollBackToItemCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = itemCardRefs.current[id]; if (el) ltInstant(() => el.scrollIntoView({ block: "center" })); }, 260); }); };
   const openNewItemForm = () => setItemForm(blankItemForm());
   const openEditItemForm = (item) => {
     setItemForm({
@@ -5206,7 +5269,7 @@ frequency: myDayFormFreq, monthDay: myDayFormFreq === "Monthly" ? (parseInt(myDa
   const closeItemForm = () => {
     const wasEditingId = itemForm && itemForm.id;
     setItemForm(null); setAddingGroup(false); setAddingSubTo(null);
-    if (wasEditingId) scrollBackToItemCard(wasEditingId);
+    if (wasEditingId) scrollBackToItemCard(wasEditingId); else ltScrollTop();
   };
 
   // Bottom-nav switch: leaving a section closes whatever was open inside it (Planner category,
@@ -5843,10 +5906,10 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
   }, []);
 
   const travelFormCard = (
-                  <div ref={travelFormRef}>
+                  <div ref={travelFormRef} data-entry-form="1">
                     <Card style={{ marginBottom: 9 }}>
-                      <SectionLabel>{editingTravelId ? "Edit trip" : "New trip"}</SectionLabel>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <FormHeader onBack={cancelTravelForm}>{editingTravelId ? "Edit trip" : "New trip"}</FormHeader>
+                      <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                         <Select value={travelForm.mode} onChange={(e) => setTravelForm({ ...travelForm, mode: e.target.value })}>
                           <option value="Train">Train</option>
                           <option value="Bus">Bus</option>
@@ -5872,21 +5935,21 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                         })()}
                         <div style={{ display: "flex", gap: 6 }}>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Travel date</div>
+                            <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Departure date</div>
                             <TextField type="date" value={travelForm.travelDate} onChange={(e) => setTravelForm({ ...travelForm, travelDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                           </div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Travel time</div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Departure time</div>
                           <TimeInput travel fmt={travelForm.timeFormat} onFmt={(f) => setTravelForm((p) => ({ ...p, timeFormat: f }))} value={travelForm.travelTime} onChange={(v) => setTravelForm({ ...travelForm, travelTime: v })} style={{ fontFamily: mono }} />
                         </div>
                         <div>
-                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Reach time (optional)</div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 3 }}>Arrival time (optional)</div>
                           <TimeInput travel fmt={travelForm.timeFormat} onFmt={(f) => setTravelForm((p) => ({ ...p, timeFormat: f }))} allowClear value={travelForm.arrivalTime} onChange={(v) => setTravelForm({ ...travelForm, arrivalTime: v })} style={{ fontFamily: mono }} />
                           {timeEst.main && timeEst.main === travelForm.arrivalTime && <div style={{ fontSize: 12, color: TEAL, padding: "3px 2px 0" }}>Arrival time estimated from the road route (approx.). You can change it.</div>}
                         </div>
                         <div>
-                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Reach date</div>
+                          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Arrival date</div>
                           {(() => {
                             const dayAfter = (d, n) => { if (!d) return ""; const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() + n); const pad = (v) => String(v).padStart(2, "0"); return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`; };
                             const sameDay = travelForm.travelDate && (!travelForm.arrivalDate || travelForm.arrivalDate === travelForm.travelDate);
@@ -5940,7 +6003,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                             <option value="Already Paid">Already Paid</option>
                           </Select>
                         </div>
-                        <TextField placeholder="Ticket / booking details" value={travelForm.bookingDetails} onChange={(e) => setTravelForm({ ...travelForm, bookingDetails: e.target.value })} />
+                        <FL t="Ticket / booking details"><TextField placeholder="Ticket / booking details" value={travelForm.bookingDetails} onChange={(e) => setTravelForm({ ...travelForm, bookingDetails: e.target.value })} /></FL>
                         <div>
                           <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Remind me before travel date (pick as many as you like)</div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -5970,21 +6033,18 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                             </div>
                           )}
                         </div>
-                        <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
-                          <button onClick={addTravelPlan} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{editingTravelId ? "Save changes" : "Save trip"}</button>
-                          <button onClick={cancelTravelForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                        </div>
+                        <FormBar saveLabel={editingTravelId ? "Save changes" : "Save trip"} onSave={addTravelPlan} onCancel={cancelTravelForm} check={() => !travelForm.fromLocation.trim() ? "Enter where you are travelling from" : !travelForm.toLocation.trim() ? "Enter where you are travelling to" : !travelForm.travelDate ? "Choose the travel date" : ""} />
                       </div>
                     </Card>
                   </div>
   );
 
   const goalFormCard = (
-                  <div ref={goalFormRef}>
+                  <div ref={goalFormRef} data-entry-form="1">
                 <Card style={{ marginBottom: 9 }}>
-                  <SectionLabel>{editingGoalId ? "Edit goal" : "New goal"}</SectionLabel>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <TextField placeholder="Goal title" value={goalForm.title} onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })} />
+                  <FormHeader onBack={cancelGoalForm}>{editingGoalId ? "Edit goal" : "New goal"}</FormHeader>
+                  <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <FL t="Goal title"><TextField placeholder="Goal title" value={goalForm.title} onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })} /></FL>
                     {isRoutineCategory && (
                       <div>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Goal type</div>
@@ -6002,7 +6062,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                       </div>
                     )}
                     <div>
-                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Sequence number</div>
+                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Order in list</div>
                       <TextField type="number" placeholder="1" value={goalForm.sequence} onChange={(e) => setGoalForm({ ...goalForm, sequence: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                     </div>
                     {isFinanceGoalsTab && (
@@ -6120,20 +6180,17 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                         </div>
                       </>
                     )}
-                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
-                      <button onClick={addGoal} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{editingGoalId ? "Save changes" : "Save goal"}</button>
-                      <button onClick={cancelGoalForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                    </div>
+                    <FormBar saveLabel={editingGoalId ? "Save changes" : "Save goal"} onSave={addGoal} onCancel={cancelGoalForm} check={() => !goalForm.title.trim() ? "Enter a title to save" : ""} />
                   </div>
                 </Card>
                   </div>
   );
 
   const repaymentFormCard = (
-                  <div ref={repaymentFormRef}>
+                  <div ref={repaymentFormRef} data-entry-form="1">
                     <Card style={{ marginBottom: 9 }}>
-                      <SectionLabel>{editingRepaymentId ? "Edit reminder" : "New reminder"}</SectionLabel>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <FormHeader onBack={cancelRepaymentForm}>{editingRepaymentId ? "Edit reminder" : "New reminder"}</FormHeader>
+                      <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                         <Select value={repaymentForm.category} onChange={(e) => { const cat = e.target.value; setRepaymentForm({ ...blankRepaymentForm(), category: cat, frequency: cat === "Insurance Renewal" ? "Yearly" : "Monthly" }); }}>
                           {REPAYMENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                         </Select>
@@ -6266,7 +6323,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                             </div>
                             {(repaymentForm.frequency === "Monthly" || repaymentForm.frequency === "Yearly") && (
                               <div>
-                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Due window (day of month, e.g. 1 to 10)</div>
+                                <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Due between these days of the month (e.g. 1 to 10)</div>
                                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                                   <TextField type="number" min="1" max="31" placeholder="From" value={repaymentForm.dueDayStart} onChange={(e) => setRepaymentForm({ ...repaymentForm, dueDayStart: e.target.value })} style={{ flex: 1, fontFamily: mono }} />
                                   <span style={{ color: INK_FAINT, fontSize: 14 }}>to</span>
@@ -6282,11 +6339,8 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                             {REMINDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                           </Select>
                         </div>
-                        <TextField placeholder="Remarks (optional)" value={repaymentForm.remarks} onChange={(e) => setRepaymentForm({ ...repaymentForm, remarks: e.target.value })} />
-                        <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
-                          <button onClick={addRepayment} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{editingRepaymentId ? "Save changes" : "Save"}</button>
-                          <button onClick={cancelRepaymentForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                        </div>
+                        <FL t="Remarks (optional)"><TextField placeholder="Remarks (optional)" value={repaymentForm.remarks} onChange={(e) => setRepaymentForm({ ...repaymentForm, remarks: e.target.value })} /></FL>
+                        <FormBar saveLabel={editingRepaymentId ? "Save changes" : "Save"} onSave={addRepayment} onCancel={cancelRepaymentForm} check={() => repaymentCategoryClass(repaymentForm.category) === "gold" && !(parseFloat(repaymentForm.loanAmount) > 0) ? "Enter the loan amount" : ""} />
                       </div>
                     </Card>
                   </div>
@@ -6294,8 +6348,8 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
 
   const bikeServiceFormCard = bikeServiceForm && (
     <Card style={{ marginBottom: 9 }}>
-      <SectionLabel>Log service</SectionLabel>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <FormHeader onBack={cancelBikeServiceForm}>Log service</FormHeader>
+      <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <TextField type="number" placeholder="Odometer reading (km)" value={bikeServiceForm.odometer} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, odometer: e.target.value })} style={{ fontFamily: mono }} />
         <TextField type="number" placeholder="Cost" value={bikeServiceForm.cost} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, cost: e.target.value })} style={{ fontFamily: mono }} />
         <div>
@@ -6306,26 +6360,23 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             ))}
           </div>
         </div>
-        <TextField placeholder="Other part (optional)" value={bikeServiceForm.otherPart} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, otherPart: e.target.value })} />
-        <TextField placeholder="Service center / mechanic (optional)" value={bikeServiceForm.serviceCenter} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, serviceCenter: e.target.value })} />
-        <TextField placeholder="Notes (optional)" value={bikeServiceForm.notes} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, notes: e.target.value })} />
-        <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
-          <button onClick={saveBikeService} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>Save</button>
-          <button onClick={cancelBikeServiceForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-        </div>
+        <MoreOptions><FL t="Other part (optional)"><TextField placeholder="Other part (optional)" value={bikeServiceForm.otherPart} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, otherPart: e.target.value })} /></FL>
+        <FL t="Service center / mechanic (optional)"><TextField placeholder="Service center / mechanic (optional)" value={bikeServiceForm.serviceCenter} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, serviceCenter: e.target.value })} /></FL>
+        <FL t="Notes (optional)"><TextField placeholder="Notes (optional)" value={bikeServiceForm.notes} onChange={(e) => setBikeServiceForm({ ...bikeServiceForm, notes: e.target.value })} /></FL></MoreOptions>
+        <FormBar saveLabel={"Save"} onSave={saveBikeService} onCancel={cancelBikeServiceForm} check={() => !(parseFloat(bikeServiceForm.odometer) > 0) ? "Enter the odometer reading" : ""} />
       </div>
     </Card>
   );
 
   const myDayFormCard = (
-                  <div ref={myDayFormRef}>
+                  <div ref={myDayFormRef} data-entry-form="1">
                 <Card style={{ marginBottom: 9 }}>
-                  <SectionLabel>{editingMyDayId ? "Edit plan" : "New plan"}</SectionLabel>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <FormHeader onBack={cancelMyDayForm}>{editingMyDayId ? "Edit plan" : "New plan"}</FormHeader>
+                  <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <Select value={myDayForm.type} onChange={(e) => setMyDayForm({ ...myDayForm, type: e.target.value })}>
                       {MYDAY_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </Select>
-                    <TextField placeholder="Title (e.g. Team standup, Doctor visit)" value={myDayForm.title} onChange={(e) => setMyDayForm({ ...myDayForm, title: e.target.value })} />
+                    <FL t="Title (e.g. Team standup, Doctor visit)"><TextField placeholder="Title (e.g. Team standup, Doctor visit)" value={myDayForm.title} onChange={(e) => setMyDayForm({ ...myDayForm, title: e.target.value })} /></FL>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <div style={{ flex: "1 1 140px" }}>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>{myDayForm.frequency && myDayForm.frequency !== "Once" ? "Starts from" : "Date"}</div>
@@ -6345,8 +6396,8 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
               monthDay={myDayForm.monthDay} onMonthDay={(v) => setMyDayForm((f) => ({ ...f, monthDay: v }))}
               yearDate={myDayForm.yearDate} onYearDate={(v) => setMyDayForm((f) => ({ ...f, yearDate: v }))}
             />
-                    <TextField placeholder="Location / link (optional)" value={myDayForm.location} onChange={(e) => setMyDayForm({ ...myDayForm, location: e.target.value })} />
-                    <TextField placeholder="Notes (optional)" value={myDayForm.notes} onChange={(e) => setMyDayForm({ ...myDayForm, notes: e.target.value })} />
+                    <MoreOptions><FL t="Location / link (optional)"><TextField placeholder="Location / link (optional)" value={myDayForm.location} onChange={(e) => setMyDayForm({ ...myDayForm, location: e.target.value })} /></FL>
+                    <FL t="Notes (optional)"><TextField placeholder="Notes (optional)" value={myDayForm.notes} onChange={(e) => setMyDayForm({ ...myDayForm, notes: e.target.value })} /></FL></MoreOptions>
                     {myDayFormFreq === "Once" && (
             <div>
               <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Also remind me before the date (pick as many as you like)</div>
@@ -6370,20 +6421,17 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                         <span style={{ fontSize: 13, color: INK_FAINT }}>minutes before start time{myDayForm.eventTime ? "" : " (set a time above for this to work)"}</span>
                       </div>
                     )}
-                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
-                      <button onClick={addMyDayEvent} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{editingMyDayId ? "Save changes" : "Save plan"}</button>
-                      <button onClick={cancelMyDayForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                    </div>
+                    <FormBar saveLabel={editingMyDayId ? "Save changes" : "Save plan"} onSave={addMyDayEvent} onCancel={cancelMyDayForm} check={() => !myDayForm.title.trim() ? "Enter a title to save" : ""} />
                   </div>
                 </Card>
                   </div>
   );
 
   const shoppingFormCard = !shoppingForm ? null : (
-                  <div ref={shoppingFormRef}>
+                  <div ref={shoppingFormRef} data-entry-form="1">
                 <Card>
-                  <SectionLabel>{shoppingForm.id ? "Edit shopping list" : "New shopping list"}</SectionLabel>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <FormHeader onBack={closeShoppingForm}>{shoppingForm.id ? "Edit shopping list" : "New shopping list"}</FormHeader>
+                  <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <div style={{ flex: "1 1 160px" }}>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Shop name</div>
@@ -6488,21 +6536,18 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                       <span style={{ fontFamily: mono, fontSize: 20, fontWeight: 600, color: BRASS }}>{inr(shoppingFormTotal)}</span>
                     </div>
 
-                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end", marginTop: 2 }}>
-                      <button onClick={saveShoppingForm} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>{shoppingForm.id ? "Save changes" : "Save list"}</button>
-                      <button onClick={closeShoppingForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                    </div>
+                    <FormBar saveLabel={shoppingForm.id ? "Save changes" : "Save list"} onSave={saveShoppingForm} onCancel={closeShoppingForm} check={() => !(shoppingForm.shopName || "").trim() ? "Enter the shop name" : ""} />
                   </div>
                 </Card>
                   </div>
   );
 
   const itemFormCard = !itemForm ? null : (
-                  <div ref={itemFormRef}>
+                  <div ref={itemFormRef} data-entry-form="1">
                 <Card>
-                  <SectionLabel>{itemForm.id ? "Edit routine" : "New routine"}</SectionLabel>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <TextField placeholder="Name" value={itemForm.name} onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))} />
+                  <FormHeader onBack={closeItemForm}>{itemForm.id ? "Edit routine" : "New routine"}</FormHeader>
+                  <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <FL t="Name"><TextField placeholder="Name" value={itemForm.name} onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))} /></FL>
                     <Select value={itemForm.type} onChange={(e) => setItemForm((f) => ({ ...f, type: e.target.value }))}>
                       {TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </Select>
@@ -6593,10 +6638,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
               yearDate={itemForm.yearDate} onYearDate={(v) => setItemForm((f) => ({ ...f, yearDate: v }))}
             />
 
-                    <div style={{ display: "flex", gap: 5, justifyContent: "flex-end", marginTop: 5 }}>
-                      <button onClick={saveItemForm} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>Save</button>
-                      <button onClick={closeItemForm} style={{ background: "transparent", border: `1px solid ${LINE}`, borderRadius: 7, padding: "6px 9px", color: INK_DIM, cursor: "pointer", fontSize: 15 }}>Cancel</button>
-                    </div>
+                    <FormBar saveLabel={"Save"} onSave={saveItemForm} onCancel={closeItemForm} check={() => !itemForm.name.trim() ? "Enter a name to save" : ""} />
                   </div>
                 </Card>
                   </div>
@@ -6949,7 +6991,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             );
           })()}
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
-            {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "More" : "Progress"}
+            {page === "dashboard" ? "Home" : page === "daily" ? "Today" : page === "categories" ? "Planner" : page === "datalink" ? "Settings" : "Progress"}
           </span>
         </span>
         <div className="app-header-icons" style={{ display: "flex", alignItems: "center", position: "relative" }}>
@@ -8533,9 +8575,6 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <SectionLabel>Daily routine</SectionLabel>
-                    <button onClick={() => { const evs = dailyCalendarEvents(dailyItems.filter(isItemValid), today); if (evs.length) downloadFile("daily-activities.ics", buildIcs(evs), "text/calendar"); }} style={{ display: "flex", alignItems: "center", gap: 5, background: hexA(BRASS_HEX, 0.1), border: "none", color: BRASS, borderRadius: 980, padding: "6px 11px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
-                      <CalendarDays size={14} /> Add to calendar
-                    </button>
                   </div>
                   <div style={{ fontSize: 14, color: INK_FAINT, marginBottom: 9 }}>Only items with their required fields filled in show up on the Daily tab.</div>
                   {itemForm && !itemForm.id && <AddFormOnly>{itemFormCard}</AddFormOnly>}
@@ -10263,7 +10302,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                 return (
                   <button onClick={() => setMoreSection(moreSection === "sheet" ? "storage" : null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", padding: "2px 0 12px", cursor: "pointer", color: BRASS, fontFamily: "inherit" }}>
                     <ChevronLeft size={22} strokeWidth={2.4} />
-                    <span style={{ fontSize: 19, fontWeight: 800, color: INK, letterSpacing: "-.01em" }}>{TITLES[moreSection] || "More"}</span>
+                    <span style={{ fontSize: 19, fontWeight: 800, color: INK, letterSpacing: "-.01em" }}>{TITLES[moreSection] || "Settings"}</span>
                   </button>
                 );
               })()}
@@ -10646,6 +10685,7 @@ function doPost(e) {
           )}
           <button
             onClick={() => setShowQuickCapture((v) => !v)}
+            className="lt-hide-on-form"
             title="Quick capture"
             aria-label="Quick capture"
             style={{
@@ -10681,6 +10721,7 @@ function doPost(e) {
         return (
           <button
             onClick={fabAction.onClick}
+            className="lt-hide-on-form"
             title={fabAction.title}
             aria-label={fabAction.title}
             style={{
@@ -10705,9 +10746,9 @@ function doPost(e) {
         );
       })()}
 
-      <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 10000, background: "transparent", paddingBottom: "calc(10px + env(safe-area-inset-bottom))", display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+      <div className="lt-hide-on-form" style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 10000, background: "transparent", paddingBottom: "calc(10px + env(safe-area-inset-bottom))", display: "flex", justifyContent: "center", pointerEvents: "none" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 2, width: "calc(100% - 24px)", maxWidth: 456, background: "var(--nav-bg)", borderRadius: 26, boxShadow: "0 10px 30px rgba(15,23,42,0.14), 0 2px 8px rgba(15,23,42,0.06)", border: `1px solid ${LINE}`, padding: "6px 6px", pointerEvents: "auto" }}>
-          {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: ClipboardCheck }, { id: "analysis", label: "Progress", icon: TrendingUp }, { id: "datalink", label: "More", icon: Settings2 }].map((p) => {
+          {[{ id: "dashboard", label: "Home", icon: HomeIcon }, { id: "daily", label: "Today", icon: CalendarDays }, { id: "categories", label: "Planner", icon: ClipboardCheck }, { id: "analysis", label: "Progress", icon: TrendingUp }, { id: "datalink", label: "Settings", icon: Settings2 }].map((p) => {
             const Icon = p.icon; const active = page === p.id;
             return (
               <button key={p.id} onClick={() => switchSection(p.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: active ? 3 : 2, padding: "6px 0", background: "transparent", border: "none", cursor: "pointer", color: active ? "#FFFFFF" : INK_FAINT, transition: "color .18s ease" }}>
