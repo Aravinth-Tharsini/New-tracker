@@ -935,10 +935,18 @@ function tripCalendarEvent(t) {
   return { uid: "trip" + t.id, title: `${multi ? "Trip" : t.mode}: ${stops}`, details: lines.join("\n"), location: t.fromLocation, startMs, endMs, alarmsMin: alarms };
 }
 const ICS_DAY = { Mon: "MO", Tue: "TU", Wed: "WE", Thu: "TH", Fri: "FR", Sat: "SA", Sun: "SU" };
-function dailyCalendarEvents(items, startDate) {
+function dailyCalendarEvents(items, startDate0) {
   return items.map((item) => {
     const byday = (item.days || []).map((d) => ICS_DAY[d]).filter(Boolean);
-    const rrule = byday.length && byday.length < 7 ? `FREQ=WEEKLY;BYDAY=${byday.join(",")}` : "FREQ=DAILY";
+    let rrule = byday.length && byday.length < 7 ? `FREQ=WEEKLY;BYDAY=${byday.join(",")}` : "FREQ=DAILY";
+    let startDate = startDate0;
+    if (item.frequency === "Daily") rrule = "FREQ=DAILY";
+    else if (item.frequency === "Monthly" || item.frequency === "Yearly") {
+      const md = parseInt(item.monthDay, 10); const [ym, yd] = String(item.yearDate || "").split("-").map(Number);
+      if (item.frequency === "Monthly" && md) rrule = md === 31 ? "FREQ=MONTHLY;BYMONTHDAY=-1" : `FREQ=MONTHLY;BYMONTHDAY=${md}`;
+      else if (item.frequency === "Yearly" && ym && yd) rrule = `FREQ=YEARLY;BYMONTH=${ym};BYMONTHDAY=${yd}`;
+      for (let k = 0; k < 800; k++) { const d = new Date(startDate0 + "T00:00:00"); d.setDate(d.getDate() + k); if (isItemScheduledToday(item, d)) { startDate = dateKey(d); break; } }
+    }
     const base = { uid: "daily" + item.id, title: item.name, details: "Daily activity from my Daily Life app", rrule };
     if (item.scheduledTime) { const startMs = icsLocalMs(startDate, item.scheduledTime); return startMs == null ? null : { ...base, startMs, endMs: startMs + 15 * 60000, alarmsMin: [10, 0] }; }
     return { ...base, allDayDate: startDate, allDayAlarmHour: 9 };
@@ -2291,7 +2299,54 @@ const REPAYMENT_CATEGORIES = ["Gold Loan", "Loan", "EMI", "Electricity", "Rent",
 const REPAYMENT_VARIABLE_CATEGORIES = ["Electricity", "Mobile Recharge", "Water"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 function weekdayLabel(date) { return WEEKDAYS[(date.getDay() + 6) % 7]; }
-function isItemScheduledToday(item, date) { return !item.days || item.days.length === 0 || item.days.includes(weekdayLabel(date)); }
+// Frequency (Daily / Weekly / Monthly / Yearly) helpers shared by Routine and My Day.
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function daysInMonthOf(y, m0) { return new Date(y, m0 + 1, 0).getDate(); }
+function ordinalDay(n) { const v = n % 100; const s = ["th", "st", "nd", "rd"]; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+function dateParts(x) {
+  if (x instanceof Date) return { y: x.getFullYear(), m0: x.getMonth(), d: x.getDate() };
+  const [y, m, d] = String(x || "").slice(0, 10).split("-").map(Number);
+  return { y, m0: (m || 1) - 1, d: d || 1 };
+}
+// Monthly: that day of the month (shorter months use their last day). Yearly: that month + day each year.
+function freqMatches(freq, spec, x) {
+  const p = dateParts(x);
+  if (freq === "Monthly") {
+    const md = parseInt(spec && spec.monthDay, 10); if (!md) return true;
+    return p.d === Math.min(md, daysInMonthOf(p.y, p.m0));
+  }
+  if (freq === "Yearly") {
+    const [mm, dd] = String((spec && spec.yearDate) || "").split("-").map(Number); if (!mm || !dd) return true;
+    return p.m0 + 1 === mm && p.d === Math.min(dd, daysInMonthOf(p.y, mm - 1));
+  }
+  return true;
+}
+function freqLabel(freq, spec) {
+  if (freq === "Monthly") { const md = parseInt(spec && spec.monthDay, 10); return md ? `monthly on the ${ordinalDay(md)}` : "monthly"; }
+  if (freq === "Yearly") { const [mm, dd] = String((spec && spec.yearDate) || "").split("-").map(Number); return mm && dd ? `yearly on ${dd} ${MONTH_SHORT[mm - 1]}` : "yearly"; }
+  return "";
+}
+function isItemScheduledToday(item, date) {
+  const f = item.frequency;
+  if (f === "Daily") return true;
+  if (f === "Monthly" || f === "Yearly") return freqMatches(f, item, date);
+  return !item.days || item.days.length === 0 || item.days.includes(weekdayLabel(date));
+}
+// My Day plans: "Once" (single date), or Daily / Weekly (repeatDays) / Monthly / Yearly starting from eventDate.
+function myDayFreq(ev) {
+  const f = ev && ev.frequency;
+  if (f === "Daily" || f === "Monthly" || f === "Yearly") return f;
+  if (ev && ev.repeatDays && ev.repeatDays.length > 0) return "Weekly";
+  return "Once";
+}
+function myDayIsRecurring(ev) { return myDayFreq(ev) !== "Once"; }
+function myDayRepeatLabel(ev) {
+  const f = myDayFreq(ev);
+  if (f === "Daily") return "Repeats every day";
+  if (f === "Weekly") return "Repeats " + ev.repeatDays.join(", ");
+  const spec = { monthDay: ev.monthDay || dateParts(ev.eventDate).d, yearDate: ev.yearDate || (() => { const p = dateParts(ev.eventDate); return pad2(p.m0 + 1) + "-" + pad2(p.d); })() };
+  return "Repeats " + freqLabel(f, spec);
+}
 const ROUTINE_CATEGORIES = ["career", "health"];
 const GOAL_TRACK_ICON = { career: "Building2", health: "Dumbbell" };
 function computeRoutineTotals(g) {
@@ -2302,8 +2357,11 @@ function computeRoutineTotals(g) {
     const weeklyMin = occurrences * session;
     return { dailyMin: round(weeklyMin / 7), weeklyMin: round(weeklyMin), monthlyMin: round((weeklyMin * 30) / 7), yearlyMin: round(weeklyMin * 52) };
   }
-  if (g.frequency === "Monthly") {
+    if (g.frequency === "Monthly") {
     return { dailyMin: round(session / 30), weeklyMin: round((session * 7) / 30), monthlyMin: round(session), yearlyMin: round(session * 12) };
+  }
+  if (g.frequency === "Yearly") {
+    return { dailyMin: round(session / 365), weeklyMin: round((session * 7) / 365), monthlyMin: round(session / 12), yearlyMin: round(session) };
   }
   return { dailyMin: round(session), weeklyMin: round(session * 7), monthlyMin: round(session * 30), yearlyMin: round(session * 365) };
 }
@@ -2317,8 +2375,11 @@ function computeGoalPlanTotalMinutes(g) {
     const occurrences = (g.specificDays && g.specificDays.length) ? g.specificDays.length : (Number(g.daysPerWeek) || 0);
     return round((days / 7) * occurrences * session);
   }
-  if (g.frequency === "Monthly") {
+    if (g.frequency === "Monthly") {
     return round((span.totalDays + 1) / 30 * session);
+  }
+  if (g.frequency === "Yearly") {
+    return round((span.totalDays + 1) / 365 * session);
   }
   return round((span.totalDays + 1) * session);
 }
@@ -2495,10 +2556,13 @@ const MYDAY_TYPE_OPTIONS = [
 // those weekdays starting from eventDate onward.
 function myDayEventOccursOn(ev, dateStr) {
   if (!ev || !dateStr) return false;
-  if (ev.repeatDays && ev.repeatDays.length > 0) {
+  const fq = myDayFreq(ev);
+  if (fq !== "Once") {
     if (ev.eventDate && dateStr < ev.eventDate) return false;
-    const wd = weekdayLabel(new Date(dateStr));
-    return ev.repeatDays.includes(wd);
+    if (fq === "Daily") return true;
+    if (fq === "Weekly") return ev.repeatDays.includes(weekdayLabel(new Date(dateStr)));
+    const sp = dateParts(ev.eventDate);
+    return freqMatches(fq, { monthDay: ev.monthDay || sp.d, yearDate: ev.yearDate || (pad2(sp.m0 + 1) + "-" + pad2(sp.d)) }, dateStr);
   }
   if (!ev.eventDate) return false;
   // Same lead-window rule as travel plans: a My Day entry starts showing on the Daily tab
@@ -3172,6 +3236,50 @@ function AddFormOnly({ children }) {
   const ref = useRef(null);
   useEffect(() => { const t = setTimeout(() => { try { if (ref.current) ref.current.scrollIntoView({ block: "start" }); } catch (e) {} }, 40); return () => clearTimeout(t); }, []);
   return <div ref={ref} data-add-form="1">{children}</div>;
+}
+function FrequencyPicker({ freq, onFreq, options, days, onToggleDay, monthDay, onMonthDay, yearDate, onYearDate, hint }) {
+  const opts = options || ["Daily", "Weekly", "Monthly", "Yearly"];
+  const [ym, yd] = String(yearDate || "").split("-");
+  const chip = (sel) => ({ background: sel ? BRASS : PANEL_2, border: "none", color: sel ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "6px 11px", fontSize: 14, fontWeight: 600, cursor: "pointer" });
+  const maxD = freq === "Yearly" ? daysInMonthOf(2024, (parseInt(ym, 10) || 1) - 1) : 31;
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 6 }}>Frequency{hint ? ` (${hint})` : ""}</div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        {opts.map((o) => <button key={o} type="button" onClick={() => onFreq(o)} style={chip(freq === o)}>{o === "Once" ? "One time" : o}</button>)}
+      </div>
+      {freq === "Weekly" && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>On days</div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {WEEKDAYS.map((day) => <button key={day} type="button" onClick={() => onToggleDay(day)} style={{ ...chip((days || []).includes(day)), padding: "6px 9px" }}>{day}</button>)}
+          </div>
+        </div>
+      )}
+      {freq === "Monthly" && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Day of the month</div>
+          <Select value={String(monthDay || "")} onChange={(e) => onMonthDay(e.target.value)} style={{ width: "100%" }}>
+            {Array.from({ length: 31 }, (_, i) => <option key={i + 1} value={String(i + 1)}>{ordinalDay(i + 1)}</option>)}
+          </Select>
+          {parseInt(monthDay, 10) > 28 && <div style={{ fontSize: 12, color: INK_FAINT, marginTop: 4 }}>Shorter months use their last day.</div>}
+        </div>
+      )}
+      {freq === "Yearly" && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Date each year</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <Select value={String(parseInt(ym, 10) || 1)} onChange={(e) => onYearDate(pad2(e.target.value) + "-" + pad2(Math.min(parseInt(yd, 10) || 1, daysInMonthOf(2024, e.target.value - 1))))} style={{ flex: 1 }}>
+              {MONTH_SHORT.map((m, i) => <option key={m} value={String(i + 1)}>{m}</option>)}
+            </Select>
+            <Select value={String(parseInt(yd, 10) || 1)} onChange={(e) => onYearDate(pad2(parseInt(ym, 10) || 1) + "-" + pad2(e.target.value))} style={{ flex: 1 }}>
+              {Array.from({ length: maxD }, (_, i) => <option key={i + 1} value={String(i + 1)}>{i + 1}</option>)}
+            </Select>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 function IconBtn({ onClick, children, title }) { return <button onClick={onClick} title={title} aria-label={title} style={{ background: PANEL_2, border: "none", borderRadius: 12, padding: "0 11px", height: 38, color: BRASS, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>{children}</button>; }
 function IconAction({ onClick, children, disabled, tone, style, title }) {
@@ -4993,14 +5101,14 @@ function LifeTracker() {
   const myDayCardRefs = useRef({});
   const scrollToMyDayForm = () => { requestAnimationFrame(() => { setTimeout(() => { if (myDayFormRef.current) myDayFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 120); }); };
   const scrollBackToMyDayCard = (id) => { requestAnimationFrame(() => { setTimeout(() => { const el = myDayCardRefs.current[id]; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60); }); };
-  const blankMyDayForm = () => ({ reminderType: "", type: "Meeting", title: "", eventDate: dateKey(), eventTime: "", location: "", notes: "", repeatDays: [], reminderOffsets: ["none"], reminderEnabled: true, reminderMinutes: "15" });
+  const blankMyDayForm = () => ({ reminderType: "", type: "Meeting", title: "", eventDate: dateKey(), eventTime: "", location: "", notes: "", repeatDays: [], frequency: "Once", monthDay: "", yearDate: "", reminderOffsets: ["none"], reminderEnabled: true, reminderMinutes: "15" });
   const [myDayForm, setMyDayForm] = useState(blankMyDayForm());
   const toggleMyDayRepeatDay = (day) => setMyDayForm((f) => ({ ...f, repeatDays: f.repeatDays.includes(day) ? f.repeatDays.filter((d) => d !== day) : [...f.repeatDays, day] }));
   const toggleMyDayReminderOffset = (offset) => setMyDayForm((f) => ({ ...f, reminderOffsets: f.reminderOffsets.includes(offset) ? f.reminderOffsets.filter((o) => o !== offset) : [...f.reminderOffsets, offset] }));
   const openEditMyDay = (ev) => {
     setMyDayForm({
       reminderType: ev.reminderType || "", type: ev.type || "Meeting", title: ev.title || "", eventDate: ev.eventDate || dateKey(), eventTime: ev.eventTime || "",
-      location: ev.location || "", notes: ev.notes || "", repeatDays: ev.repeatDays || [],
+      location: ev.location || "", notes: ev.notes || "", repeatDays: ev.repeatDays || [], frequency: myDayFreq(ev), monthDay: ev.monthDay ? String(ev.monthDay) : "", yearDate: ev.yearDate || "",
       reminderOffsets: ev.reminderOffsets && ev.reminderOffsets.length ? ev.reminderOffsets : ["none"],
       reminderEnabled: ev.reminderEnabled !== false, reminderMinutes: ev.reminderMinutes != null ? String(ev.reminderMinutes) : "15",
     });
@@ -5013,11 +5121,13 @@ function LifeTracker() {
     setShowAddMyDay(false); setEditingMyDayId(null); setMyDayForm(blankMyDayForm());
     if (wasEditingId) scrollBackToMyDayCard(wasEditingId);
   };
+  const myDayFormFreq = (() => { const f = myDayForm.frequency || (myDayForm.repeatDays && myDayForm.repeatDays.length ? "Weekly" : "Once"); return f === "Weekly" && !(myDayForm.repeatDays && myDayForm.repeatDays.length) ? "Once" : f; })();
   const addMyDayEvent = () => {
     if (!myDayForm.title.trim()) return;
     const base = {
       reminderType: myDayForm.reminderType || reminderStyle.plans, type: myDayForm.type, title: myDayForm.title.trim(), eventDate: myDayForm.eventDate || dateKey(), eventTime: myDayForm.eventTime,
-      location: myDayForm.location.trim(), notes: myDayForm.notes.trim(), repeatDays: myDayForm.repeatDays || [],
+      location: myDayForm.location.trim(), notes: myDayForm.notes.trim(), repeatDays: myDayFormFreq === "Weekly" ? (myDayForm.repeatDays || []) : [],
+frequency: myDayFormFreq, monthDay: myDayFormFreq === "Monthly" ? (parseInt(myDayForm.monthDay, 10) || dateParts(myDayForm.eventDate || dateKey()).d) : "", yearDate: myDayFormFreq === "Yearly" ? (myDayForm.yearDate || (pad2(dateParts(myDayForm.eventDate || dateKey()).m0 + 1) + "-" + pad2(dateParts(myDayForm.eventDate || dateKey()).d))) : "",
       reminderOffsets: myDayForm.reminderOffsets && myDayForm.reminderOffsets.length ? myDayForm.reminderOffsets : ["none"],
       reminderEnabled: !!myDayForm.reminderEnabled, reminderMinutes: parseInt(myDayForm.reminderMinutes) || 15,
     };
@@ -5289,7 +5399,7 @@ function LifeTracker() {
               const [hh, mm] = String(tm).split(":").map(Number); if (Number.isNaN(hh) || Number.isNaN(mm)) continue;
               const d = new Date(); d.setDate(d.getDate() + k); d.setHours(hh, mm, 0, 0);
               if (k === 0 && doneToday) continue;
-              if (days.length && days.length < 7 && !days.includes(WD_NAMES[d.getDay()])) continue;
+              if (!isItemScheduledToday(i, d)) continue;
               add(i.name, "Time for your daily activity", d, "daily", i, `alarm:daily:${i.id}:${dateKey(d)}:${tm}`);
             }
           });
@@ -5302,7 +5412,8 @@ function LifeTracker() {
             const hasTime = !!e.eventTime && !Number.isNaN(hh) && !Number.isNaN(mm);
             const body = `${hasTime ? fmtTimeString12(e.eventTime) : "Today"}${e.location ? " \u00b7 " + e.location : ""}`;
             const early = e.reminderEnabled !== false ? (parseInt(e.reminderMinutes, 10) || 0) : 0;
-            const rd = (e.repeatDays || []).filter((d) => NATIVE_WD[d]);
+            const fqE = myDayFreq(e); const datedRepeat = fqE === "Monthly" || fqE === "Yearly";
+const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repeatDays || []).filter((d) => NATIVE_WD[d]);
             if (hasTime && rd.length) {
               if (AR && ((e.reminderType || reminderStyle.plans) === "alarm")) {
                 // ringing alarms are planned as individual days (next 14), so each one can be skipped when already done
@@ -5319,12 +5430,19 @@ function LifeTracker() {
                 weekly.push({ title, body, on: { weekday: NATIVE_WD[d], hour: hh, minute: mm }, cat: "plans", item: e });
                 if (early > 0) weekly.push({ title: `${title} in ${early} min`, body, on: shiftWd(NATIVE_WD[d], hh, mm, early), cat: "plans", item: e });
               });
+            } else if (hasTime && datedRepeat) {
+              for (let k = 0; k < HORIZON_DAYS; k++) {
+                const d = new Date(); d.setDate(d.getDate() + k); const dk = dateKey(d); if (!myDayEventOccursOn(e, dk)) continue;
+                d.setHours(hh, mm, 0, 0);
+                add(title, body, d, "plans", e, `alarm:plans:${e.id}:${dk}:${e.eventTime}`);
+                if (early > 0) add(`${title} in ${early} min`, body, new Date(d.getTime() - early * 60000), "plans", e, `alarm:plans-early:${e.id}:${dk}:${e.eventTime}`);
+              }
             } else if (hasTime) {
               const at = new Date(`${e.eventDate}T${hhmmOf(e.eventTime)}:00`);
               add(title, body, at, "plans", e, `alarm:plans:${e.id}:${e.eventDate}:${e.eventTime}`);
               if (early > 0) add(`${title} in ${early} min`, body, new Date(at.getTime() - early * 60000), "plans", e, `alarm:plans-early:${e.id}:${e.eventDate}:${e.eventTime}`);
             }
-            if (!rd.length) (e.reminderOffsets || []).forEach((o) => {
+            if (!rd.length && !datedRepeat) (e.reminderOffsets || []).forEach((o) => {
               const opt = REMINDER_OPTIONS.find((x) => x.value === o); if (!opt || !opt.days) return;
               const d = new Date(`${e.eventDate}T09:00:00`); d.setDate(d.getDate() - opt.days);
               add(`Upcoming: ${title}`, `${formatDMY(e.eventDate)}${hasTime ? " at " + fmtTimeString12(e.eventTime) : ""} \u2014 ${opt.label.toLowerCase()}`, d, "plans", e);
@@ -5654,7 +5772,7 @@ function LifeTracker() {
     if (!remindersEnabled) return;
     myDayEvents.forEach((ev) => {
       if (ev.completed) return;
-      const isRecurring = ev.repeatDays && ev.repeatDays.length > 0;
+      const isRecurring = myDayIsRecurring(ev);
 
       // Day-ahead reminders (e.g. "1 day before", "1 week before") only make sense for one-time plans.
       if (!isRecurring && ev.eventDate) {
@@ -5905,10 +6023,11 @@ function LifeTracker() {
                         <div>
                           <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Frequency</div>
                           <Select value={goalForm.frequency} onChange={(e) => setGoalForm({ ...goalForm, frequency: e.target.value })} style={{ width: "100%" }}>
-                            <option value="Daily">Today</option>
-                            <option value="Weekly">Weekly</option>
-                            <option value="Monthly">Monthly</option>
-                          </Select>
+                            <option value="Daily">Daily</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Monthly">Monthly</option>
+                <option value="Yearly">Yearly</option>
+              </Select>
                         </div>
                         {goalForm.frequency === "Weekly" && (
                           <>
@@ -6138,10 +6257,10 @@ function LifeTracker() {
                             <div>
                               <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Payment frequency</div>
                               <Select value={repaymentForm.frequency} onChange={(e) => setRepaymentForm({ ...repaymentForm, frequency: e.target.value })} style={{ width: "100%" }}>
-                                <option value="Daily">Today</option>
-                                <option value="Weekly">Weekly</option>
-                                <option value="Monthly">Monthly</option>
-                                <option value="Half-yearly">Half-yearly</option>
+                                <option value="Daily">Daily</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Monthly">Monthly</option>
+                <option value="Half-yearly">Half-yearly</option>
                                 <option value="Yearly">Yearly</option>
                               </Select>
                             </div>
@@ -6209,7 +6328,7 @@ function LifeTracker() {
                     <TextField placeholder="Title (e.g. Team standup, Doctor visit)" value={myDayForm.title} onChange={(e) => setMyDayForm({ ...myDayForm, title: e.target.value })} />
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <div style={{ flex: "1 1 140px" }}>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>{myDayForm.repeatDays.length > 0 ? "Starts from" : "Date"}</div>
+                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>{myDayForm.frequency && myDayForm.frequency !== "Once" ? "Starts from" : "Date"}</div>
                         <TextField type="date" value={myDayForm.eventDate} onChange={(e) => setMyDayForm({ ...myDayForm, eventDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                       </div>
                       <div style={{ flex: "1 1 160px" }}>
@@ -6218,22 +6337,19 @@ function LifeTracker() {
                         {myDayForm.eventTime ? <ReminderTypePick value={myDayForm.reminderType || reminderStyle.plans} onChange={(v) => setMyDayForm((f) => ({ ...f, reminderType: v }))} /> : null}
                       </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Repeat on days (leave blank for a one-time plan)</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                        {WEEKDAYS.map((day) => {
-                          const sel = myDayForm.repeatDays.includes(day);
-                          return (
-                            <button key={day} type="button" onClick={() => toggleMyDayRepeatDay(day)} style={{ background: sel ? BRASS : PANEL_2, border: "none", color: sel ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "6px 9px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{day}</button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <FrequencyPicker
+              options={["Once", "Daily", "Weekly", "Monthly", "Yearly"]}
+              freq={myDayForm.frequency || (myDayForm.repeatDays && myDayForm.repeatDays.length ? "Weekly" : "Once")}
+              onFreq={(f) => setMyDayForm((x) => { const sd = dateParts(x.eventDate || dateKey()); return { ...x, frequency: f, monthDay: f === "Monthly" ? (x.monthDay || String(sd.d)) : x.monthDay, yearDate: f === "Yearly" ? (x.yearDate || (pad2(sd.m0 + 1) + "-" + pad2(sd.d))) : x.yearDate }; })}
+              days={myDayForm.repeatDays || []} onToggleDay={toggleMyDayRepeatDay}
+              monthDay={myDayForm.monthDay} onMonthDay={(v) => setMyDayForm((f) => ({ ...f, monthDay: v }))}
+              yearDate={myDayForm.yearDate} onYearDate={(v) => setMyDayForm((f) => ({ ...f, yearDate: v }))}
+            />
                     <TextField placeholder="Location / link (optional)" value={myDayForm.location} onChange={(e) => setMyDayForm({ ...myDayForm, location: e.target.value })} />
                     <TextField placeholder="Notes (optional)" value={myDayForm.notes} onChange={(e) => setMyDayForm({ ...myDayForm, notes: e.target.value })} />
-                    {myDayForm.repeatDays.length === 0 && (
-                      <div>
-                        <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Also remind me before the date (pick as many as you like)</div>
+                    {myDayFormFreq === "Once" && (
+            <div>
+              <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 5 }}>Also remind me before the date (pick as many as you like)</div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                           {REMINDER_OPTIONS.map((o) => {
                             const sel = myDayForm.reminderOffsets.includes(o.value);
@@ -6245,7 +6361,7 @@ function LifeTracker() {
                       </div>
                     )}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{ fontSize: 13, color: INK_FAINT }}>{myDayForm.repeatDays.length > 0 ? "Remind me before it starts, each time" : "Also remind me at a set time on the day"}</div>
+                      <div style={{ fontSize: 13, color: INK_FAINT }}>{myDayFormFreq !== "Once" ? "Remind me before it starts, each time" : "Also remind me at a set time on the day"}</div>
                       <button type="button" onClick={() => setMyDayForm({ ...myDayForm, reminderEnabled: !myDayForm.reminderEnabled })} style={{ background: myDayForm.reminderEnabled ? "rgba(0,113,227,0.12)" : PANEL_2, border: `1px solid ${myDayForm.reminderEnabled ? BRASS : LINE}`, borderRadius: 7, padding: "5px 8px", color: myDayForm.reminderEnabled ? BRASS : INK_DIM, cursor: "pointer", fontSize: 13 }}>{myDayForm.reminderEnabled ? "On" : "Off"}</button>
                     </div>
                     {myDayForm.reminderEnabled && (
@@ -6468,17 +6584,14 @@ function LifeTracker() {
                       </div>
                     )}
 
-                    <div>
-                      <div style={{ fontSize: 13, color: INK_FAINT, marginBottom: 6 }}>Days (leave blank for every day)</div>
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        {WEEKDAYS.map((day) => {
-                          const sel = itemForm.days.includes(day);
-                          return (
-                            <button key={day} onClick={() => setItemForm((f) => ({ ...f, days: f.days.includes(day) ? f.days.filter((d) => d !== day) : [...f.days, day] }))} style={{ background: sel ? BRASS : PANEL_2, border: "none", color: sel ? "#FFFFFF" : INK_DIM, borderRadius: 980, padding: "6px 9px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{day}</button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <FrequencyPicker
+              freq={itemForm.frequency || (itemForm.days && itemForm.days.length ? "Weekly" : "Daily")}
+              onFreq={(f) => setItemForm((x) => ({ ...x, frequency: f, days: f === "Weekly" ? (x.days || []) : [], monthDay: f === "Monthly" ? (x.monthDay || String(new Date().getDate())) : x.monthDay, yearDate: f === "Yearly" ? (x.yearDate || (pad2(new Date().getMonth() + 1) + "-" + pad2(new Date().getDate()))) : x.yearDate }))}
+              days={itemForm.days || []}
+              onToggleDay={(day) => setItemForm((f) => ({ ...f, days: f.days.includes(day) ? f.days.filter((d) => d !== day) : [...f.days, day] }))}
+              monthDay={itemForm.monthDay} onMonthDay={(v) => setItemForm((f) => ({ ...f, monthDay: v }))}
+              yearDate={itemForm.yearDate} onYearDate={(v) => setItemForm((f) => ({ ...f, yearDate: v }))}
+            />
 
                     <div style={{ display: "flex", gap: 5, justifyContent: "flex-end", marginTop: 5 }}>
                       <button onClick={saveItemForm} style={{ background: BRASS, border: "none", borderRadius: 7, padding: "6px 11px", color: "#FFFFFF", cursor: "pointer", fontSize: 15 }}>Save</button>
@@ -7730,7 +7843,7 @@ function LifeTracker() {
                       <div className="today-expand-enter" style={{ marginTop: 8, paddingTop: 2 }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {visibleMyDay.map((e) => {
-                            const isRecurring = e.repeatDays && e.repeatDays.length > 0;
+                            const isRecurring = myDayIsRecurring(e);
                             const occursToday = myDayEventOccursOn(e, today);
                             const dLabel = !isRecurring ? dayLabelForExt(e.eventDate, today) : "";
                             const highlighted = dailyHighlightId === e.id;
@@ -7751,7 +7864,7 @@ function LifeTracker() {
                                     <span style={{ fontSize: 12.5, fontWeight: 700, color: "#FFFFFF", background: dLabel === "Yesterday" ? CORAL : BRASS, borderRadius: 980, padding: "3px 9px" }}>{dLabel}</span>
                                   )}
                                   {isRecurring ? (
-                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS_HEX, 0.10), borderRadius: 980, padding: "3px 9px" }}>Repeats {e.repeatDays.join(", ")}</span>
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS_HEX, 0.10), borderRadius: 980, padding: "3px 9px" }}>{myDayRepeatLabel(e)}</span>
                                   ) : (
                                     <span style={{ fontSize: 12.5, fontWeight: 700, color: BRASS, background: hexA(BRASS_HEX, 0.10), borderRadius: 980, padding: "3px 9px" }}>{formatDMY(e.eventDate)}</span>
                                   )}
@@ -8405,7 +8518,6 @@ function LifeTracker() {
                         </div>
                         <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
                           <IconAction onClick={() => { const ev = tripCalendarEvent(t); if (ev) window.open(googleCalendarUrl(ev), "_blank"); }} title="Add to Google Calendar"><CalendarDays size={15} /></IconAction>
-                          <IconAction onClick={() => { const ev = tripCalendarEvent(t); if (ev) downloadFile(`trip-${(t.toLocation || "trip").replace(/[^a-z0-9]+/gi, "-")}.ics`, buildIcs([ev]), "text/calendar"); }} title="Download calendar file (.ics)"><Download size={15} /></IconAction>
                           <IconAction onClick={() => openEditTravel(t)} title="Edit trip"><Pencil size={15} /></IconAction>
                           <IconAction onClick={() => deleteTravelPlan(t.id)} title="Delete trip"><Trash2 size={15} /></IconAction>
                         </div>
@@ -8440,9 +8552,9 @@ function LifeTracker() {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 15 }}>{item.name || <span style={{ color: INK_FAINT }}>(unnamed)</span>}</div>
                             <div style={{ fontSize: 13, color: valid ? TEAL : CORAL, marginTop: 2 }}>{item.type} &middot; {valid ? "on Daily tab" : "incomplete \u2014 hidden"}</div>
-                            {(item.scheduledTime || (item.days && item.days.length > 0)) && (
+                            {(item.scheduledTime || (item.days && item.days.length > 0) || item.frequency === "Monthly" || item.frequency === "Yearly") && (
                               <div style={{ fontSize: 11, color: INK_FAINT, marginTop: 2, fontFamily: mono }}>
-                                {item.scheduledTime ? `at ${fmtTimeString12(item.scheduledTime)}` : ""}{item.scheduledTime && item.days && item.days.length > 0 ? " \u00b7 " : ""}{item.days && item.days.length > 0 ? item.days.join(", ") : (item.scheduledTime ? "every day" : "")}
+                                {item.scheduledTime ? `at ${fmtTimeString12(item.scheduledTime)}` : ""}{item.scheduledTime && ((item.days && item.days.length > 0) || item.frequency === "Monthly" || item.frequency === "Yearly") ? " \u00b7 " : ""}{(item.frequency === "Monthly" || item.frequency === "Yearly") ? freqLabel(item.frequency, item) : item.days && item.days.length > 0 ? item.days.join(", ") : (item.scheduledTime ? "every day" : "")}
                               </div>
                             )}
                           </div>
@@ -8567,7 +8679,7 @@ function LifeTracker() {
               {showAddMyDay && !editingMyDayId && <AddFormOnly>{myDayFormCard}</AddFormOnly>}
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                 {sortedMyDayEvents.filter((e) => !e.completed).map((e) => {
-                  const isRecurring = e.repeatDays && e.repeatDays.length > 0;
+                  const isRecurring = myDayIsRecurring(e);
                   const dayLabel = !isRecurring ? dayLabelForExt(e.eventDate, today) : "";
                   const offsetLabels = (e.reminderOffsets || []).filter((v) => v !== "none").map((v) => (REMINDER_OPTIONS.find((o) => o.value === v) || {}).label).filter(Boolean);
                   if (showAddMyDay && editingMyDayId === e.id) {
@@ -8580,7 +8692,7 @@ function LifeTracker() {
                         <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{e.type} &middot; {e.title}</div>
                         <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3, display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
                           {dayLabel && <span style={{ fontWeight: 700, color: BRASS }}>{dayLabel}</span>}
-                          {isRecurring ? <span style={{ fontWeight: 700, color: BRASS }}>Repeats {e.repeatDays.join(", ")}</span> : <span>{formatDMY(e.eventDate)}</span>}
+                          {isRecurring ? <span style={{ fontWeight: 700, color: BRASS }}>{myDayRepeatLabel(e)}</span> : <span>{formatDMY(e.eventDate)}</span>}
                           {e.eventTime && <><span>&middot;</span><span style={{ fontWeight: 700, color: INK_DIM }}>{fmtTimeString12(e.eventTime)}</span><span>({timeOfDayLabel(e.eventTime)})</span></>}
                           {e.location ? <span>&middot; {e.location}</span> : null}
                         </div>
