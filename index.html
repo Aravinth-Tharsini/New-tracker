@@ -1007,14 +1007,16 @@ function fmtKm(km) { return `${Math.round((km || 0) * 10) / 10} km`; }
 // APP_VERSION is the version baked into this build. Raise it for every new APK. APK_UPDATE_REPO is the GitHub
 // repository ("user/repo") whose recent Releases hold the APKs; leave it empty to turn the APK check off.
 // The APK check compares Release tags with the REAL installed APK version (read from the phone), not with APP_VERSION.
-const APP_VERSION = "2026.10.24.7";
+const APP_VERSION = "2026.10.25.1";
 // Shown on More > App update ("What's new"). Keep each line short and simple; add a new block for every release.
 const APP_CHANGELOG = {
-  date: "24 Oct 2026",
+  date: "25 Oct 2026",
   items: [
-    ["new", "App update now reads the real installed app version."],
-    ["new", "Required updates show a red dot and a highlighted card."],
-    ["better", "Optional updates show quietly, with no red dot."],
+    ["new", "Separate Alarm sound and Notification sound."],
+    ["new", "Pick Default, a suggested sound, or one from your phone."],
+    ["new", "Play any sound before you choose it."],
+    ["better", "Reminders & alarms and Notification mode now match the Settings look."],
+    ["removed", "Reminder type section on the Reminders & alarms page."],
   ],
 };
 const APK_UPDATE_REPO = "Aravinth-Tharsini/New-tracker";
@@ -1056,9 +1058,23 @@ async function fetchApkReleases(repo) {
     const asset = apks.find((x) => /app-debug\.apk$/i.test(x.name || "")) || apks[0];
     if (!asset) return; // the APK is not attached yet: nothing to download
     const body = String(j.body || "");
-    out.push({ version: String(j.tag_name).replace(/^[^0-9]*/, ""), url: asset.browser_download_url, mandatory: /\[mandatory\]/i.test(body), notes: body.replace(/\[mandatory\]/gi, "").trim().slice(0, 500) });
+    out.push({ version: String(j.tag_name).replace(/^[^0-9]*/, ""), date: j.published_at || "", url: asset.browser_download_url, mandatory: /\[mandatory\]/i.test(body), notes: body.replace(/\[mandatory\]/gi, "").trim().slice(0, 500) });
   });
   return out;
+}
+// "What's new" comes automatically from the GitHub Release notes of the installed version. In the release notes write one
+// line per change, for example "- new: Sound picker" (kinds: new, better, fixed, removed). A plain line counts as "new".
+function parseWhatsNew(notes) {
+  const items = [];
+  String(notes || "").split(/\r?\n/).forEach((raw) => {
+    let t = raw.replace(/^\s*(?:[-*\u2022]+|\d+[.)])\s*/, "").replace(/\*\*/g, "").trim();
+    if (!t || /^#/.test(t) || /^\[?mandatory\]?$/i.test(t)) return;
+    let kind = "new";
+    const m = t.match(/^(new|better|improved|fixed|removed)\s*[:\-\u2013]\s*(.+)$/i);
+    if (m) { kind = m[1].toLowerCase() === "improved" ? "better" : m[1].toLowerCase(); t = m[2].trim(); }
+    if (t) items.push([kind, t]);
+  });
+  return items.slice(0, 8);
 }
 // Decides what the phone should show. installed = "" means the version could not be read: then only mandatory releases are shown.
 function evaluateApkUpdate(releases, installed) {
@@ -5027,6 +5043,21 @@ function LifeTracker() {
   // Full-screen loading animation shown while an update is being applied: { kind: "web" | "apk", step: 0..2 }
   const [updateOverlay, setUpdateOverlay] = useState(null);
   const [installedApk, setInstalledApk] = useState(undefined); // undefined = not checked yet, "" = could not be read
+  const [whatsNew, setWhatsNew] = useState(null); // { version, date, items } read from the GitHub Release of the installed version
+  useEffect(() => {
+    if (moreSection !== "update" || !APK_UPDATE_REPO) return undefined;
+    let off = false;
+    fetchApkReleases(APK_UPDATE_REPO).then((list) => {
+      const cur = installedApk || APP_VERSION;
+      const rel = list.slice().sort((a, b) => (versionIsNewer(a.version, b.version) ? -1 : versionIsNewer(b.version, a.version) ? 1 : 0)).find((r) => !versionIsNewer(r.version, cur));
+      const items = rel ? parseWhatsNew(rel.notes) : [];
+      if (!off && rel && items.length) {
+        let d = ""; try { if (rel.date) d = new Date(rel.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch (e) {}
+        setWhatsNew({ version: rel.version, date: d, items });
+      }
+    }).catch(() => {});
+    return () => { off = true; };
+  }, [moreSection, installedApk]);
   const fetchLatestApk = async (repo) => {
     const cap = window.Capacitor;
     const native = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
@@ -10401,10 +10432,10 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
           <Card style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>What's new</div>
-              <div style={{ fontSize: 12, color: INK_FAINT, fontFamily: mono, textAlign: "right" }}>Updated {APP_CHANGELOG.date} {"\u00b7"} v{APP_VERSION}</div>
+              <div style={{ fontSize: 12, color: INK_FAINT, fontFamily: mono, textAlign: "right" }}>{(whatsNew && whatsNew.date) || (whatsNew ? "" : APP_CHANGELOG.date)}{(whatsNew && whatsNew.date) || !whatsNew ? " \u00b7 " : ""}v{whatsNew ? whatsNew.version : APP_VERSION}</div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 10 }}>
-              {APP_CHANGELOG.items.map(([kind, text], i) => { const tagColor = (k) => (k === "new" || k === "fixed") ? TEAL : k === "better" ? BRASS : k === "removed" ? CORAL : INK_DIM; return (
+              {(whatsNew ? whatsNew.items : APP_CHANGELOG.items).map(([kind, text], i) => { const tagColor = (k) => (k === "new" || k === "fixed") ? TEAL : k === "better" ? BRASS : k === "removed" ? CORAL : INK_DIM; return (
                 <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
                   <span style={{ flexShrink: 0, minWidth: 46, textAlign: "center", fontSize: 10.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", padding: "3px 7px", borderRadius: 6, color: tagColor(kind), background: hexA(tagColor(kind), 0.12) }}>{kind}</span>
                   <span style={{ fontSize: 13.5, color: INK, lineHeight: 1.4 }}>{text}</span>
