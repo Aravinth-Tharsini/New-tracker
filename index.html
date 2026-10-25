@@ -2109,19 +2109,8 @@ const SOUND_PATTERNS = {
   gentle: { type: "sine", vol: 0.35, notes: [[523, 0, 0.5], [659, 0.3, 0.5], [784, 0.6, 0.8]] },
 };
 const SOUND_CUSTOM_MAX_BYTES = 1000000;
-// Each section that can ring has its own alarm sound and its own notification sound. Nothing is set until the person
-// chooses one, so every section starts on the phone's own sound.
-const SOUND_SECTIONS = [
-  { k: "plans", label: "My Day" },
-  { k: "daily", label: "Routine" },
-  { k: "trips", label: "Trips" },
-  { k: "shopping", label: "Shopping" },
-  { k: "repay", label: "Finance (payments)" },
-];
-// A section's saved choice. Falls back to the older single shared choice (kept so nothing saved is lost), then to the phone default.
+// One alarm sound and one notification sound for the whole app. Default = the phone's own sound.
 function soundFor(prefs, sec, kind) {
-  const c = prefs && prefs.sections && sec && prefs.sections[sec] && prefs.sections[sec][kind];
-  if (c && c.id) return c;
   const g = prefs && prefs[kind];
   return g && g.id ? g : { id: "default" };
 }
@@ -3864,7 +3853,7 @@ function LifeTracker() {
   // Sound choices for alarms and notifications (More > Reminders & alarms > Sounds).
   const [soundPrefs, setSoundPrefs] = useState(() => ({ alarm: { id: "default" }, notification: { id: "default" }, ...(readPersistedSync("soundPrefs", {}) || {}) }));
   useEffect(() => { if (loaded) window.storage.set("soundPrefs", JSON.stringify(soundPrefs), false).catch(() => {}); }, [soundPrefs, loaded]);
-  const soundSig = JSON.stringify(Object.keys((soundPrefs && soundPrefs.sections) || {}).sort().map((k) => [k, ["alarm", "notification"].map((t) => { const c = soundPrefs.sections[k] && soundPrefs.sections[k][t]; return c ? (c.id + ":" + (c.uri || "")) : ""; })]));
+  const soundSig = ["alarm", "notification"].map((t) => { const c = soundPrefs && soundPrefs[t]; return c ? (c.id + ":" + (c.uri || "")) : ""; }).join("|");
   const soundPrefsRef = useRef(soundPrefs);
   soundPrefsRef.current = soundPrefs;
   const previewRef = useRef({ ctx: null, audio: null });
@@ -3903,31 +3892,24 @@ function LifeTracker() {
       playSoundPattern(pr.ctx, choice.id);
     } catch (e) {}
   };
-  // Saves a sound for ONE section + type (alarm or notification) only. Other sections are never touched.
-  const chooseSound = (kind, choice, sec) => {
+  const chooseSound = (kind, choice) => {
     setSoundMsg("");
-    setSoundPrefs((p) => {
-      if (!sec) return { ...p, [kind]: choice };
-      const secs = p.sections || {};
-      return { ...p, sections: { ...secs, [sec]: { ...(secs[sec] || {}), [kind]: choice } } };
-    });
+    setSoundPrefs((p) => ({ ...p, [kind]: choice }));
     playChoice(choice, kind);
   };
-  const [soundOpenSec, setSoundOpenSec] = useState("");
   const [deviceSounds, setDeviceSounds] = useState({ alarm: [], notification: [] });
   useEffect(() => {
-    if (!soundOpenSec) return;
     const AR = nativeAR(); if (!AR || !AR.getRingtones) return;
     ["alarm", "notification"].forEach((k) => {
       try { AR.getRingtones({ kind: k }).then((r) => { const l = ((r && r.ringtones) || []).filter((x) => x && x.uri && x.title).slice(0, 60); setDeviceSounds((d) => ({ ...d, [k]: l })); }).catch(() => {}); } catch (e) {}
     });
-  }, [soundOpenSec]);
-  const pickCustomSound = (kind, file, sec) => {
+  }, []);
+  const pickCustomSound = (kind, file) => {
     if (!file) return;
     if (file.type && !/^audio\//.test(file.type)) { setSoundMsg("Please choose an audio file."); return; }
     if (file.size > SOUND_CUSTOM_MAX_BYTES) { setSoundMsg("That file is too big. Choose a short sound under 1 MB."); return; }
     const fr = new FileReader();
-    fr.onload = () => chooseSound(kind, { id: "custom", name: file.name, data: String(fr.result || "") }, sec);
+    fr.onload = () => chooseSound(kind, { id: "custom", name: file.name, data: String(fr.result || "") });
     fr.onerror = () => setSoundMsg("Could not read that file.");
     fr.readAsDataURL(file);
   };
@@ -10475,45 +10457,30 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
           </Card>
           <Card style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Sounds</div>
-            <div style={{ fontSize: 13, color: INK_FAINT, margin: "4px 0 6px", lineHeight: 1.4 }}>Each section has its own alarm and notification sound. Default uses your phone&#8217;s sound. Tap a section, then tap a sound to choose it and hear it.</div>
-            {SOUND_SECTIONS.map((sec, si) => {
-              const open = soundOpenSec === sec.k;
-              const lab = (kind) => { const c = soundFor(soundPrefs, sec.k, kind); return c.id === "default" ? "Phone default" : (c.name || (SOUND_CHOICES.find((x) => x.id === c.id) || {}).label || "Phone sound"); };
+            <div style={{ fontSize: 13, color: INK_FAINT, margin: "4px 0 6px", lineHeight: 1.4 }}>Default uses your phone&#8217;s sound. Or choose a sound from your phone.</div>
+            {[{ kind: "alarm", label: "Alarm sound" }, { kind: "notification", label: "Notification sound" }].map((grp) => {
+              const cur = soundFor(soundPrefs, null, grp.kind);
+              const tone = SOUND_CHOICES.find((x) => x.id === cur.id && x.id !== "default");
+              const rows = [{ id: "default", label: "Default (phone\u2019s sound)" }, ...(cur.id === "device" ? [{ id: "device:" + cur.uri, label: cur.name || "Phone sound", uri: cur.uri }] : []), ...(tone ? [{ id: tone.id, label: tone.label }] : []), ...(cur.id === "custom" ? [{ id: "custom", label: cur.name || "Your sound" }] : [])];
+              const isOn = (r) => r.uri ? (cur.id === "device" && cur.uri === r.uri) : cur.id === r.id;
+              const toChoice = (r) => r.id === "custom" ? cur : r.uri ? { id: "device", uri: r.uri, name: r.label } : { id: r.id };
               return (
-                <div key={sec.k} style={{ borderTop: si > 0 ? `1px solid ${LINE}` : "none" }}>
-                  <button onClick={() => { stopPreview(); setSoundOpenSec(open ? "" : sec.k); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 0", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: "block", fontSize: 14.5, fontWeight: 700 }}>{sec.label}</span>
-                      <span style={{ display: "block", fontSize: 12, color: INK_FAINT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Alarm: {lab("alarm")} &middot; Notification: {lab("notification")}</span>
-                    </span>
-                    <ChevronDown size={16} style={{ flexShrink: 0, color: INK_FAINT, transform: open ? "rotate(180deg)" : "none" }} />
-                  </button>
-                  {open && [{ kind: "alarm", label: "Alarm sound" }, { kind: "notification", label: "Notification sound" }].map((grp) => {
-                    const cur = soundFor(soundPrefs, sec.k, grp.kind);
-                    const dev = (deviceSounds[grp.kind] || []).map((d) => ({ id: "device:" + d.uri, label: d.title, uri: d.uri }));
-                    const rows = [{ id: "default", label: "Default (phone\u2019s sound)" }, ...(cur.id === "device" && !dev.some((d) => d.uri === cur.uri) ? [{ id: "device:" + cur.uri, label: cur.name || "Phone sound", uri: cur.uri }] : []), ...dev, ...SOUND_CHOICES.filter((x) => x.id !== "default"), ...(cur.id === "custom" ? [{ id: "custom", label: cur.name || "Your sound" }] : [])];
-                    const isOn = (r) => r.uri ? (cur.id === "device" && cur.uri === r.uri) : cur.id === r.id;
-                    const toChoice = (r) => r.id === "custom" ? cur : r.uri ? { id: "device", uri: r.uri, name: r.label } : { id: r.id };
+                <div key={grp.kind} style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, marginBottom: 4 }}>{grp.label}</div>
+                  {rows.map((r, i) => {
+                    const on = isOn(r);
                     return (
-                      <div key={grp.kind} style={{ margin: "2px 0 12px 4px" }}>
-                        <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: INK_FAINT, marginBottom: 4 }}>{grp.label}</div>
-                        {rows.map((r, i) => {
-                          const on = isOn(r);
-                          return (
-                            <button key={r.id} onClick={() => chooseSound(grp.kind, toChoice(r), sec.k)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
-                              <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? BRASS : INK_FAINT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <span style={{ width: 10, height: 10, borderRadius: 5, background: BRASS }} />}</span>
-                              <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: on ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
-                              <span onClick={(e) => { e.stopPropagation(); playChoice(toChoice(r), grp.kind); }} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, fontSize: 12.5, fontWeight: 600, color: BRASS, padding: "4px 8px" }}><Play size={13} /> Play</span>
-                            </button>
-                          );
-                        })}
-                        <label style={{ display: "block", marginTop: 8, textAlign: "center", padding: "9px 10px", borderRadius: 10, border: `1.5px solid ${BRASS}`, color: BRASS, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                          Choose from phone
-                          <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pickCustomSound(grp.kind, f, sec.k); }} />
-                        </label>
-                      </div>
+                      <button key={r.id} onClick={() => chooseSound(grp.kind, toChoice(r))} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 0", background: "transparent", border: "none", borderTop: i > 0 ? `1px solid ${LINE}` : "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
+                        <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? BRASS : INK_FAINT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <span style={{ width: 10, height: 10, borderRadius: 5, background: BRASS }} />}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: on ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+                        <span onClick={(e) => { e.stopPropagation(); playChoice(toChoice(r), grp.kind); }} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, fontSize: 12.5, fontWeight: 600, color: BRASS, padding: "4px 8px" }}><Play size={13} /> Play</span>
+                      </button>
                     );
                   })}
+                  <label style={{ display: "block", marginTop: 8, textAlign: "center", padding: "9px 10px", borderRadius: 10, border: `1.5px solid ${BRASS}`, color: BRASS, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                    Choose from phone
+                    <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pickCustomSound(grp.kind, f); }} />
+                  </label>
                 </div>
               );
             })}
