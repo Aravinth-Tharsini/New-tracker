@@ -3908,13 +3908,7 @@ function LifeTracker() {
     setSoundPrefs((p) => ({ ...p, [kind]: choice }));
     playChoice(choice, kind);
   };
-  const [deviceSounds, setDeviceSounds] = useState({ alarm: [], notification: [] });
-  useEffect(() => {
-    const AR = nativeAR(); if (!AR || !AR.getRingtones) return;
-    ["alarm", "notification"].forEach((k) => {
-      try { AR.getRingtones({ kind: k }).then((r) => { const l = ((r && r.ringtones) || []).filter((x) => x && x.uri && x.title).slice(0, 60); setDeviceSounds((d) => ({ ...d, [k]: l })); }).catch(() => {}); } catch (e) {}
-    });
-  }, []);
+  useEffect(() => { if (moreSection !== "reminders") stopPreview(); }, [moreSection]);
   const pickCustomSound = (kind, file) => {
     if (!file) return;
     if (file.type && !/^audio\//.test(file.type)) { setSoundMsg("Please choose an audio file."); return; }
@@ -10502,9 +10496,11 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                             <div key={r.id} style={{ display: "flex", alignItems: "center", borderTop: j > 0 ? `1px solid ${LINE}` : "none" }}>
                               <button onClick={() => chooseSound(sr.kind, toChoice(r))} role="radio" aria-checked={on} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, padding: "10px 0", minHeight: 44, background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", color: INK, textAlign: "left" }}>
                                 <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? BRASS : INK_FAINT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <span style={{ width: 10, height: 10, borderRadius: 5, background: BRASS }} />}</span>
-                                <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: on ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+                                <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: on ? 700 : 500, color: on ? BRASS : INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
                               </button>
-                              <button onClick={() => playChoice(toChoice(r), sr.kind)} aria-label={"Play " + r.label} style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, minWidth: 62, minHeight: 34, fontSize: 13, fontWeight: 700, color: BRASS, background: "rgba(0,113,227,0.10)", border: "none", borderRadius: 17, cursor: "pointer", fontFamily: "inherit" }}><Play size={13} /> Play</button>
+                              {(r.id === "default" && sr.kind === "notification" && !(nativeAR() && nativeAR().previewRingtone))
+                                ? <span style={{ flexShrink: 0, width: 36 }} />
+                                : <button onClick={() => playChoice(toChoice(r), sr.kind)} aria-label={"Play " + r.label} style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, color: "#FFFFFF", background: BRASS, border: "none", borderRadius: 18, cursor: "pointer" }}><Play size={14} fill="#FFFFFF" /></button>}
                             </div>
                           );
                         };
@@ -10519,9 +10515,9 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                               <ChevronRight size={17} color={INK_FAINT} style={{ flexShrink: 0, transform: open ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
                             </button>
                             {open && (
-                              <div style={{ padding: "0 0 10px 48px" }}>
+                              <div style={{ background: PANEL_2, borderRadius: 14, padding: "2px 12px 12px", margin: "0 0 12px" }}>
                                 {top.map(renderRow)}
-                                <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, margin: "6px 0 2px", padding: "11px 10px", minHeight: 44, borderRadius: 10, border: `1.5px solid ${BRASS}`, color: BRASS, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                                <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, margin: "8px 0 2px", padding: "11px 10px", minHeight: 44, borderRadius: 12, border: `1.5px dashed ${BRASS}`, color: BRASS, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                                   <Upload size={16} /> Choose from phone
                                   <input type="file" accept="audio/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pickCustomSound(sr.kind, f); }} />
                                 </label>
