@@ -4945,6 +4945,7 @@ function LifeTracker() {
   const travelCardRefs = useRef({});
   const blankTravelForm = () => ({ reminderType: "", mode: "Train", fromLocation: "", toLocation: "", travelDate: "", travelTime: "", arrivalTime: "", arrivalDate: "", legs: [], amount: "", distanceKm: "", bookingDetails: "", reminderOffsets: ["1d"], paymentStatus: "Not Paid", notes: [], timeFormat: "" });
   const [travelForm, setTravelForm] = useState(blankTravelForm());
+  const [placeFocus, setPlaceFocus] = useState(""); // "from" | "to" | "" - which location box shows old-trip suggestions
   // Auto distance (and, for Bus / Car / Bike, an estimated arrival time): when From + To (and mode) are filled, look them up online.
   // Never overwrites a number or time you typed yourself.
   const autoDistRef = useRef({});
@@ -6237,9 +6238,44 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                           <option value="Other">Other</option>
                         </Select>
                         <div style={{ display: "flex", gap: 6 }}>
-                          <TextField placeholder="From location" value={travelForm.fromLocation} onChange={(e) => setTravelForm({ ...travelForm, fromLocation: e.target.value })} style={{ flex: 1 }} />
-                          <TextField placeholder="To location" value={travelForm.toLocation} onChange={(e) => { const v = e.target.value; setTravelForm((f) => { const oldTo = f.toLocation; const legs = (f.legs || []).map((l, i) => (i === 0 && (!l.fromLocation || l.fromLocation === oldTo) ? { ...l, fromLocation: v } : l)); return { ...f, toLocation: v, legs }; }); }} style={{ flex: 1 }} />
+                          <TextField placeholder="From location" value={travelForm.fromLocation} onFocus={() => setPlaceFocus("from")} onBlur={() => setTimeout(() => setPlaceFocus((p) => (p === "from" ? "" : p)), 200)} onChange={(e) => setTravelForm({ ...travelForm, fromLocation: e.target.value })} style={{ flex: 1 }} />
+                          <TextField placeholder="To location" value={travelForm.toLocation} onFocus={() => setPlaceFocus("to")} onBlur={() => setTimeout(() => setPlaceFocus((p) => (p === "to" ? "" : p)), 200)} onChange={(e) => { const v = e.target.value; setTravelForm((f) => { const oldTo = f.toLocation; const legs = (f.legs || []).map((l, i) => (i === 0 && (!l.fromLocation || l.fromLocation === oldTo) ? { ...l, fromLocation: v } : l)); return { ...f, toLocation: v, legs }; }); }} style={{ flex: 1 }} />
                         </div>
+                        {placeFocus && (() => {
+                          // Suggestions built from earlier trips: most used first; for "To", places reached from the chosen "From" come first.
+                          const norm = (x) => String(x || "").trim().toLowerCase();
+                          const isFrom = placeFocus === "from";
+                          const typed = norm(isFrom ? travelForm.fromLocation : travelForm.toLocation);
+                          const fromNow = norm(travelForm.fromLocation);
+                          const score = {};
+                          const label = {};
+                          const bump = (name, pts) => { const k = norm(name); if (!k) return; label[k] = label[k] || String(name).trim(); score[k] = (score[k] || 0) + pts; };
+                          (travelPlans || []).forEach((t) => {
+                            const legs = Array.isArray(t.legs) && t.legs.length ? t.legs : [];
+                            const pairs = [{ f: t.fromLocation, t: t.toLocation }, ...legs.map((l) => ({ f: l.fromLocation, t: l.toLocation }))];
+                            pairs.forEach((p) => {
+                              if (isFrom) { bump(p.f, 1); bump(p.t, 0.5); }
+                              else { bump(p.t, 1); bump(p.f, 0.5); if (fromNow && norm(p.f) === fromNow) bump(p.t, 5); }
+                            });
+                          });
+                          const list = Object.keys(score)
+                            .filter((k) => k !== typed && (!typed || k.includes(typed)) && !(!isFrom && k === fromNow))
+                            .sort((a, b) => score[b] - score[a])
+                            .slice(0, 6);
+                          if (!list.length) return null;
+                          const pick = (name) => {
+                            if (isFrom) setTravelForm((f) => ({ ...f, fromLocation: name }));
+                            else setTravelForm((f) => { const oldTo = f.toLocation; const legs = (f.legs || []).map((l, i) => (i === 0 && (!l.fromLocation || l.fromLocation === oldTo) ? { ...l, fromLocation: name } : l)); return { ...f, toLocation: name, legs }; });
+                            setPlaceFocus("");
+                          };
+                          return (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              {list.map((k) => (
+                                <button key={k} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(label[k])} style={{ background: PANEL_2, color: INK_DIM, border: "none", borderRadius: 980, padding: "7px 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label[k]}</button>
+                              ))}
+                            </div>
+                          );
+                        })()}
                         {(() => {
                           const durMin = travelDurationMinutes(travelForm.travelTime, travelForm.arrivalTime, travelForm.travelDate, travelForm.arrivalDate);
                           return durMin != null ? (
@@ -6280,7 +6316,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                               </div>
                             );
                           })()}
-                          <TextField type="date" value={travelForm.arrivalDate} onChange={(e) => setTravelForm({ ...travelForm, arrivalDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
+                          <TextField type="date" value={travelForm.arrivalDate || travelForm.travelDate} onChange={(e) => setTravelForm({ ...travelForm, arrivalDate: e.target.value })} style={{ width: "100%", fontFamily: mono }} />
                         </div>
                         <TextField type="number" placeholder={travelForm.legs.length ? "Leg 1 amount" : "Amount"} value={travelForm.amount} onChange={(e) => setTravelForm({ ...travelForm, amount: e.target.value })} style={{ fontFamily: mono }} />
                         <TextField type="number" placeholder="Distance in km (optional)" value={travelForm.distanceKm} onChange={(e) => setTravelForm({ ...travelForm, distanceKm: e.target.value })} style={{ fontFamily: mono }} />
