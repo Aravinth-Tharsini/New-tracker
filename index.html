@@ -1779,7 +1779,7 @@ function ltCreateTree(T, host, opt) {
   const hemi = new T.HemisphereLight(0xffffff, 0x2a3a1c, 0.5), sun = new T.DirectionalLight(0xffffff, 2);
   sun.castShadow = !mini; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.15; scene.add(hemi, sun, sun.target);
   const L = new T.Vector3(0, 1, 0), pm = new T.PMREMGenerator(R); let envRT = null, envT = 0, dead = false;
-  const env = () => { clearTimeout(envT); envT = setTimeout(() => { if (dead) return; const n = pm.fromScene(skyScene); scene.environment = n.texture; if (envRT) envRT.dispose(); envRT = n; }, 120); };
+  const env = () => {}; /* env map disabled: it renders everything white on many phones */
   function setTime(h) {
     const a = (h - 6) / 12 * Math.PI, el = Math.sin(a), day = ss(-0.08, 0.3, el), night = 1 - ss(-0.3, 0.05, el), warm = cl(1 - Math.abs(el) / 0.4);
     const top = C("#050a1c").lerp(C("#3d82d6"), day).lerp(C("#6a4a8a"), warm * 0.3), bot = C("#0d1730").lerp(C("#bcdcf0"), day).lerp(C("#ff9a5a"), warm * 0.75);
@@ -1787,7 +1787,7 @@ function ltCreateTree(T, host, opt) {
     L.set(Math.cos(a), el, 0.3).normalize(); if (el < 0) L.negate();
     sun.intensity = el > 0 ? 3 * ss(0, 0.18, el) + 0.05 : 0.5 * ss(0, 0.3, -el);
     sun.color.copy(el > 0 ? C("#fff1d8").lerp(C("#ff8a3c"), warm) : C("#8fa8ff"));
-    hemi.color.copy(top).lerp(C("#ffffff"), 0.4); hemi.groundColor.copy(C("#1a2410").lerp(C("#3a4a2a"), day)); hemi.intensity = 0.15 + 0.6 * day + 0.1 * night;
+    hemi.color.copy(top).lerp(C("#ffffff"), 0.4); hemi.groundColor.copy(C("#1a2410").lerp(C("#3a4a2a"), day)); hemi.intensity = 0.55 + 0.85 * day + 0.3 * night;
     R.toneMappingExposure = 0.8 + 0.25 * day; body.material.color.set(el > 0 ? "#fff4cc" : "#dfe6ff");
     stars.material.opacity = night * 0.9; stars.visible = night > 0.02; env();
   }
@@ -1817,9 +1817,10 @@ function ltCreateTree(T, host, opt) {
     const sc = 0.05 + 0.95 * Math.pow(cl(g / 9), 1.1), y0 = 1.05, D = 6, fl = cl((g - 6.2) / 1.5), fr = cl((g - 8.2) / 1.2), size = 0.35 + 2.1 * sc;
     const Mx = new T.Matrix4(), Q = new T.Quaternion(), P = new T.Vector3(), S = new T.Vector3(), E = new T.Euler(), UP = new T.Vector3(0, 1, 0), col = new T.Color();
     let nb = 0, nl = 0, nf = 0, nr = 0; treeH = 9 * sc * 2.9 + 1.5; const base = 9 * sc, w0 = 0.03 + 1.2 * Math.pow(sc, 0.95);
-    const seg = (p, d, len, w) => { if (nb >= MS) return; Q.setFromUnitVectors(UP, d); S.set(w, len, w); Mx.compose(p, Q, S); bark.setMatrixAt(nb++, Mx); };
+    const bc = new T.Color();
+    const seg = (p, d, len, w) => { if (nb >= MS) return; Q.setFromUnitVectors(UP, d); S.set(w, len, w); Mx.compose(p, Q, S); const bs = 0.8 + 0.2 * sd(nb + 21); bc.setRGB(bs, bs * 0.96, bs * 0.92); bark.setColorAt(nb, bc); bark.setMatrixAt(nb++, Mx); };
     const leaf = (p, r, sz, cnt) => { for (let i = 0; i < cnt && nl < ML; i++) { const k = nl + nb * 7; P.set(p.x + (sd(k) - 0.5) * 2 * r, p.y + (sd(k + 1) - 0.4) * r, p.z + (sd(k + 2) - 0.5) * 2 * r); E.set((sd(k + 3) - 0.5) * 2.2, sd(k + 4) * 6.283, (sd(k + 5) - 0.7) * 2.2); Q.setFromEuler(E); const s = sz * (0.7 + sd(k + 6) * 0.6); S.set(s, s, s); Mx.compose(P, Q, S); leaves.setMatrixAt(nl, Mx);
-      const sh = cl(0.55 + 0.45 * P.y / treeH); if (sd(k + 7) > v + 0.12) col.setHSL(0.1 + sd(k + 8) * 0.04, 0.6, 0.28 * sh + 0.1); else col.setHSL(0.24 + sd(k + 8) * 0.07, 0.55, (0.2 + sd(k + 9) * 0.14) * sh + 0.06); leaves.setColorAt(nl, col); nl++; } };
+      const sh = cl(0.55 + 0.45 * P.y / treeH); if (sd(k + 7) > v + 0.12) col.setHSL(0.1 + sd(k + 8) * 0.04, 0.6, 0.28 * sh + 0.1); else col.setHSL(0.24 + sd(k + 8) * 0.07, 0.55, (0.27 + sd(k + 9) * 0.16) * sh + 0.08); leaves.setColorAt(nl, col); nl++; } };
     const dot = (m, i, p, s, c) => { P.copy(p); E.set(sd(i) * 6, sd(i + 1) * 6, 0); Q.setFromEuler(E); Mx.compose(P, Q, s); m.setMatrixAt(i, Mx); m.setColorAt(i, c); };
     function rec(p, dir, len, w, d, id) {
       const th = (d - 1) * 1.15 + 0.35, f = d ? ss(th, th + 1.3, g) : 0.1 + 0.9 * ss(0, 0.5, g); if (f < 0.01) return;
