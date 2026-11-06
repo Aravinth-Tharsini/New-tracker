@@ -1841,43 +1841,112 @@ function ltCreateTree(T, host, opt) {
     [bark, leaves, flw, frt].forEach((o) => { o.instanceMatrix.needsUpdate = true; if (o.instanceColor) o.instanceColor.needsUpdate = true; });
     const sk = 1 - ss(0.2, 0.9, g); seed.visible = g < 0.9; seed.scale.set(sk, sk * 0.65, sk * 0.7);
   }
-  // ===== Wildlife: birds, butterflies, bees, moths, fireflies, rabbits (full-screen tree only) =====
+  // ===== Wildlife (realistic-style procedural animals: feathered birds, veined butterflies, furry rabbits) =====
   const amb = { day: 1, night: 0, g: 0 };
   const wl = new T.Group(); wl.visible = !mini; scene.add(wl);
-  const WM = (c, o) => new T.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.75 }, o || {}));
-  const wSph = new T.SphereGeometry(1, 10, 8), wCone = new T.ConeGeometry(1, 1, 8), wBox = new T.BoxGeometry(1, 1, 1);
-  const part = (g, m, sx, sy, sz, x, y, z) => { const o = new T.Mesh(g, m); o.scale.set(sx, sy, sz); o.position.set(x, y, z); return o; };
-  const wingT = tex(64, 64, (x) => { x.clearRect(0, 0, 64, 64); x.fillStyle = "#fff"; x.beginPath(); x.moveTo(0, 30); x.bezierCurveTo(8, 0, 62, 0, 62, 26); x.bezierCurveTo(60, 50, 30, 62, 0, 40); x.closePath(); x.fill(); x.strokeStyle = "rgba(30,20,10,.85)"; x.lineWidth = 4; x.stroke(); x.fillStyle = "rgba(30,20,10,.55)"; for (let i = 0; i < 4; i++) { x.beginPath(); x.arc(22 + i * 9, 14 + (i % 2) * 24, 3.2, 0, 6.283); x.fill(); } });
-  const dotT = tex(32, 32, (x) => { const g = x.createRadialGradient(16, 16, 0, 16, 16, 16); g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.4, "rgba(255,255,255,.6)"); g.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = g; x.fillRect(0, 0, 32, 32); });
-  const bfL = new T.PlaneGeometry(0.5, 0.42); bfL.rotateX(-Math.PI / 2); bfL.translate(0.25, 0, 0); const bfR = bfL.clone(); bfR.scale(-1, 1, 1);
-  const bwL = new T.BoxGeometry(1, 0.05, 0.45); bwL.translate(0.5, 0, 0); const bwR = bwL.clone(); bwR.scale(-1, 1, 1);
-  const makeBF = (c, moth) => { const g = new T.Group(), wm = WM(c, { map: wingT, alphaTest: 0.35, side: T.DoubleSide, emissive: moth ? c : "#000000", emissiveIntensity: moth ? 0.25 : 0 });
-    const wL = new T.Mesh(bfL, wm), wR = new T.Mesh(bfR, wm); g.add(wL, wR, part(wSph, WM("#2a1d12"), 0.04, 0.04, 0.2, 0, 0, 0)); g.rotation.order = "YXZ"; return { g, wL, wR }; };
-  const makeBee = () => { const g = new T.Group(), wm = WM("#ffffff", { transparent: true, opacity: 0.7, side: T.DoubleSide });
-    const wL = new T.Mesh(bfL, wm), wR = new T.Mesh(bfR, wm); wL.scale.setScalar(0.45); wR.scale.setScalar(0.45); wL.position.y = wR.position.y = 0.1;
-    g.add(wL, wR, part(wSph, WM("#f5c518"), 0.1, 0.1, 0.16, 0, 0, 0), part(wSph, WM("#1a1a1a"), 0.105, 0.105, 0.05, 0, 0, -0.03), part(wSph, WM("#1a1a1a"), 0.07, 0.07, 0.07, 0, 0.01, 0.17)); g.rotation.order = "YXZ"; return { g, wL, wR }; };
-  const makeBird = (c1, c2) => { const g = new T.Group(), bm = WM(c1), wm = WM(c2, { side: T.DoubleSide });
-    const bk = part(wCone, WM("#f2b134"), 0.06, 0.2, 0.06, 0, 0.12, 0.64); bk.rotation.x = Math.PI / 2;
-    const wL = new T.Mesh(bwL, wm), wR = new T.Mesh(bwR, wm); wL.position.set(0.12, 0.1, 0.02); wR.position.set(-0.12, 0.1, 0.02); wL.scale.set(0.8, 1, 1); wR.scale.set(0.8, 1, 1);
-    g.add(part(wSph, bm, 0.28, 0.26, 0.5, 0, 0, 0), part(wSph, bm, 0.19, 0.19, 0.19, 0, 0.15, 0.42), bk, part(wBox, wm, 0.14, 0.04, 0.5, 0, 0.02, -0.55), part(wSph, WM("#111"), 0.035, 0.035, 0.035, 0.1, 0.2, 0.54), part(wSph, WM("#111"), 0.035, 0.035, 0.035, -0.1, 0.2, 0.54), wL, wR); g.rotation.order = "YXZ"; return { g, wL, wR }; };
-  const makeRabbit = (c) => { const g = new T.Group(), m = WM(c), head = new T.Group(); head.position.set(0, 0.38, 0.5);
-    head.add(part(wSph, m, 0.22, 0.2, 0.26, 0, 0, 0.05), part(wBox, m, 0.07, 0.4, 0.05, 0.09, 0.32, -0.02), part(wBox, m, 0.07, 0.4, 0.05, -0.09, 0.32, -0.02), part(wSph, WM("#111"), 0.03, 0.03, 0.03, 0.11, 0.06, 0.2), part(wSph, WM("#111"), 0.03, 0.03, 0.03, -0.11, 0.06, 0.2));
-    g.add(part(wSph, m, 0.34, 0.32, 0.55, 0, 0.3, 0), part(wSph, WM("#f4f1ea"), 0.12, 0.12, 0.12, 0, 0.34, -0.55), head); g.rotation.order = "YXZ"; return { g, head }; };
+  const K3 = (h) => new T.Color(h).convertSRGBToLinear();
+  const WM = (c, o) => new T.MeshStandardMaterial(Object.assign({ color: K3(c), roughness: 0.85, metalness: 0 }, o || {}));
+  const VM = (o) => new T.MeshStandardMaterial(Object.assign({ vertexColors: true, roughness: 0.92, metalness: 0 }, o || {}));
+  const glossy = WM("#080808", { roughness: 0.12 });
+  const shape = (geo, fn) => { const p = geo.attributes.position; for (let i = 0; i < p.count; i++) { const o = fn(p.getX(i), p.getY(i), p.getZ(i)); p.setXYZ(i, o[0], o[1], o[2]); } p.needsUpdate = true; return geo; };
+  const paint = (geo, fn) => { const p = geo.attributes.position, n = geo.attributes.normal, a = new Float32Array(p.count * 3), c = new T.Color(); for (let i = 0; i < p.count; i++) { fn(c, p.getX(i), p.getY(i), p.getZ(i), n.getX(i), n.getY(i), n.getZ(i), i); a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; } geo.setAttribute("color", new T.BufferAttribute(a, 3)); return geo; };
+  const part = (g, m, x, y, z) => { const o = new T.Mesh(g, m); o.position.set(x, y, z); return o; };
+  const ball = (r, seg) => new T.SphereGeometry(r, seg || 10, seg ? Math.ceil(seg * 0.7) : 8);
+  const furT = tex(64, 64, (x, w, h) => { x.fillStyle = "#808080"; x.fillRect(0, 0, w, h); for (let i = 0; i < 700; i++) { const v = 90 + Math.floor(sd(i * 3.1) * 120); x.fillStyle = "rgba(" + v + "," + v + "," + v + ",.55)"; x.fillRect(sd(i * 1.7) * w, sd(i * 5.3) * h, 1.2, 2.6); } }); furT.repeat.set(3, 3);
+  // ---- feathers
+  const plumage = (kind, base, dark, light) => { const tail = kind === "tail", W = tail ? 64 : 128, H = tail ? 128 : 64;
+    return tex(W, H, (x, w, h) => { x.save(); x.beginPath();
+      if (tail) { x.moveTo(w * 0.3, h); x.lineTo(w * 0.02, h * 0.07); x.quadraticCurveTo(w * 0.5, -h * 0.03, w * 0.98, h * 0.07); x.lineTo(w * 0.7, h); } else { x.moveTo(0, h); x.lineTo(w * 0.97, h * 0.74); x.quadraticCurveTo(w * 1.01, h * 0.4, w * 0.9, h * 0.1); x.lineTo(0, h * 0.2); }
+      x.closePath(); x.clip(); const gr = x.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, dark); gr.addColorStop(1, base); x.fillStyle = gr; x.fillRect(0, 0, w, h);
+      x.strokeStyle = "rgba(0,0,0,.30)"; x.lineWidth = 1.1; const N = tail ? 7 : 13; for (let i = 1; i < N; i++) { x.beginPath(); if (tail) { x.moveTo(w * i / N, 0); x.lineTo(w * (0.3 + 0.4 * i / N), h); } else { x.moveTo(w * i / N, 0); x.lineTo(w * i / N - w * 0.035, h); } x.stroke(); }
+      if (!tail) { x.fillStyle = light; x.globalAlpha = 0.5; for (let xx = 4; xx < w * 0.85; xx += 8) { x.beginPath(); x.arc(xx, h * 0.62 + ((xx / 8) % 2 ? 3 : 0), 7, 0, Math.PI); x.fill(); } x.globalAlpha = 0.35; x.fillRect(w * 0.45, h * 0.18, w * 0.05, h * 0.5); x.globalAlpha = 1; }
+      x.restore(); }); };
+  const wingG = (u0, u1) => { const g = new T.PlaneGeometry(0.42, 0.34); g.rotateX(-Math.PI / 2); g.translate(0.21, 0, 0); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, u0 + uv.getX(i) * (u1 - u0)); return g; };
+  const wgIn = wingG(0, 0.48), wgOut = wingG(0.48, 1), wgInR = wgIn.clone(), wgOutR = wgOut.clone(); wgInR.scale(-1, 1, 1); wgOutR.scale(-1, 1, 1);
+  const tailG = new T.PlaneGeometry(0.2, 0.46); tailG.rotateX(-Math.PI / 2); tailG.translate(0, 0, -0.23);
+  const SP = (o) => { for (const k in o) if (typeof o[k] === "string" && o[k][0] === "#" && k !== "wingH" && k !== "wingD" && k !== "wingL" && k !== "beak") o[k] = K3(o[k]); return o; };
+  const species = [
+    SP({ back: "#7a6248", belly: "#e6dfd0", breast: "#d4622a", bw: 1, cap: "#7a6248", throat: "#d4622a", beak: "#3b2f25", wingH: "#6e5740", wingD: "#3f3023", wingL: "#a88d6c" }),
+    SP({ back: "#3f6fbf", belly: "#e7dcc9", breast: "#c9763c", bw: 0.9, cap: "#3f6fbf", throat: "#c9763c", beak: "#2a2a2a", wingH: "#3a66b0", wingD: "#223f6e", wingL: "#6d93d0" }),
+    SP({ back: "#8b6b4a", belly: "#cfc8bb", breast: "#b8ae9c", bw: 0.6, cap: "#7b5a3e", throat: "#3d352c", beak: "#4b4038", wingH: "#745639", wingD: "#4a3523", wingL: "#b79a76" }),
+    SP({ back: "#7f9154", belly: "#efd447", breast: "#f2d24a", bw: 1, cap: "#355f9e", throat: "#f4f0e6", beak: "#2d2d2d", wingH: "#4e79b5", wingD: "#284c82", wingL: "#9ab6dc" })
+  ];
+  const makeBird = (sp) => { const g = new T.Group();
+    const body = paint(shape(new T.SphereGeometry(1, 28, 18), (x, y, z) => { const tk = z < 0 ? 0.55 + 0.45 * Math.pow(1 + z, 0.6) : 1, br = (z > 0.05 && y < 0) ? 1 + 0.28 * (-y) * Math.sin(Math.min(1, (z - 0.05) / 0.8) * 3.14) : 1; return [x * 0.19 * tk * br, y * 0.2 * tk * br + (z < 0 ? -0.03 * z : 0), z * 0.46]; }),
+      (c, x, y, z, nx, ny, nz, i) => { c.copy(sp.belly).lerp(sp.back, ss(-0.25, 0.55, ny)); c.lerp(sp.breast, ss(0, 0.4, nz) * (1 - ss(0.1, 0.75, ny)) * sp.bw); c.multiplyScalar(0.9 + 0.2 * sd(i * 1.7)); });
+    const head = paint(shape(ball(1, 20), (x, y, z) => [x * 0.155, y * 0.15, z * 0.17]), (c, x, y, z, nx, ny, nz, i) => { c.copy(sp.throat).lerp(sp.cap, ss(-0.1, 0.6, ny)); c.multiplyScalar(0.92 + 0.16 * sd(i * 2.3)); });
+    const bkG = new T.ConeGeometry(0.028, 0.12, 10); bkG.rotateX(Math.PI / 2);
+    const wm = WM("#ffffff", { map: plumage("wing", sp.wingH, sp.wingD, sp.wingL), alphaTest: 0.4, side: T.DoubleSide });
+    const tm = WM("#ffffff", { map: plumage("tail", sp.wingH, sp.wingD, sp.wingL), alphaTest: 0.4, side: T.DoubleSide });
+    const mkW = (gi, go, sx) => { const a = new T.Mesh(gi, wm), b = new T.Mesh(go, wm); b.position.x = 0.42 * sx; a.add(b); a.position.set(0.12 * sx, 0.08, 0.08); return [a, b]; };
+    const [wL1, wL2] = mkW(wgIn, wgOut, 1), [wR1, wR2] = mkW(wgInR, wgOutR, -1);
+    const legs = new T.Group(), lm = WM("#7d6552"); for (const sx of [-1, 1]) { const l = new T.Mesh(new T.CylinderGeometry(0.011, 0.009, 0.2, 6), lm); l.position.set(0.06 * sx, -0.22, 0.04); legs.add(l); const f = new T.Mesh(new T.BoxGeometry(0.05, 0.01, 0.09), lm); f.position.set(0.06 * sx, -0.32, 0.07); legs.add(f); }
+    const tl = new T.Mesh(tailG, tm); tl.position.set(0, 0.0, -0.38); tl.rotation.x = -0.12;
+    g.add(new T.Mesh(body, VM()), part(head, VM(), 0, 0.115, 0.42), part(bkG, WM(sp.beak), 0, 0.1, 0.585), part(ball(0.026, 8), glossy, 0.115, 0.14, 0.5), part(ball(0.026, 8), glossy, -0.115, 0.14, 0.5), tl, wL1, wR1, legs);
+    g.rotation.order = "YXZ"; return { g, wL1, wL2, wR1, wR2, legs }; };
+  // ---- butterflies & moths
+  const bfTex = (o) => tex(160, 128, (x, w, h) => {
+    const wing = () => { x.beginPath(); x.ellipse(w * 0.5, h * 0.72, w * 0.5, h * 0.23, -0.12, 0, 6.283); x.moveTo(w * 0.78, h * 0.3); x.ellipse(w * 0.42, h * 0.28, w * 0.36, h * 0.25, 0.2, 0, 6.283); };
+    x.save(); wing(); const gr = x.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, o.dark); gr.addColorStop(0.3, o.base); gr.addColorStop(1, o.base); x.fillStyle = gr; x.fill(); x.clip();
+    if (o.mottle) for (let i = 0; i < 90; i++) { x.fillStyle = "rgba(" + (sd(i) > 0.5 ? "40,28,15" : "235,220,190") + ",.16)"; x.beginPath(); x.arc(sd(i * 2.1) * w, sd(i * 3.7) * h, 2 + sd(i * 5.9) * 6, 0, 6.283); x.fill(); }
+    x.strokeStyle = o.vein; x.lineWidth = o.vw || 1.6; for (let i = 0; i < 11; i++) { x.beginPath(); x.moveTo(4, h * 0.5); x.quadraticCurveTo(w * 0.45, h * (0.5 + (i - 5) * 0.06), w * (0.62 + 0.1 * (i % 3)), h * (i / 10)); x.stroke(); }
+    if (o.apex) { x.fillStyle = "rgba(15,10,5,.8)"; x.beginPath(); x.ellipse(w * 0.93, h * 0.8, w * 0.15, h * 0.15, 0, 0, 6.283); x.fill(); x.fillStyle = "#fff"; for (let i = 0; i < 3; i++) { x.beginPath(); x.arc(w * 0.9 + i * 6 - 6, h * 0.76 + i * 5, 2.6, 0, 6.283); x.fill(); } }
+    if (o.eye) { x.fillStyle = "rgba(30,20,10,.9)"; x.beginPath(); x.arc(w * 0.55, h * 0.3, 11, 0, 6.283); x.fill(); x.fillStyle = "rgba(240,225,190,.9)"; x.beginPath(); x.arc(w * 0.55, h * 0.3, 6, 0, 6.283); x.fill(); x.fillStyle = "#222"; x.beginPath(); x.arc(w * 0.55, h * 0.3, 2.6, 0, 6.283); x.fill(); }
+    x.lineWidth = o.bw; x.strokeStyle = o.edge; wing(); x.stroke();
+    if (o.dots) { x.fillStyle = "#fff"; for (let a = 0.15; a < 3.1; a += 0.32) { x.beginPath(); x.arc(w * 0.5 + w * 0.43 * Math.cos(a - 0.12), h * 0.72 - h * 0.18 * Math.sin(a), 2.3, 0, 6.283); x.fill(); } for (let a = 0.3; a < 2.8; a += 0.38) { x.beginPath(); x.arc(w * 0.42 + w * 0.3 * Math.cos(a + 0.2), h * 0.28 - h * 0.21 * Math.sin(a), 2.1, 0, 6.283); x.fill(); } }
+    x.restore(); });
+  const bfKinds = [
+    { base: "#dc6b17", dark: "#b34a0c", vein: "#1a1208", edge: "#14100a", bw: 7, dots: 1, apex: 1 },
+    { base: "#f0d03a", dark: "#d6a81f", vein: "#1a1208", edge: "#18120a", bw: 6, vw: 2.6 },
+    { base: "#5b86d6", dark: "#35539a", vein: "#243764", edge: "#e9eef8", bw: 4, vw: 1.2 },
+    { base: "#f2f0e4", dark: "#b9b6a3", vein: "#6b6a5c", edge: "#d8d6c6", bw: 3, apex: 1, vw: 1 },
+    { base: "#d98a4c", dark: "#a8612b", vein: "#2a1a0e", edge: "#1c130a", bw: 5, apex: 1, dots: 1 },
+    { base: "#c8d8f2", dark: "#8fa6cf", vein: "#4a5a80", edge: "#2a2f45", bw: 3, vw: 1.2 },
+    { base: "#c45a2b", dark: "#8b3a17", vein: "#1a1008", edge: "#1a1008", bw: 6, dots: 1 }
+  ], mothKind = { base: "#b9a37f", dark: "#7a6648", vein: "#5d4c33", edge: "#6d5a3f", bw: 4, mottle: 1, eye: 1, vw: 1.2 };
+  const bfLg = new T.PlaneGeometry(0.62, 0.5); bfLg.rotateX(-Math.PI / 2); bfLg.translate(0.31, 0, 0); const bfRg = bfLg.clone(); bfRg.scale(-1, 1, 1);
+  const makeBF = (o, moth) => { const g = new T.Group(), wm = WM("#ffffff", { map: bfTex(o), alphaTest: 0.35, side: T.DoubleSide, roughness: 0.9 }), bm = WM(moth ? "#6a5a45" : "#241a10");
+    const wL = new T.Mesh(bfLg, wm), wR = new T.Mesh(bfRg, wm); const th = shape(ball(1, 10), (x, y, z) => [x * 0.04, y * 0.04, z * 0.08]), ab = shape(ball(1, 10), (x, y, z) => [x * 0.028, y * 0.028, z * 0.17]), hd = ball(0.03, 8);
+    const an = new T.Group(); for (const s of [-1, 1]) { const c = new T.CylinderGeometry(0.003, 0.003, 0.22, 4); c.translate(0, 0.11, 0); const m = new T.Mesh(c, bm); m.rotation.set(1.0, 0, -0.35 * s); an.add(m); } an.position.set(0, 0.01, 0.1);
+    g.add(wL, wR, part(th, new T.MeshStandardMaterial({ color: K3(moth ? "#7a6850" : "#2a1d12"), roughness: 1 }), 0, 0, 0.02), part(ab, bm, 0, 0, -0.16), part(hd, bm, 0, 0, 0.1), an); g.rotation.order = "YXZ"; return { g, wL, wR }; };
+  // ---- honey bee
+  const beeWT = tex(64, 32, (x, w, h) => { x.beginPath(); x.ellipse(2, h * 0.5, w * 0.95, h * 0.46, 0, 0, 6.283); x.fillStyle = "rgba(235,240,245,.55)"; x.fill(); x.strokeStyle = "rgba(90,80,60,.6)"; x.lineWidth = 1; for (let i = 0; i < 5; i++) { x.beginPath(); x.moveTo(2, h * 0.5); x.lineTo(w * (0.5 + i * 0.1), h * (0.15 + i * 0.17)); x.stroke(); } });
+  const beeWg = new T.PlaneGeometry(0.3, 0.13); beeWg.rotateX(-Math.PI / 2); beeWg.translate(0.15, 0, -0.02); const beeWgR = beeWg.clone(); beeWgR.scale(-1, 1, 1);
+  const makeBee = () => { const g = new T.Group(), wm = WM("#ffffff", { map: beeWT, transparent: true, alphaTest: 0.05, side: T.DoubleSide, depthWrite: false });
+    const wL = new T.Mesh(beeWg, wm), wR = new T.Mesh(beeWgR, wm); wL.position.set(0.04, 0.09, 0.02); wR.position.set(-0.04, 0.09, 0.02);
+    const ab = paint(shape(ball(1, 14), (x, y, z) => [x * 0.085, y * 0.085, z * 0.17]), (c, x, y, z, nx, ny, nz) => { c.copy(Math.sin(nz * 8) > 0 ? K3("#d99a1c") : K3("#2a1c0f")); });
+    const th = paint(shape(ball(1, 12), (x, y, z) => [x * 0.09, y * 0.085, z * 0.1]), (c, x, y, z, nx, ny, nz, i) => { c.copy(K3("#8d6a2a")).multiplyScalar(0.85 + 0.3 * sd(i * 1.3)); });
+    g.add(wL, wR, part(ab, VM(), 0, -0.005, -0.17), part(th, VM(), 0, 0.01, 0.0), part(ball(0.06, 10), WM("#2a1c0f"), 0, 0, 0.12), part(ball(0.022, 6), glossy, 0.045, 0.02, 0.15), part(ball(0.022, 6), glossy, -0.045, 0.02, 0.15));
+    for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) { const l = new T.Mesh(new T.CylinderGeometry(0.006, 0.005, 0.12, 4), WM("#2a1c0f")); l.position.set(0.05 * sx, -0.08, 0.06 - k * 0.05); l.rotation.z = 0.5 * sx; g.add(l); }
+    g.rotation.order = "YXZ"; return { g, wL, wR }; };
+  // ---- wild rabbit
+  const rabSp = [{ back: "#8a7455", belly: "#d8cfc0", nape: "#9c6b43" }, { back: "#7b7468", belly: "#d9d5cd", nape: "#8d7a62" }];
+  const makeRabbit = (sp) => { const g = new T.Group(), bk = K3(sp.back), bl = K3(sp.belly), nk = K3(sp.nape), fm = VM({ roughness: 1, bumpMap: furT, bumpScale: 1.2 }), flat = WM(sp.back, { roughness: 1, bumpMap: furT, bumpScale: 1.2 });
+    const body = paint(shape(ball(1, 28), (x, y, z) => { const hz = z < 0 ? 1 + 0.25 * -z : 1; return [x * 0.2 * hz, y * 0.22 * hz + 0.05 * (1 - z * z), z * 0.48]; }), (c, x, y, z, nx, ny, nz, i) => { c.copy(bl).lerp(bk, ss(-0.35, 0.5, ny)); if (nz > 0.4 && ny > 0) c.lerp(nk, 0.4); c.multiplyScalar(0.78 + 0.4 * sd(i * 0.37)); });
+    const head = new T.Group(); head.position.set(0, 0.26, 0.5);
+    const skull = paint(shape(ball(1, 20), (x, y, z) => { const tp = z > 0 ? 1 - 0.4 * z : 1; return [x * 0.14 * tp, y * 0.14 * tp, z * 0.2]; }), (c, x, y, z, nx, ny, nz, i) => { c.copy(bl).lerp(bk, ss(-0.4, 0.4, ny)); if (nz > 0.5) c.lerp(bl, 0.5); c.multiplyScalar(0.82 + 0.3 * sd(i * 0.53)); });
+    head.add(new T.Mesh(skull, fm), part(ball(0.022, 8), WM("#d9908c"), 0, -0.01, 0.2), part(ball(0.036, 10), glossy, 0.108, 0.04, 0.07), part(ball(0.036, 10), glossy, -0.108, 0.04, 0.07));
+    const earG = paint(shape(ball(1, 12), (x, y, z) => [x * 0.045, (y + 1) * 0.15, z * 0.016]), (c, x, y, z, nx, ny, nz) => { c.copy(bk); if (nz > 0.2) c.lerp(K3("#d79a96"), 0.55); if (ny > 0.8 && y > 0.25) c.lerp(K3("#2e241b"), 0.7); });
+    const ears = []; for (const s of [-1, 1]) { const e = new T.Mesh(earG, VM({ side: T.DoubleSide })); e.position.set(0.06 * s, 0.1, -0.04); e.rotation.set(-0.25, 0, -0.18 * s); head.add(e); ears.push(e); }
+    g.add(new T.Mesh(body, fm), head, part(ball(0.075, 12), WM("#f2efe7", { roughness: 1 }), 0, 0.1, -0.5));
+    for (const s of [-1, 1]) { const fl = new T.Mesh(new T.CylinderGeometry(0.032, 0.026, 0.26, 8), flat); fl.position.set(0.08 * s, -0.2, 0.28); const th = new T.Mesh(shape(ball(1, 12), (x, y, z) => [x * 0.09, y * 0.15, z * 0.2]), flat); th.position.set(0.17 * s, -0.04, -0.2); const ft = new T.Mesh(new T.CylinderGeometry(0.028, 0.026, 0.3, 8), flat); ft.rotation.x = Math.PI / 2; ft.position.set(0.15 * s, -0.27, -0.1); g.add(fl, th, ft); }
+    g.rotation.order = "YXZ"; return { g, head, ears }; };
   const flyers = [], rabbits = [];
   const addFlyer = (kind, o, extra) => { wl.add(o.g); flyers.push(Object.assign({ kind }, o, extra)); };
-  const bfCols = ["#ff9a2e", "#ffd23f", "#4da3ff", "#ff6fa5", "#fff3b0", "#a66bff", "#ff7a45"], birdCols = [["#d9382f", "#7a1f1a"], ["#2f7fd9", "#1d4c82"], ["#f2c230", "#8a6b10"], ["#8a6a4a", "#4f3b27"]];
-  for (let i = 0; i < 7; i++) addFlyer("bf", makeBF(bfCols[i]), { id: i, ph: i * 1.9, s1: (0.14 + 0.1 * sd(i)) * (i % 2 ? 1 : -1), s2: 0.3 + 0.2 * sd(i + 9), s3: 0.6 + 0.4 * sd(i + 4), rr: 0.5 + 0.9 * sd(i + 3), hh: sd(i + 5), fw: 3, wb: 0.3, ff: 14 + i, sz: 0.9 + 0.3 * sd(i + 7) });
-  for (let i = 0; i < 5; i++) addFlyer("moth", makeBF("#e8dcc0", true), { id: 20 + i, ph: i * 2.3, s1: (0.2 + 0.12 * sd(i + 30)) * (i % 2 ? 1 : -1), s2: 0.5 + 0.3 * sd(i + 39), s3: 0.8, rr: 0.35 + 0.5 * sd(i + 33), hh: sd(i + 35), fw: 5, wb: 0.25, ff: 24, sz: 1 });
-  for (let i = 0; i < 4; i++) addFlyer("bee", makeBee(), { id: 40 + i, ph: i * 1.3, s1: (0.5 + 0.4 * sd(i + 50)) * (i % 2 ? 1 : -1), s2: 1.2, s3: 1.5, rr: 0.3 + 0.25 * sd(i + 53), hh: 0.4 + 0.5 * sd(i + 55), fw: 9, wb: 0.15, ff: 55, sz: 1 });
-  for (let i = 0; i < 4; i++) addFlyer("bird", makeBird(birdCols[i][0], birdCols[i][1]), { id: 60 + i, ph: i * 1.6, s1: (0.2 + 0.12 * sd(i + 70)) * (i % 2 ? 1 : -1), s2: 0.25, s3: 0.4, rr: 1.1 + 0.6 * sd(i + 73), hh: 0.5 + 0.5 * sd(i + 75), fw: 0, wb: 0, ff: 11 + i, sz: 0.9 + 0.3 * sd(i + 77), off: i * 7.3, yaw: 0 });
-  for (let i = 0; i < 2; i++) { const r = makeRabbit(i ? "#b9a58a" : "#8f7a62"), a = i * 3.1 + 1; wl.add(r.g); rabbits.push({ g: r.g, head: r.head, x: Math.cos(a) * 7, z: Math.sin(a) * 7, tx: 0, tz: 0, mode: "idle", wait: 1 + i * 2, ph: i * 2 }); }
-  const ffN = 36, ffA = new Float32Array(ffN * 3), ffG = new T.BufferGeometry(); ffG.setAttribute("position", new T.BufferAttribute(ffA, 3));
-  const ffM = new T.PointsMaterial({ color: 0xd9ff6a, size: 9, sizeAttenuation: false, map: dotT, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, fog: false });
+  for (let i = 0; i < 7; i++) addFlyer("bf", makeBF(bfKinds[i]), { id: i, ph: i * 1.9, s1: (0.14 + 0.1 * sd(i)) * (i % 2 ? 1 : -1), s2: 0.3 + 0.2 * sd(i + 9), s3: 0.6 + 0.4 * sd(i + 4), rr: 0.5 + 0.9 * sd(i + 3), hh: sd(i + 5), fw: 3, wb: 0.3, ff: 12 + i, sz: 0.85 + 0.3 * sd(i + 7) });
+  for (let i = 0; i < 5; i++) addFlyer("moth", makeBF(mothKind, true), { id: 20 + i, ph: i * 2.3, s1: (0.2 + 0.12 * sd(i + 30)) * (i % 2 ? 1 : -1), s2: 0.5 + 0.3 * sd(i + 39), s3: 0.8, rr: 0.35 + 0.5 * sd(i + 33), hh: sd(i + 35), fw: 5, wb: 0.25, ff: 22, sz: 0.9 });
+  for (let i = 0; i < 4; i++) addFlyer("bee", makeBee(), { id: 40 + i, ph: i * 1.3, s1: (0.5 + 0.4 * sd(i + 50)) * (i % 2 ? 1 : -1), s2: 1.2, s3: 1.5, rr: 0.3 + 0.25 * sd(i + 53), hh: 0.4 + 0.5 * sd(i + 55), fw: 9, wb: 0.15, ff: 55, sz: 0.9 });
+  for (let i = 0; i < 4; i++) addFlyer("bird", makeBird(species[i]), { id: 60 + i, ph: i * 1.6, s1: (0.2 + 0.12 * sd(i + 70)) * (i % 2 ? 1 : -1), s2: 0.25, s3: 0.4, rr: 1.1 + 0.6 * sd(i + 73), hh: 0.5 + 0.5 * sd(i + 75), fw: 0, wb: 0, ff: 11 + i, sz: 0.85 + 0.25 * sd(i + 77), off: i * 7.3 });
+  for (let i = 0; i < 2; i++) { const r = makeRabbit(rabSp[i]), a = i * 3.1 + 1; wl.add(r.g); rabbits.push({ g: r.g, head: r.head, ears: r.ears, x: Math.cos(a) * 7, z: Math.sin(a) * 7, tx: 0, tz: 0, mode: "idle", wait: 1 + i * 2, ph: i * 2 }); }
+  // ---- fireflies: each one blinks on its own rhythm
+  const ffN = 36, ffA = new Float32Array(ffN * 3), ffC = new Float32Array(ffN * 3), ffG = new T.BufferGeometry(); ffG.setAttribute("position", new T.BufferAttribute(ffA, 3)); ffG.setAttribute("color", new T.BufferAttribute(ffC, 3));
+  const dotT = tex(32, 32, (x) => { const g = x.createRadialGradient(16, 16, 0, 16, 16, 16); g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.35, "rgba(255,255,255,.55)"); g.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = g; x.fillRect(0, 0, 32, 32); });
+  const ffM = new T.PointsMaterial({ size: 8, sizeAttenuation: false, map: dotT, vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false });
   const ffP = new T.Points(ffG, ffM); ffP.frustumCulled = false; wl.add(ffP);
   const P = new T.Vector3(), Q = new T.Vector3(), T1 = new T.Vector3(), bT = 26, bFly = 15;
   const orbitPos = (f, t, out) => { const H = Math.max(treeH, 3), R = 1.2 + H * 0.36 * f.rr, a = t * f.s1 + f.ph, w = 0.7 + 0.3 * Math.sin(t * f.s2 + f.ph);
     return out.set(Math.cos(a) * R * w, H * (0.2 + 0.5 * f.hh) + Math.sin(t * f.s3 + f.ph * 2) * H * 0.1 + Math.sin(t * f.fw + f.ph) * f.wb, Math.sin(a) * R * (1.4 - w * 0.4)); };
-  const perchOf = (b, k, out) => { const a = sd(b.id * 7 + k * 3) * 6.283, r = 3 + sd(b.id * 5 + k) * 6; return out.set(Math.cos(a) * r, mh(r) + 0.3 * b.sz, Math.sin(a) * r); };
+  const perchOf = (b, k, out) => { const a = sd(b.id * 7 + k * 3) * 6.283, r = 3 + sd(b.id * 5 + k) * 6; return out.set(Math.cos(a) * r, mh(r) + 0.34 * b.sz, Math.sin(a) * r); };
   const birdPos = (b, t, out) => { const u0 = t + b.off, k = Math.floor(u0 / bT), u = u0 - k * bT;
     if (u < bFly) { orbitPos(b, t, out); if (u < 3) { perchOf(b, k - 1, T1); out.lerpVectors(T1, out, ss(0, 3, u)); } else if (u > bFly - 3) { perchOf(b, k, T1); out.lerpVectors(out, T1, ss(bFly - 3, bFly, u)); } } else perchOf(b, k, out);
     return out; };
@@ -1889,28 +1958,29 @@ function ltCreateTree(T, host, opt) {
       f.g.visible = show; if (!show) continue;
       if (f.kind === "bird") {
         birdPos(f, t, P); birdPos(f, t + 0.12, Q); const perched = ((t + f.off) % bT) >= bFly;
-        face(f.g, 1); if (perched) f.g.rotation.x = 0.35 * Math.max(0, Math.sin(t * 2.1 + f.ph));
-        const amp = perched ? 0 : 0.25 + 0.75 * ss(-0.2, 0.4, Math.sin(t * 0.7 + f.ph)), a = perched ? -0.9 : Math.sin(t * f.ff) * 0.75 * amp + 0.1;
-        f.wL.rotation.z = a; f.wR.rotation.z = -a;
+        face(f.g, 1); f.legs.visible = perched;
+        if (perched) { f.g.rotation.x = 0.35 * Math.max(0, Math.sin(t * 2.1 + f.ph)); f.wL1.rotation.set(0, 1.5, -0.18); f.wR1.rotation.set(0, -1.5, 0.18); f.wL2.rotation.set(0, 0, 0); f.wR2.rotation.set(0, 0, 0); }
+        else { const amp = 0.25 + 0.75 * ss(-0.2, 0.4, Math.sin(t * 0.7 + f.ph)), a1 = Math.sin(t * f.ff) * 0.75 * amp + 0.1, a2 = Math.sin(t * f.ff - 0.9) * 0.55 * amp; f.wL1.rotation.set(0, 0.12, a1); f.wL2.rotation.set(0, 0.1, a2); f.wR1.rotation.set(0, -0.12, -a1); f.wR2.rotation.set(0, -0.1, -a2); }
       } else {
         orbitPos(f, t, P); orbitPos(f, t + 0.12, Q); face(f.g, 0.6);
-        const a = 0.25 + Math.sin(t * f.ff + f.ph) * 0.9; f.wL.rotation.z = a; f.wR.rotation.z = -a;
+        const a = 0.3 + Math.sin(t * f.ff + f.ph) * 0.85; f.wL.rotation.z = a; f.wR.rotation.z = -a;
       }
       f.g.position.copy(P); f.g.scale.setScalar(K * f.sz * (f.kind === "bird" ? 1.15 : 1));
     }
     for (const r of rabbits) {
       r.g.visible = g >= 1.5 && night < 0.85; if (!r.g.visible) continue;
-      const rr = Math.hypot(r.x, r.z);
-      if (r.mode === "idle") { r.wait -= dt; r.head.rotation.x = 0.45 * Math.max(0, Math.sin(t * 5 + r.ph)); r.g.position.y += (mh(rr) - r.g.position.y) * 0.3;
+      const rr = Math.hypot(r.x, r.z), S = K * 1.1;
+      if (r.mode === "idle") { r.wait -= dt; r.head.rotation.x = 0.4 * Math.max(0, Math.sin(t * 5 + r.ph)); r.g.rotation.x *= 0.8; r.g.position.y += (mh(rr) + 0.3 * S - r.g.position.y) * 0.3; r.ears[0].rotation.z = -0.18 + Math.sin(t * 2.3 + r.ph) * 0.05 * (Math.sin(t * 0.4 + r.ph) > 0.7 ? 1 : 0);
         if (r.wait <= 0) { const a = Math.random() * 6.283, d = 4 + Math.random() * 11; r.tx = Math.cos(a) * d; r.tz = Math.sin(a) * d; r.mode = "move"; } }
       else { const dx = r.tx - r.x, dz = r.tz - r.z, d = Math.hypot(dx, dz); r.head.rotation.x = 0;
-        if (d < 0.25) { r.mode = "idle"; r.wait = 2 + Math.random() * 4; } else { const s = Math.min(d, 1.8 * dt * K * 1.6); r.x += dx / d * s; r.z += dz / d * s; r.g.rotation.y = Math.atan2(dx, dz); r.g.position.y = mh(rr) + Math.abs(Math.sin(t * 7 + r.ph)) * 0.35 * K; } }
-      r.g.position.x = r.x; r.g.position.z = r.z; r.g.scale.setScalar(K * 1.1);
+        if (d < 0.25) { r.mode = "idle"; r.wait = 2 + Math.random() * 4; } else { const s = Math.min(d, 1.8 * dt * K * 1.6), ph = t * 7 + r.ph; r.x += dx / d * s; r.z += dz / d * s; r.g.rotation.y = Math.atan2(dx, dz); r.g.rotation.x = Math.cos(ph) * 0.25; r.g.position.y = mh(rr) + 0.3 * S + Math.abs(Math.sin(ph)) * 0.35 * K; } }
+      r.g.position.x = r.x; r.g.position.z = r.z; r.g.scale.setScalar(S);
     }
     ffP.visible = g >= 1 && night > 0.3;
     if (ffP.visible) { const H = Math.max(treeH, 3);
-      for (let i = 0; i < ffN; i++) { const s = t * 0.12 * (0.6 + sd(i + 1)) + i * 1.7, R = 2 + H * 0.55 * (0.4 + 0.6 * sd(i)); ffA[i * 3] = Math.cos(s) * R + Math.sin(t * 0.9 + i) * 0.6; ffA[i * 3 + 1] = 1 + H * (0.1 + 0.6 * sd(i + 2)) + Math.sin(t * 0.5 + i * 2) * 0.8; ffA[i * 3 + 2] = Math.sin(s) * R + Math.cos(t * 0.8 + i) * 0.6; }
-      ffG.attributes.position.needsUpdate = true; ffM.opacity = night * (0.6 + 0.4 * Math.sin(t * 3)); }
+      for (let i = 0; i < ffN; i++) { const s = t * 0.12 * (0.6 + sd(i + 1)) + i * 1.7, R = 2 + H * 0.55 * (0.4 + 0.6 * sd(i)); ffA[i * 3] = Math.cos(s) * R + Math.sin(t * 0.9 + i) * 0.6; ffA[i * 3 + 1] = 1 + H * (0.1 + 0.6 * sd(i + 2)) + Math.sin(t * 0.5 + i * 2) * 0.8; ffA[i * 3 + 2] = Math.sin(s) * R + Math.cos(t * 0.8 + i) * 0.6;
+        const b = night * Math.pow(Math.max(0, Math.sin(t * (1.1 + sd(i) * 0.9) + i * 2.1)), 3); ffC[i * 3] = 0.75 * b; ffC[i * 3 + 1] = b; ffC[i * 3 + 2] = 0.25 * b; }
+      ffG.attributes.position.needsUpdate = true; ffG.attributes.color.needsUpdate = true; }
   }
   const view = { yaw: 0, pitch: 0.14, zoom: mini ? 0.62 : 1, H: 6 }, tg = { yaw: 0, pitch: 0.14, zoom: view.zoom };
   const presets = { best: [0, 0.14, 1], high: [0, 0.5, 1.1], side: [1.57, 0.1, 1], close: [0, 0.05, 0.55] };
