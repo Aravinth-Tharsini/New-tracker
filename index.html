@@ -1789,7 +1789,7 @@ function ltCreateTree(T, host, opt) {
     sun.color.copy(el > 0 ? C("#fff1d8").lerp(C("#ff8a3c"), warm) : C("#8fa8ff"));
     hemi.color.copy(top).lerp(C("#ffffff"), 0.4); hemi.groundColor.copy(C("#1a2410").lerp(C("#3a4a2a"), day)); hemi.intensity = 0.55 + 0.85 * day + 0.3 * night;
     R.toneMappingExposure = 0.8 + 0.25 * day; body.material.color.set(el > 0 ? "#fff4cc" : "#dfe6ff");
-    stars.material.opacity = night * 0.9; stars.visible = night > 0.02; env();
+    stars.material.opacity = night * 0.9; stars.visible = night > 0.02; amb.day = day; amb.night = night; env();
   }
   const prof = [[0.01, 1.2], [6, 1.15], [14, 0.8], [20, 0.3], [22, 0], [23, -1.4]];
   const mh = (r) => { if (r >= 22) return 0; for (let i = 0; i < 4; i++) if (r <= prof[i + 1][0]) { const t = (r - prof[i][0]) / (prof[i + 1][0] - prof[i][0]); return prof[i][1] + (prof[i + 1][1] - prof[i][1]) * t; } return 0; };
@@ -1814,6 +1814,7 @@ function ltCreateTree(T, host, opt) {
   const tr = new T.Group(); tr.add(bark, leaves, flw, frt); scene.add(tr);
   let treeH = 3;
   function build(g, v) {
+    amb.g = g;
     const sc = 0.05 + 0.95 * Math.pow(cl(g / 9), 1.1), y0 = 1.05, D = 6, fl = cl((g - 6.2) / 1.5), fr = cl((g - 8.2) / 1.2), size = 0.35 + 2.1 * sc;
     const Mx = new T.Matrix4(), Q = new T.Quaternion(), P = new T.Vector3(), S = new T.Vector3(), E = new T.Euler(), UP = new T.Vector3(0, 1, 0), col = new T.Color();
     let nb = 0, nl = 0, nf = 0, nr = 0; treeH = 9 * sc * 2.9 + 1.5; const base = 9 * sc, w0 = 0.03 + 1.2 * Math.pow(sc, 0.95);
@@ -1840,6 +1841,77 @@ function ltCreateTree(T, host, opt) {
     [bark, leaves, flw, frt].forEach((o) => { o.instanceMatrix.needsUpdate = true; if (o.instanceColor) o.instanceColor.needsUpdate = true; });
     const sk = 1 - ss(0.2, 0.9, g); seed.visible = g < 0.9; seed.scale.set(sk, sk * 0.65, sk * 0.7);
   }
+  // ===== Wildlife: birds, butterflies, bees, moths, fireflies, rabbits (full-screen tree only) =====
+  const amb = { day: 1, night: 0, g: 0 };
+  const wl = new T.Group(); wl.visible = !mini; scene.add(wl);
+  const WM = (c, o) => new T.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.75 }, o || {}));
+  const wSph = new T.SphereGeometry(1, 10, 8), wCone = new T.ConeGeometry(1, 1, 8), wBox = new T.BoxGeometry(1, 1, 1);
+  const part = (g, m, sx, sy, sz, x, y, z) => { const o = new T.Mesh(g, m); o.scale.set(sx, sy, sz); o.position.set(x, y, z); return o; };
+  const wingT = tex(64, 64, (x) => { x.clearRect(0, 0, 64, 64); x.fillStyle = "#fff"; x.beginPath(); x.moveTo(0, 30); x.bezierCurveTo(8, 0, 62, 0, 62, 26); x.bezierCurveTo(60, 50, 30, 62, 0, 40); x.closePath(); x.fill(); x.strokeStyle = "rgba(30,20,10,.85)"; x.lineWidth = 4; x.stroke(); x.fillStyle = "rgba(30,20,10,.55)"; for (let i = 0; i < 4; i++) { x.beginPath(); x.arc(22 + i * 9, 14 + (i % 2) * 24, 3.2, 0, 6.283); x.fill(); } });
+  const dotT = tex(32, 32, (x) => { const g = x.createRadialGradient(16, 16, 0, 16, 16, 16); g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.4, "rgba(255,255,255,.6)"); g.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = g; x.fillRect(0, 0, 32, 32); });
+  const bfL = new T.PlaneGeometry(0.5, 0.42); bfL.rotateX(-Math.PI / 2); bfL.translate(0.25, 0, 0); const bfR = bfL.clone(); bfR.scale(-1, 1, 1);
+  const bwL = new T.BoxGeometry(1, 0.05, 0.45); bwL.translate(0.5, 0, 0); const bwR = bwL.clone(); bwR.scale(-1, 1, 1);
+  const makeBF = (c, moth) => { const g = new T.Group(), wm = WM(c, { map: wingT, alphaTest: 0.35, side: T.DoubleSide, emissive: moth ? c : "#000000", emissiveIntensity: moth ? 0.25 : 0 });
+    const wL = new T.Mesh(bfL, wm), wR = new T.Mesh(bfR, wm); g.add(wL, wR, part(wSph, WM("#2a1d12"), 0.04, 0.04, 0.2, 0, 0, 0)); g.rotation.order = "YXZ"; return { g, wL, wR }; };
+  const makeBee = () => { const g = new T.Group(), wm = WM("#ffffff", { transparent: true, opacity: 0.7, side: T.DoubleSide });
+    const wL = new T.Mesh(bfL, wm), wR = new T.Mesh(bfR, wm); wL.scale.setScalar(0.45); wR.scale.setScalar(0.45); wL.position.y = wR.position.y = 0.1;
+    g.add(wL, wR, part(wSph, WM("#f5c518"), 0.1, 0.1, 0.16, 0, 0, 0), part(wSph, WM("#1a1a1a"), 0.105, 0.105, 0.05, 0, 0, -0.03), part(wSph, WM("#1a1a1a"), 0.07, 0.07, 0.07, 0, 0.01, 0.17)); g.rotation.order = "YXZ"; return { g, wL, wR }; };
+  const makeBird = (c1, c2) => { const g = new T.Group(), bm = WM(c1), wm = WM(c2, { side: T.DoubleSide });
+    const bk = part(wCone, WM("#f2b134"), 0.06, 0.2, 0.06, 0, 0.12, 0.64); bk.rotation.x = Math.PI / 2;
+    const wL = new T.Mesh(bwL, wm), wR = new T.Mesh(bwR, wm); wL.position.set(0.12, 0.1, 0.02); wR.position.set(-0.12, 0.1, 0.02); wL.scale.set(0.8, 1, 1); wR.scale.set(0.8, 1, 1);
+    g.add(part(wSph, bm, 0.28, 0.26, 0.5, 0, 0, 0), part(wSph, bm, 0.19, 0.19, 0.19, 0, 0.15, 0.42), bk, part(wBox, wm, 0.14, 0.04, 0.5, 0, 0.02, -0.55), part(wSph, WM("#111"), 0.035, 0.035, 0.035, 0.1, 0.2, 0.54), part(wSph, WM("#111"), 0.035, 0.035, 0.035, -0.1, 0.2, 0.54), wL, wR); g.rotation.order = "YXZ"; return { g, wL, wR }; };
+  const makeRabbit = (c) => { const g = new T.Group(), m = WM(c), head = new T.Group(); head.position.set(0, 0.38, 0.5);
+    head.add(part(wSph, m, 0.22, 0.2, 0.26, 0, 0, 0.05), part(wBox, m, 0.07, 0.4, 0.05, 0.09, 0.32, -0.02), part(wBox, m, 0.07, 0.4, 0.05, -0.09, 0.32, -0.02), part(wSph, WM("#111"), 0.03, 0.03, 0.03, 0.11, 0.06, 0.2), part(wSph, WM("#111"), 0.03, 0.03, 0.03, -0.11, 0.06, 0.2));
+    g.add(part(wSph, m, 0.34, 0.32, 0.55, 0, 0.3, 0), part(wSph, WM("#f4f1ea"), 0.12, 0.12, 0.12, 0, 0.34, -0.55), head); g.rotation.order = "YXZ"; return { g, head }; };
+  const flyers = [], rabbits = [];
+  const addFlyer = (kind, o, extra) => { wl.add(o.g); flyers.push(Object.assign({ kind }, o, extra)); };
+  const bfCols = ["#ff9a2e", "#ffd23f", "#4da3ff", "#ff6fa5", "#fff3b0", "#a66bff", "#ff7a45"], birdCols = [["#d9382f", "#7a1f1a"], ["#2f7fd9", "#1d4c82"], ["#f2c230", "#8a6b10"], ["#8a6a4a", "#4f3b27"]];
+  for (let i = 0; i < 7; i++) addFlyer("bf", makeBF(bfCols[i]), { id: i, ph: i * 1.9, s1: (0.14 + 0.1 * sd(i)) * (i % 2 ? 1 : -1), s2: 0.3 + 0.2 * sd(i + 9), s3: 0.6 + 0.4 * sd(i + 4), rr: 0.5 + 0.9 * sd(i + 3), hh: sd(i + 5), fw: 3, wb: 0.3, ff: 14 + i, sz: 0.9 + 0.3 * sd(i + 7) });
+  for (let i = 0; i < 5; i++) addFlyer("moth", makeBF("#e8dcc0", true), { id: 20 + i, ph: i * 2.3, s1: (0.2 + 0.12 * sd(i + 30)) * (i % 2 ? 1 : -1), s2: 0.5 + 0.3 * sd(i + 39), s3: 0.8, rr: 0.35 + 0.5 * sd(i + 33), hh: sd(i + 35), fw: 5, wb: 0.25, ff: 24, sz: 1 });
+  for (let i = 0; i < 4; i++) addFlyer("bee", makeBee(), { id: 40 + i, ph: i * 1.3, s1: (0.5 + 0.4 * sd(i + 50)) * (i % 2 ? 1 : -1), s2: 1.2, s3: 1.5, rr: 0.3 + 0.25 * sd(i + 53), hh: 0.4 + 0.5 * sd(i + 55), fw: 9, wb: 0.15, ff: 55, sz: 1 });
+  for (let i = 0; i < 4; i++) addFlyer("bird", makeBird(birdCols[i][0], birdCols[i][1]), { id: 60 + i, ph: i * 1.6, s1: (0.2 + 0.12 * sd(i + 70)) * (i % 2 ? 1 : -1), s2: 0.25, s3: 0.4, rr: 1.1 + 0.6 * sd(i + 73), hh: 0.5 + 0.5 * sd(i + 75), fw: 0, wb: 0, ff: 11 + i, sz: 0.9 + 0.3 * sd(i + 77), off: i * 7.3, yaw: 0 });
+  for (let i = 0; i < 2; i++) { const r = makeRabbit(i ? "#b9a58a" : "#8f7a62"), a = i * 3.1 + 1; wl.add(r.g); rabbits.push({ g: r.g, head: r.head, x: Math.cos(a) * 7, z: Math.sin(a) * 7, tx: 0, tz: 0, mode: "idle", wait: 1 + i * 2, ph: i * 2 }); }
+  const ffN = 36, ffA = new Float32Array(ffN * 3), ffG = new T.BufferGeometry(); ffG.setAttribute("position", new T.BufferAttribute(ffA, 3));
+  const ffM = new T.PointsMaterial({ color: 0xd9ff6a, size: 9, sizeAttenuation: false, map: dotT, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, fog: false });
+  const ffP = new T.Points(ffG, ffM); ffP.frustumCulled = false; wl.add(ffP);
+  const P = new T.Vector3(), Q = new T.Vector3(), T1 = new T.Vector3(), bT = 26, bFly = 15;
+  const orbitPos = (f, t, out) => { const H = Math.max(treeH, 3), R = 1.2 + H * 0.36 * f.rr, a = t * f.s1 + f.ph, w = 0.7 + 0.3 * Math.sin(t * f.s2 + f.ph);
+    return out.set(Math.cos(a) * R * w, H * (0.2 + 0.5 * f.hh) + Math.sin(t * f.s3 + f.ph * 2) * H * 0.1 + Math.sin(t * f.fw + f.ph) * f.wb, Math.sin(a) * R * (1.4 - w * 0.4)); };
+  const perchOf = (b, k, out) => { const a = sd(b.id * 7 + k * 3) * 6.283, r = 3 + sd(b.id * 5 + k) * 6; return out.set(Math.cos(a) * r, mh(r) + 0.3 * b.sz, Math.sin(a) * r); };
+  const birdPos = (b, t, out) => { const u0 = t + b.off, k = Math.floor(u0 / bT), u = u0 - k * bT;
+    if (u < bFly) { orbitPos(b, t, out); if (u < 3) { perchOf(b, k - 1, T1); out.lerpVectors(T1, out, ss(0, 3, u)); } else if (u > bFly - 3) { perchOf(b, k, T1); out.lerpVectors(out, T1, ss(bFly - 3, bFly, u)); } } else perchOf(b, k, out);
+    return out; };
+  const face = (o, pk) => { const dx = Q.x - P.x, dy = Q.y - P.y, dz = Q.z - P.z, hl = Math.hypot(dx, dz); if (hl > 0.004) { o.rotation.y = Math.atan2(dx, dz); o.rotation.x = -Math.max(-0.7, Math.min(0.7, Math.atan2(dy, hl))) * pk; } else o.rotation.x = 0; };
+  function wildUpdate(t, dt) {
+    const g = amb.g, day = amb.day, night = amb.night, K = 0.55 + 0.55 * cl(treeH / 22);
+    for (const f of flyers) {
+      const show = f.kind === "bird" ? g >= 3 && day > 0.12 : f.kind === "bf" ? g >= 1.5 && day > 0.25 : f.kind === "bee" ? g >= 6.2 && day > 0.3 : g >= 1.5 && night > 0.4;
+      f.g.visible = show; if (!show) continue;
+      if (f.kind === "bird") {
+        birdPos(f, t, P); birdPos(f, t + 0.12, Q); const perched = ((t + f.off) % bT) >= bFly;
+        face(f.g, 1); if (perched) f.g.rotation.x = 0.35 * Math.max(0, Math.sin(t * 2.1 + f.ph));
+        const amp = perched ? 0 : 0.25 + 0.75 * ss(-0.2, 0.4, Math.sin(t * 0.7 + f.ph)), a = perched ? -0.9 : Math.sin(t * f.ff) * 0.75 * amp + 0.1;
+        f.wL.rotation.z = a; f.wR.rotation.z = -a;
+      } else {
+        orbitPos(f, t, P); orbitPos(f, t + 0.12, Q); face(f.g, 0.6);
+        const a = 0.25 + Math.sin(t * f.ff + f.ph) * 0.9; f.wL.rotation.z = a; f.wR.rotation.z = -a;
+      }
+      f.g.position.copy(P); f.g.scale.setScalar(K * f.sz * (f.kind === "bird" ? 1.15 : 1));
+    }
+    for (const r of rabbits) {
+      r.g.visible = g >= 1.5 && night < 0.85; if (!r.g.visible) continue;
+      const rr = Math.hypot(r.x, r.z);
+      if (r.mode === "idle") { r.wait -= dt; r.head.rotation.x = 0.45 * Math.max(0, Math.sin(t * 5 + r.ph)); r.g.position.y += (mh(rr) - r.g.position.y) * 0.3;
+        if (r.wait <= 0) { const a = Math.random() * 6.283, d = 4 + Math.random() * 11; r.tx = Math.cos(a) * d; r.tz = Math.sin(a) * d; r.mode = "move"; } }
+      else { const dx = r.tx - r.x, dz = r.tz - r.z, d = Math.hypot(dx, dz); r.head.rotation.x = 0;
+        if (d < 0.25) { r.mode = "idle"; r.wait = 2 + Math.random() * 4; } else { const s = Math.min(d, 1.8 * dt * K * 1.6); r.x += dx / d * s; r.z += dz / d * s; r.g.rotation.y = Math.atan2(dx, dz); r.g.position.y = mh(rr) + Math.abs(Math.sin(t * 7 + r.ph)) * 0.35 * K; } }
+      r.g.position.x = r.x; r.g.position.z = r.z; r.g.scale.setScalar(K * 1.1);
+    }
+    ffP.visible = g >= 1 && night > 0.3;
+    if (ffP.visible) { const H = Math.max(treeH, 3);
+      for (let i = 0; i < ffN; i++) { const s = t * 0.12 * (0.6 + sd(i + 1)) + i * 1.7, R = 2 + H * 0.55 * (0.4 + 0.6 * sd(i)); ffA[i * 3] = Math.cos(s) * R + Math.sin(t * 0.9 + i) * 0.6; ffA[i * 3 + 1] = 1 + H * (0.1 + 0.6 * sd(i + 2)) + Math.sin(t * 0.5 + i * 2) * 0.8; ffA[i * 3 + 2] = Math.sin(s) * R + Math.cos(t * 0.8 + i) * 0.6; }
+      ffG.attributes.position.needsUpdate = true; ffM.opacity = night * (0.6 + 0.4 * Math.sin(t * 3)); }
+  }
   const view = { yaw: 0, pitch: 0.14, zoom: mini ? 0.62 : 1, H: 6 }, tg = { yaw: 0, pitch: 0.14, zoom: view.zoom };
   const presets = { best: [0, 0.14, 1], high: [0, 0.5, 1.1], side: [1.57, 0.1, 1], close: [0, 0.05, 0.55] };
   const pts = new Map();
@@ -1865,6 +1937,7 @@ function ltCreateTree(T, host, opt) {
     const s = Math.max(14, view.H * 1.1), c = sun.shadow.camera; c.left = -s; c.right = s; c.top = s; c.bottom = -s; c.near = 1; c.far = 220; c.updateProjectionMatrix();
     sun.target.position.set(0, view.H * 0.4, 0); sun.position.copy(L).multiplyScalar(100).add(sun.target.position); body.position.copy(L).multiplyScalar(80);
     tr.rotation.z = Math.sin(t * 0.8) * 0.004 + Math.sin(t * 1.9) * 0.002; tr.rotation.x = Math.cos(t * 0.7) * 0.003;
+    if (!mini) wildUpdate(t, dt);
     R.render(scene, cam);
   };
   raf = requestAnimationFrame(frame);
