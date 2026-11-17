@@ -3120,6 +3120,7 @@ const CATEGORY_DEFS = [
   { id: "trip", label: "Trips", icon: Plane },
   { id: "activity", label: "Routine", icon: Activity },
   { id: "shopping", label: "Shopping", icon: ShoppingBag },
+  { id: "office", label: "Office & Leave", icon: Building2 },
 ];
 // Color + description used only for the Planner tab's category picker cards.
 const PLANNER_CATEGORY_META = {
@@ -3131,6 +3132,7 @@ const PLANNER_CATEGORY_META = {
   trip: { desc: "Plan trips and manage your travel details", fg: "#0D9488", bg: "rgba(13,148,136,0.15)" },
   activity: { desc: "Build habits and stick to your routine", fg: "#4338CA", bg: "rgba(67,56,202,0.13)" },
   shopping: { desc: "Plan shopping and manage your lists", fg: "#EA580C", bg: "rgba(234,88,12,0.14)" },
+  office: { desc: "Attendance, leave balance and holidays", fg: "#0284C7", bg: "rgba(2,132,199,0.13)" },
 };
 // My Day: meetings and other special activities planned for a specific day, with an editable reminder.
 const MYDAY_TYPE_OPTIONS = [
@@ -3979,6 +3981,881 @@ function CenteredButton({ children, maxWidth = 280, widthPct = "58%" }) {
   );
 }
 
+// ==== OFFICE & LEAVE: core logic (pure functions, no UI) ====
+const OF_P2 = (n) => String(n).padStart(2, "0");
+const OF_MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const OF_STATUS = {
+  present: { label: "Present", color: "#34C759", short: "P" },
+  wfh: { label: "Work From Home", color: "#0A84FF", short: "W" },
+  half: { label: "Half Day", color: "#F59E0B", short: "H" },
+  leave: { label: "Leave", color: "#FF6B35", short: "L" },
+  holiday: { label: "Holiday", color: "#8B5CF6", short: "Ho" },
+  weekoff: { label: "Week Off", color: "#8E8E93", short: "Off" },
+};
+const ofKey = (d) => `${d.getFullYear()}-${OF_P2(d.getMonth() + 1)}-${OF_P2(d.getDate())}`;
+const ofParse = (k) => { const a = String(k).split("-").map(Number); return new Date(a[0], (a[1] || 1) - 1, a[2] || 1, 12, 0, 0); };
+const ofAdd = (k, n) => { const d = ofParse(k); d.setDate(d.getDate() + n); return ofKey(d); };
+const ofDow = (k) => ofParse(k).getDay();
+const ofValidKey = (k) => /^\d{4}-\d{2}-\d{2}$/.test(String(k || "")) && ofKey(ofParse(k)) === k;
+const ofMin = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || "")); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+const ofAt = (key, hhmm, dayOffset) => { const a = key.split("-").map(Number), mi = ofMin(hhmm) || 0; return new Date(a[0], a[1] - 1, a[2] + (dayOffset || 0), Math.floor(mi / 60), mi % 60, 0, 0); };
+const ofHHMM = (iso) => { const d = new Date(iso); return isNaN(d.getTime()) ? "" : `${OF_P2(d.getHours())}:${OF_P2(d.getMinutes())}`; };
+const ofLive = (arr) => (arr || []).filter((x) => x && !x.deleted);
+const ofId = (p) => (p || "id") + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+function ofDur(min) { if (min == null || isNaN(min)) return "-"; min = Math.max(0, Math.round(min)); const h = Math.floor(min / 60), m = min % 60; return h > 0 ? `${h}h ${OF_P2(m)}m` : `${m}m`; }
+function ofNum(n) { n = Math.round(n * 10) / 10; return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+
+const OF_DEFAULTS = () => ({
+  v: 1,
+  settings: { workDays: [1, 2, 3, 4, 5], inTime: "09:30", outTime: "18:30", grace: 15, halfDayHours: 4, yearStart: 1, remindIn: true, remindOut: true, remindLead: 0, showOnHome: true, loc: { on: false, lat: null, lng: null, radius: 200 }, updatedAt: 0 },
+  leaveTypes: [
+    { id: "cl", name: "Casual Leave", quota: 12, carry: 0, color: "#F59E0B", updatedAt: 0 },
+    { id: "sl", name: "Sick Leave", quota: 12, carry: 0, color: "#EF4444", updatedAt: 0 },
+    { id: "el", name: "Earned Leave", quota: 15, carry: 30, color: "#8B5CF6", updatedAt: 0 },
+  ],
+  carryIn: {},
+  holidays: [],
+  days: {},
+});
+function ofNormalize(raw) {
+  const d = OF_DEFAULTS();
+  if (!raw || typeof raw !== "object") return d;
+  const rs = raw.settings && typeof raw.settings === "object" ? raw.settings : {};
+  const s = Object.assign({}, d.settings, rs);
+  s.loc = Object.assign({}, d.settings.loc, rs.loc && typeof rs.loc === "object" ? rs.loc : {});
+  s.workDays = Array.isArray(s.workDays) ? s.workDays.map(Number).filter((n) => n >= 0 && n <= 6) : d.settings.workDays;
+  if (ofMin(s.inTime) == null) s.inTime = d.settings.inTime;
+  if (ofMin(s.outTime) == null) s.outTime = d.settings.outTime;
+  s.grace = Math.max(0, Number(s.grace) || 0); s.halfDayHours = Math.max(0, Number(s.halfDayHours) || 0); s.remindLead = Math.max(0, Number(s.remindLead) || 0);
+  s.yearStart = Number(s.yearStart) === 4 ? 4 : 1;
+  const days = {}; if (raw.days && typeof raw.days === "object") Object.keys(raw.days).forEach((k) => { const r = raw.days[k]; if (ofValidKey(k) && r && typeof r === "object") days[k] = Object.assign({}, r, { date: k }); });
+  return {
+    v: 1, settings: s,
+    leaveTypes: Array.isArray(raw.leaveTypes) ? raw.leaveTypes.filter((t) => t && t.id).map((t) => Object.assign({ quota: 0, carry: 0, color: "#F59E0B", updatedAt: 0 }, t)) : d.leaveTypes,
+    carryIn: raw.carryIn && typeof raw.carryIn === "object" ? raw.carryIn : {},
+    holidays: Array.isArray(raw.holidays) ? raw.holidays.filter((h) => h && h.id && ofValidKey(h.date)) : [],
+    days,
+  };
+}
+const ofHasData = (data) => !!(data && (Object.keys(data.days || {}).length || (data.holidays || []).length || (data.settings && data.settings.updatedAt)));
+
+// ---- shift / planned times (defaults only: planned times are never treated as confirmed attendance) ----
+function ofShift(s) { const a = ofMin(s.inTime), b = ofMin(s.outTime), over = b <= a; return { inM: a, outM: b, overnight: over, lenMin: over ? b + 1440 - a : b - a }; }
+function ofPlanned(data, key) { const sh = ofShift(data.settings); return { inAt: ofAt(key, data.settings.inTime, 0), outAt: ofAt(key, data.settings.outTime, sh.overnight ? 1 : 0), overnight: sh.overnight }; }
+function ofFlags(data, rec) {
+  const out = { lateMin: 0, earlyMin: 0 };
+  if (!rec || !rec.in) return out;
+  const p = ofPlanned(data, rec.date), g = data.settings.grace || 0, inD = new Date(rec.in);
+  if (isNaN(inD.getTime())) return out;
+  const late = Math.round((inD - p.inAt) / 60000); out.lateMin = late > g ? late : 0;
+  if (rec.out) { const outD = new Date(rec.out); if (!isNaN(outD.getTime())) { const e = Math.round((p.outAt - outD) / 60000); out.earlyMin = e > g && outD > inD ? e : 0; } }
+  return out;
+}
+function ofWorked(rec) { if (!rec || !rec.in || !rec.out) return null; const m = (new Date(rec.out) - new Date(rec.in)) / 60000; return m >= 0 && m <= 24 * 60 ? m : null; }
+
+// ---- day classification (holiday / week off are detected automatically, never stored as attendance) ----
+const ofRec = (data, key) => { const r = data.days[key]; return r && !r.deleted ? r : null; };
+const ofHolidayOn = (data, key) => ofLive(data.holidays).find((h) => h.date === key) || null;
+function ofDayInfo(data, key) {
+  const rec = ofRec(data, key), hol = ofHolidayOn(data, key), work = data.settings.workDays.includes(ofDow(key));
+  const auto = hol ? "holiday" : !work ? "weekoff" : "working";
+  return { key, rec, hol, auto, status: rec ? rec.status : (auto === "working" ? null : auto) };
+}
+function ofOpenRecord(data) { let best = null; for (const k in data.days) { const r = data.days[k]; if (r && !r.deleted && r.in && !r.out && !r.outMissing && (!best || k > best.date)) best = r; } return best; }
+function ofStaleOpen(data, nowMs) { const r = ofOpenRecord(data); if (!r) return null; const sh = ofShift(data.settings), limit = Math.max(sh.lenMin + 360, 840) * 60000; return nowMs - new Date(r.in).getTime() > limit ? r : null; }
+
+// ---- attendance actions (each returns { data } or { error, ... } and never mutates its input) ----
+const ofClone = (data) => Object.assign({}, data, { days: Object.assign({}, data.days) });
+function ofCheckIn(data, now, force) {
+  const nowD = now instanceof Date ? now : new Date(now), key = ofKey(nowD);
+  const open = ofOpenRecord(data);
+  if (open) return { error: "open", rec: open };
+  const ex = ofRec(data, key);
+  if (ex && ex.in) return { error: "duplicate", rec: ex };
+  if (ex && !force && (ex.status === "leave" || ex.status === "holiday" || ex.status === "weekoff")) return { error: "off-status", rec: ex };
+  const info = ofDayInfo(data, key);
+  if (!ex && !force && (info.auto === "holiday" || info.auto === "weekoff")) return { error: "off-day", auto: info.auto, hol: info.hol };
+  const keep = ex && (ex.status === "wfh" || ex.status === "half");
+  const rec = Object.assign({}, ex && keep ? ex : {}, { date: key, status: keep ? ex.status : "present", in: nowD.toISOString(), out: null, outMissing: false, src: "tap", updatedAt: nowD.getTime() });
+  if (!keep) { delete rec.leaveType; delete rec.appId; delete rec.halfSide; }
+  const f = ofFlags(data, rec); rec.lateMin = f.lateMin; rec.earlyMin = 0;
+  const nd = ofClone(data); nd.days[key] = rec; return { data: nd, rec };
+}
+function ofCheckOut(data, now) {
+  const nowD = now instanceof Date ? now : new Date(now), open = ofOpenRecord(data);
+  if (!open) return { error: "none" };
+  if (ofStaleOpen(data, nowD.getTime())) return { error: "stale", rec: open };
+  if (nowD <= new Date(open.in)) return { error: "before-in", rec: open };
+  const rec = Object.assign({}, open, { out: nowD.toISOString(), outMissing: false, updatedAt: nowD.getTime() });
+  const f = ofFlags(data, rec); rec.lateMin = f.lateMin; rec.earlyMin = f.earlyMin;
+  const worked = ofWorked(rec), nd = ofClone(data); nd.days[rec.date] = rec;
+  const hd = data.settings.halfDayHours || 0;
+  return { data: nd, rec, worked, suggestHalf: rec.status === "present" && hd > 0 && worked != null && worked < hd * 60 };
+}
+// resolve a check-in that was never checked out: action = "time" (outIso) | "keep" | "remove"
+function ofResolveOpen(data, key, action, outIso, now) {
+  const r = ofRec(data, key); if (!r || !r.in || r.out || r.outMissing) return { error: "none" };
+  const nd = ofClone(data), t = (now instanceof Date ? now : new Date(now || Date.now())).getTime();
+  if (action === "time") {
+    const o = new Date(outIso), i = new Date(r.in);
+    if (isNaN(o.getTime()) || o <= i) return { error: "out-before-in" };
+    if (o - i > 24 * 3600000) return { error: "too-long" };
+    const rec = Object.assign({}, r, { out: o.toISOString(), outMissing: false, src: "fixed", updatedAt: t }); const f = ofFlags(data, rec); rec.lateMin = f.lateMin; rec.earlyMin = f.earlyMin; nd.days[key] = rec;
+  } else if (action === "keep") nd.days[key] = Object.assign({}, r, { outMissing: true, updatedAt: t });
+  else if (action === "remove") nd.days[key] = { date: key, deleted: true, updatedAt: t };
+  else return { error: "bad-action" };
+  return { data: nd };
+}
+function ofMarkHalf(data, key, typeId, now) { const r = ofRec(data, key); if (!r) return { error: "none" }; const nd = ofClone(data); nd.days[key] = Object.assign({}, r, { status: "half", leaveType: typeId || null, updatedAt: new Date(now || Date.now()).getTime() }); return { data: nd }; }
+function ofDelete(data, key, now) { const nd = ofClone(data); nd.days[key] = { date: key, deleted: true, updatedAt: new Date(now || Date.now()).getTime() }; return nd; }
+
+// manual entry / edit. form = { date, status, inT, outT, outNextDay, leaveType, note }
+function ofSaveManual(data, form, now) {
+  const nowD = now instanceof Date ? now : new Date(now || Date.now()), key = form.date, st = form.status;
+  if (!ofValidKey(key)) return { error: "Pick a valid date." };
+  if (!OF_STATUS[st]) return { error: "Pick a status." };
+  const hasIn = !!form.inT, hasOut = !!form.outT, timed = st === "present" || st === "wfh" || st === "half";
+  if (!timed && (hasIn || hasOut)) return { error: "Check-in and check-out times only apply to Present, Work From Home and Half Day." };
+  if (hasOut && !hasIn) return { error: "Add a check-in time before a check-out time." };
+  let inIso = null, outIso = null;
+  if (hasIn) {
+    if (ofMin(form.inT) == null) return { error: "Check-in time is not valid." };
+    inIso = ofAt(key, form.inT, 0);
+    if (inIso > nowD) return { error: "Check-in time is in the future." };
+    if (hasOut) {
+      if (ofMin(form.outT) == null) return { error: "Check-out time is not valid." };
+      if (ofMin(form.outT) === ofMin(form.inT)) return { error: "Check-out time is the same as check-in." };
+      const next = form.outNextDay || ofMin(form.outT) < ofMin(form.inT);
+      outIso = ofAt(key, form.outT, next ? 1 : 0);
+      if (outIso <= inIso) return { error: "Check-out must be after check-in." };
+      if (outIso - inIso > 24 * 3600000) return { error: "A shift cannot be longer than 24 hours." };
+      if (outIso > nowD) return { error: "Check-out time is in the future." };
+    }
+    inIso = inIso.toISOString(); outIso = outIso ? outIso.toISOString() : null;
+  }
+  if (!timed && key > ofKey(nowD) && st !== "leave" && st !== "holiday" && st !== "weekoff") return { error: "You can only mark Leave, Holiday or Week Off for a future date." };
+  if (timed && key > ofKey(nowD)) return { error: "Attendance can't be recorded for a future date. Use leave for planned days." };
+  const open = ofOpenRecord(data);
+  if (inIso && !outIso && open && open.date !== key) return { error: `There is still an open check-in on ${key === open.date ? "this day" : open.date}. Check it out first.` };
+  const ex = ofRec(data, key);
+  const rec = { date: key, status: st, note: (form.note || "").trim(), src: "manual", updatedAt: nowD.getTime() };
+  if (ex && ex.appId && (st === "leave" || st === "half")) rec.appId = ex.appId;
+  if (st === "leave" || st === "half") { rec.leaveType = form.leaveType || null; if (st === "half" && form.halfSide) rec.halfSide = form.halfSide; }
+  if (inIso) { rec.in = inIso; rec.out = outIso; if (!outIso && form.outMissing) rec.outMissing = true; }
+  const f = ofFlags(data, rec); rec.lateMin = f.lateMin; rec.earlyMin = f.earlyMin;
+  const nd = ofClone(data); nd.days[key] = rec; return { data: nd, replaced: !!ex };
+}
+
+// ---- leave years, balances, projections ----
+function ofLeaveYear(data, key) {
+  const ys = data.settings.yearStart === 4 ? 4 : 1, d = ofParse(key), y = d.getFullYear(), m = d.getMonth() + 1, id = m >= ys ? y : y - 1;
+  const start = `${id}-${OF_P2(ys)}-01`, end = ofAdd(`${id + 1}-${OF_P2(ys)}-01`, -1);
+  return { id: String(id), start, end, label: ys === 1 ? String(id) : `${id}-${String(id + 1).slice(2)}`, range: ys === 1 ? `Jan ${id} - Dec ${id}` : `Apr ${id} - Mar ${id + 1}` };
+}
+const ofYearById = (data, id) => ofLeaveYear(data, `${id}-${OF_P2(data.settings.yearStart === 4 ? 4 : 1)}-01`);
+function ofLeaveUsed(data, typeId, year, todayKey) {
+  let taken = 0, planned = 0;
+  for (const k in data.days) { const r = data.days[k]; if (!r || r.deleted || !typeId || r.leaveType !== typeId || k < year.start || k > year.end) continue; const n = r.status === "leave" ? 1 : r.status === "half" ? 0.5 : 0; if (!n) continue; if (k <= todayKey) taken += n; else planned += n; }
+  return { taken, planned };
+}
+const ofHasRecords = (data, year) => Object.keys(data.days).some((k) => !data.days[k].deleted && k >= year.start && k <= year.end);
+function ofCarryIn(data, typeId, yearId, todayKey, depth) {
+  const man = data.carryIn && data.carryIn[yearId] && data.carryIn[yearId][typeId];
+  if (man !== undefined && man !== null && man !== "") return Number(man) || 0;
+  const t = ofLive(data.leaveTypes).find((x) => x.id === typeId);
+  if (!t || !(t.carry > 0) || (depth || 0) > 5) return 0;
+  const prevId = String(+yearId - 1), py = ofYearById(data, prevId);
+  if (!ofHasRecords(data, py)) return 0;
+  const u = ofLeaveUsed(data, typeId, py, todayKey), rem = (+t.quota || 0) + ofCarryIn(data, typeId, prevId, todayKey, (depth || 0) + 1) - u.taken - u.planned;
+  return Math.max(0, Math.min(+t.carry, rem));
+}
+function ofBalances(data, key, todayKey) {
+  const year = ofLeaveYear(data, key);
+  return ofLive(data.leaveTypes).map((t) => { const ci = ofCarryIn(data, t.id, year.id, todayKey), u = ofLeaveUsed(data, t.id, year, todayKey), avail = (+t.quota || 0) + ci; return { type: t, year, quota: +t.quota || 0, carryIn: ci, available: avail, taken: u.taken, planned: u.planned, remaining: avail - u.taken - u.planned }; });
+}
+// days to consume for a leave application over [from..to]
+function ofPlanLeave(data, from, to, half, skipOff) {
+  const days = [], skipped = [], conflicts = [];
+  if (!ofValidKey(from) || !ofValidKey(to) || to < from) return { days, skipped, conflicts, error: "Choose a valid date range." };
+  const span = Math.round((ofParse(to) - ofParse(from)) / 86400000);
+  if (span > 366) return { days, skipped, conflicts, error: "A leave application can span at most a year." };
+  for (let i = 0; i <= span; i++) {
+    const k = ofAdd(from, i), info = ofDayInfo(data, k);
+    if (info.rec && info.rec.in) { conflicts.push(k); continue; }
+    if (skipOff && !info.rec && (info.auto === "holiday" || info.auto === "weekoff")) { skipped.push({ key: k, reason: info.auto }); continue; }
+    days.push({ key: k, amount: half && from === to ? 0.5 : 1 });
+  }
+  return { days, skipped, conflicts };
+}
+// balance impact of consuming `days` of `typeId`: replaces any existing leave on those dates first
+function ofProject(data, typeId, days, todayKey) {
+  const sim = ofClone(data); days.forEach((d) => { delete sim.days[d.key]; });
+  const by = {}; days.forEach((d) => { const y = ofLeaveYear(data, d.key); by[y.id] = by[y.id] || { year: y, use: 0 }; by[y.id].use += d.amount; });
+  return Object.keys(by).sort().map((id) => { const b = ofBalances(sim, by[id].year.start, todayKey).find((x) => x.type.id === typeId); const before = b ? b.remaining : 0; return { year: by[id].year, use: by[id].use, before, after: before - by[id].use }; });
+}
+function ofApplyLeave(data, o, now) {
+  const nd = ofClone(data), t = new Date(now || Date.now()).getTime(), appId = o.appId || ofId("lv");
+  o.days.forEach((d) => { nd.days[d.key] = { date: d.key, status: d.amount === 0.5 ? "half" : "leave", leaveType: o.typeId || null, halfSide: d.amount === 0.5 ? (o.side || "first") : undefined, appId, note: (o.note || "").trim(), src: "leave", updatedAt: t }; if (nd.days[d.key].halfSide === undefined) delete nd.days[d.key].halfSide; });
+  return { data: nd, appId };
+}
+function ofCancelApp(data, appId, now) { const nd = ofClone(data), t = new Date(now || Date.now()).getTime(); let n = 0; for (const k in nd.days) { const r = nd.days[k]; if (r && !r.deleted && r.appId === appId) { if (r.in) nd.days[k] = Object.assign({}, r, { status: "present", leaveType: null, appId: null, updatedAt: t }); else nd.days[k] = { date: k, deleted: true, updatedAt: t }; n++; } } return { data: nd, count: n }; }
+function ofLeaveApps(data) {
+  const m = {}; for (const k in data.days) { const r = data.days[k]; if (!r || r.deleted || (r.status !== "leave" && r.status !== "half")) continue; const id = r.appId || ("single-" + k); (m[id] = m[id] || { id, days: [], typeId: r.leaveType || null, note: r.note || "" }).days.push({ key: k, amount: r.status === "half" ? 0.5 : 1 }); }
+  return Object.values(m).map((a) => { a.days.sort((x, y) => (x.key < y.key ? -1 : 1)); a.from = a.days[0].key; a.to = a.days[a.days.length - 1].key; a.total = a.days.reduce((s, d) => s + d.amount, 0); return a; }).sort((a, b) => (a.from < b.from ? 1 : -1));
+}
+
+// ---- insights ----
+function ofMonthStats(data, ym, todayKey) {
+  const [y, m] = ym.split("-").map(Number), n = new Date(y, m, 0).getDate();
+  const s = { ym, present: 0, wfh: 0, half: 0, leave: 0, holidays: 0, weekoffs: 0, late: 0, early: 0, unmarked: 0, workedMin: 0, hoursDays: 0, inSum: 0, inN: 0, outSum: 0, outN: 0, attended: 0, missingOut: 0 };
+  for (let d = 1; d <= n; d++) {
+    const k = `${ym}-${OF_P2(d)}`, info = ofDayInfo(data, k), r = info.rec;
+    if (r) {
+      if (r.status === "present") s.present++; else if (r.status === "wfh") s.wfh++; else if (r.status === "half") s.half++; else if (r.status === "leave") s.leave++; else if (r.status === "holiday") s.holidays++; else if (r.status === "weekoff") s.weekoffs++;
+      if (r.in && (r.status === "present" || r.status === "wfh" || r.status === "half")) {
+        if ((r.lateMin || 0) > 0) s.late++; if ((r.earlyMin || 0) > 0) s.early++;
+        const i = new Date(r.in), base = ofAt(k, "00:00", 0); s.inSum += (i - base) / 60000; s.inN++;
+        if (r.out) { const o = new Date(r.out), w = ofWorked(r); s.outSum += (o - base) / 60000; s.outN++; if (w != null) { s.workedMin += w; s.hoursDays++; } } else if (r.outMissing) s.missingOut++;
+      }
+    } else if (info.auto === "holiday") s.holidays++; else if (info.auto === "weekoff") s.weekoffs++; else if (k < todayKey) s.unmarked++;
+  }
+  s.attended = s.present + s.wfh + s.half * 0.5; s.leaveDays = s.leave + s.half * 0.5;
+  s.avgIn = s.inN ? s.inSum / s.inN : null; s.avgOut = s.outN ? s.outSum / s.outN : null;
+  return s;
+}
+function ofYearReport(data, yearId, todayKey) {
+  const yr = ofYearById(data, yearId), [sy, sm] = yr.start.split("-").map(Number), rows = [];
+  const tot = { attended: 0, leaveDays: 0, wfh: 0, holidays: 0, weekoffs: 0, late: 0, unmarked: 0, workedMin: 0 };
+  for (let i = 0; i < 12; i++) { const d = new Date(sy, sm - 1 + i, 1), ym = `${d.getFullYear()}-${OF_P2(d.getMonth() + 1)}`, st = ofMonthStats(data, ym, todayKey); rows.push(st); ["attended", "leaveDays", "wfh", "holidays", "weekoffs", "late", "unmarked", "workedMin"].forEach((k) => { tot[k] += st[k]; }); }
+  return { year: yr, rows, total: tot };
+}
+const ofTod = (min) => { if (min == null) return "-"; const m = ((Math.round(min) % 1440) + 1440) % 1440, h = Math.floor(m / 60), mm = m % 60, p = h >= 12 ? "PM" : "AM", h12 = h % 12 === 0 ? 12 : h % 12; return `${OF_P2(h12)}:${OF_P2(mm)} ${p}`; };
+
+// ---- reminders (planned times, 14-day horizon). Never records attendance. ----
+function ofReminders(data, nowMs, horizon) {
+  const out = [], s = data.settings; if (!s.remindIn && !s.remindOut) return out;
+  const today = ofKey(new Date(nowMs)), lead = (s.remindLead || 0) * 60000, fmt = (t) => ofTod(ofMin(t));
+  for (let i = -1; i < (horizon || 14); i++) {
+    const key = ofAdd(today, i), info = ofDayInfo(data, key), rec = info.rec, p = ofPlanned(data, key);
+    const offDay = rec ? (rec.status === "leave" || rec.status === "holiday" || rec.status === "weekoff") : info.auto !== "working";
+    if (offDay) continue;
+    if (s.remindIn && i >= 0 && !(rec && rec.in)) out.push({ key: `office-in-${key}`, title: "Office: time to check in", body: `Planned start ${fmt(s.inTime)}. Tap to open Office & Leave.`, at: new Date(p.inAt.getTime() - lead) });
+    const needOut = i > 0 || (rec && rec.in && !rec.out && !rec.outMissing);
+    if (s.remindOut && needOut && !(rec && rec.out)) out.push({ key: `office-out-${key}`, title: "Office: time to check out", body: `Planned finish ${fmt(s.outTime)}. Tap to open Office & Leave.`, at: p.outAt });
+  }
+  return out.filter((r) => r.at.getTime() > nowMs + 3000);
+}
+
+// ---- merge (Google Sheet pull / sync): records are keyed by date so nothing is ever duplicated; newest edit wins ----
+function ofMerge(local, incoming) {
+  const a = ofNormalize(local), b = ofNormalize(incoming), out = ofNormalize(a);
+  if ((b.settings.updatedAt || 0) > (a.settings.updatedAt || 0)) out.settings = b.settings;
+  const byId = (la, lb) => { const m = {}; la.forEach((x) => { m[x.id] = x; }); lb.forEach((x) => { const c = m[x.id]; if (!c || (x.updatedAt || 0) > (c.updatedAt || 0)) m[x.id] = x; }); return Object.values(m); };
+  out.leaveTypes = byId(a.leaveTypes, b.leaveTypes);
+  let hol = byId(a.holidays, b.holidays); const seen = {}; hol = hol.filter((h) => { if (h.deleted) return true; const k = h.date + "|" + String(h.name || "").toLowerCase(); if (seen[k]) return false; seen[k] = 1; return true; }); out.holidays = hol;
+  const days = Object.assign({}, a.days); Object.keys(b.days).forEach((k) => { const c = days[k]; if (!c || (b.days[k].updatedAt || 0) > (c.updatedAt || 0)) days[k] = b.days[k]; }); out.days = days;
+  const ci = JSON.parse(JSON.stringify(b.carryIn || {})); Object.keys(a.carryIn || {}).forEach((y) => { ci[y] = Object.assign({}, ci[y] || {}, a.carryIn[y]); }); out.carryIn = ci;
+  return out;
+}
+// ---- distance (for the optional "near office" suggestion) and CSV reports ----
+function ofDist(lat1, lng1, lat2, lng2) { const R = 6371000, r = (x) => x * Math.PI / 180, dLa = r(lat2 - lat1), dLo = r(lng2 - lng1), a = Math.sin(dLa / 2) ** 2 + Math.cos(r(lat1)) * Math.cos(r(lat2)) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.min(1, Math.sqrt(a))); }
+const ofCsv = (rows) => rows.map((r) => r.map((c) => { c = c == null ? "" : String(c); return /[",\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(",")).join("\r\n");
+function ofCsvMonth(data, ym, todayKey) {
+  const [y, m] = ym.split("-").map(Number), n = new Date(y, m, 0).getDate(), rows = [["Date", "Day", "Status", "Leave type", "Check-in", "Check-out", "Worked (min)", "Late (min)", "Left early (min)", "Note"]];
+  for (let d = 1; d <= n; d++) { const k = `${ym}-${OF_P2(d)}`, i = ofDayInfo(data, k), r = i.rec, st = r ? r.status : i.auto === "working" ? (k <= todayKey ? "unmarked" : "") : i.auto, t = r && r.leaveType ? (ofLive(data.leaveTypes).find((x) => x.id === r.leaveType) || {}).name || "" : "";
+    rows.push([k, ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][ofDow(k)], (OF_STATUS[st] && OF_STATUS[st].label) || st, t, r && r.in ? ofHHMM(r.in) : "", r && r.out ? ofHHMM(r.out) : "", r && ofWorked(r) != null ? Math.round(ofWorked(r)) : "", r ? r.lateMin || 0 : "", r ? r.earlyMin || 0 : "", (r && r.note) || (i.hol ? i.hol.name : "")]); }
+  return ofCsv(rows);
+}
+function ofCsvYear(data, yearId, todayKey) {
+  const rep = ofYearReport(data, yearId, todayKey), rows = [["Month", "Attended days", "Leave days", "WFH", "Holidays", "Week offs", "Late arrivals", "Unmarked working days", "Total hours"]];
+  rep.rows.forEach((r) => rows.push([r.ym, ofNum(r.attended), ofNum(r.leaveDays), r.wfh, r.holidays, r.weekoffs, r.late, r.unmarked, (r.workedMin / 60).toFixed(1)]));
+  rows.push(["Total", ofNum(rep.total.attended), ofNum(rep.total.leaveDays), rep.total.wfh, rep.total.holidays, rep.total.weekoffs, rep.total.late, rep.total.unmarked, (rep.total.workedMin / 60).toFixed(1)]);
+  return ofCsv(rows);
+}
+// ==== END OFFICE & LEAVE core ====
+
+// ==== OFFICE & LEAVE: UI (uses the app's own Card / SegmentedControl / TextField / TimeInput / FormBar components) ====
+const ofDayLabel = (k) => ofParse(k).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+const ofMonthName = (ym) => { const a = ym.split("-").map(Number); return ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][a[1] - 1] + " " + a[0]; };
+const ofShiftYm = (ym, n) => { const a = ym.split("-").map(Number), d = new Date(a[0], a[1] - 1 + n, 1); return `${d.getFullYear()}-${OF_P2(d.getMonth() + 1)}`; };
+const OF_TYPE_COLORS = ["#F59E0B", "#EF4444", "#8B5CF6", "#0A84FF", "#14B8A6", "#EC4899", "#64748B"];
+function OfChip({ status, label, small }) {
+  const m = OF_STATUS[status] || { label: label || "", color: "#8E8E93" };
+  return <span style={{ display: "inline-flex", alignItems: "center", background: hexA(m.color, 0.15), color: m.color, borderRadius: 980, padding: small ? "2px 8px" : "4px 10px", fontSize: small ? 11.5 : 12.5, fontWeight: 700, whiteSpace: "nowrap" }}>{label || m.label}</span>;
+}
+function OfFlag({ text, color }) { return <span style={{ display: "inline-flex", background: hexA(color, 0.14), color, borderRadius: 980, padding: "2px 8px", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>{text}</span>; }
+function OfSwitch({ on, onChange, label }) {
+  return <button type="button" role="switch" aria-checked={!!on} aria-label={label} onClick={() => onChange(!on)} style={{ flexShrink: 0, width: 44, height: 26, borderRadius: 13, border: "none", background: on ? TEAL : PANEL_2, position: "relative", cursor: "pointer", padding: 0 }}><span style={{ position: "absolute", top: 3, left: on ? 21 : 3, width: 20, height: 20, borderRadius: 10, background: "#fff", transition: "left .15s", boxShadow: "0 1px 3px rgba(0,0,0,.3)" }} /></button>;
+}
+function OfBtn({ label, onClick, tone, ghost, disabled, style }) {
+  return <button type="button" disabled={disabled} onClick={onClick} style={{ width: "100%", minHeight: 44, borderRadius: 980, border: "none", cursor: disabled ? "default" : "pointer", fontSize: 15, fontWeight: 700, fontFamily: "inherit", background: ghost ? "transparent" : disabled ? PANEL_2 : (tone || BRASS), color: ghost ? INK_DIM : disabled ? INK_FAINT : "#FFFFFF", ...style }}>{label}</button>;
+}
+function OfDialog({ title, children, actions, onClose }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 20000, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" style={{ width: "100%", maxWidth: 360, background: PANEL, borderRadius: 22, padding: "18px 16px 12px", boxShadow: "0 20px 60px rgba(0,0,0,.35)", maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: INK, fontFamily: disp, marginBottom: 8 }}>{title}</div>
+        <div style={{ fontSize: 14, color: INK_DIM, lineHeight: 1.45 }}>{children}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14 }}>{actions}</div>
+      </div>
+    </div>
+  );
+}
+function OfRowCard({ children, onClick, style }) {
+  return <div onClick={onClick} role={onClick ? "button" : undefined} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${LINE}`, cursor: onClick ? "pointer" : "default", ...style }}>{children}</div>;
+}
+
+// ---- Add / edit one day (manual entry) ----
+function OfEntryForm({ data, date, now, onBack, onSave, onDelete, say }) {
+  const todayKey = ofKey(new Date(now));
+  const init = (k) => {
+    const r = ofRec(data, k), info = ofDayInfo(data, k);
+    return { date: k, status: r ? r.status : info.auto === "working" ? (k <= todayKey ? "present" : "leave") : info.auto, inT: r && r.in ? ofHHMM(r.in) : "", outT: r && r.out ? ofHHMM(r.out) : "", leaveType: r ? r.leaveType || null : (ofLive(data.leaveTypes)[0] || {}).id || null, halfSide: r && r.halfSide ? r.halfSide : "first", note: r ? r.note || "" : "" };
+  };
+  const [f, setF] = useState(() => init(date));
+  const set = (p) => setF((x) => ({ ...x, ...p }));
+  const ex = ofRec(data, f.date), timed = f.status === "present" || f.status === "wfh" || f.status === "half", isLeave = f.status === "leave" || f.status === "half";
+  const types = ofLive(data.leaveTypes), pl = ofPlanned(data, f.date || todayKey);
+  const overnightHint = f.inT && f.outT && ofMin(f.outT) < ofMin(f.inT);
+  const proj = isLeave && ofValidKey(f.date) ? ofProject(data, f.leaveType, [{ key: f.date, amount: f.status === "half" ? 0.5 : 1 }], todayKey)[0] : null;
+  const form = timed ? f : { ...f, inT: "", outT: "" };
+  const check = () => { const r = ofSaveManual(data, form, new Date(now)); return r.error || ""; };
+  const save = () => { const r = ofSaveManual(data, form, new Date(now)); if (!r.error) onSave(r.data, proj && proj.after < 0 ? proj : null); };
+  return (
+    <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <FormHeader onBack={onBack}>{ex ? "Edit attendance" : "Add attendance"}</FormHeader>
+      <FL t="Date"><TextField type="date" value={f.date} onChange={(e) => { const v = e.target.value; if (ofValidKey(v)) setF(init(v)); else set({ date: v }); }} /></FL>
+      <FL t="Status">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{Object.keys(OF_STATUS).map((s) => <ChipButton key={s} label={OF_STATUS[s].label} active={f.status === s} onClick={() => set({ status: s })} />)}</div>
+      </FL>
+      {isLeave && (
+        <FL t="Leave type">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {types.map((t) => <ChipButton key={t.id} label={t.name} active={f.leaveType === t.id} onClick={() => set({ leaveType: t.id })} />)}
+            <ChipButton label="No deduction" active={!f.leaveType} onClick={() => set({ leaveType: null })} />
+          </div>
+          {proj && f.leaveType ? <div style={{ fontSize: 13, marginTop: 7, color: proj.after < 0 ? CORAL : INK_DIM, fontWeight: proj.after < 0 ? 700 : 500 }}>Balance {ofNum(proj.before)} {"\u2192"} {ofNum(proj.after)} days{proj.after < 0 ? " (negative)" : ""}</div> : null}
+        </FL>
+      )}
+      {f.status === "half" && (
+        <FL t="Which half is leave?"><div style={{ display: "flex", gap: 6 }}><ChipButton label="First half" active={f.halfSide === "first"} onClick={() => set({ halfSide: "first" })} /><ChipButton label="Second half" active={f.halfSide === "second"} onClick={() => set({ halfSide: "second" })} /></div></FL>
+      )}
+      {timed && (
+        <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}><FL t="Check-in"><TimeInput value={f.inT} onChange={(v) => set({ inT: v })} allowClear placeholder={`Planned ${fmtTimeString12(data.settings.inTime)}`} /></FL></div>
+          <div style={{ flex: 1, minWidth: 0 }}><FL t="Check-out"><TimeInput value={f.outT} onChange={(v) => set({ outT: v })} allowClear placeholder={`Planned ${fmtTimeString12(data.settings.outTime)}`} /></FL></div>
+        </div>
+      )}
+      {timed && <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: -4 }}>{overnightHint ? "Check-out is earlier than check-in, so it will be saved on the next day (overnight shift)." : "Planned times are only defaults. Leave a time empty if you are not sure."}</div>}
+      <FL t="Note (optional)"><TextField value={f.note} onChange={(e) => set({ note: e.target.value })} placeholder="e.g. Client visit" /></FL>
+      {ex ? <OfBtn label="Delete this day's record" tone={CORAL} ghost onClick={() => onDelete(f.date)} style={{ color: CORAL }} /> : null}
+      <FormBar saveLabel="Save" onSave={save} onCancel={onBack} check={check} />
+    </div>
+  );
+}
+
+// ---- Apply for leave ----
+function OfApplyForm({ data, init, now, onBack, onApply }) {
+  const todayKey = ofKey(new Date(now)), types = ofLive(data.leaveTypes);
+  const [f, setF] = useState(() => ({ typeId: init.typeId || (types[0] || {}).id || null, from: init.from || todayKey, to: init.to || init.from || todayKey, half: !!init.half, side: "first", skip: true, note: "" }));
+  const set = (p) => setF((x) => ({ ...x, ...p }));
+  const plan = ofPlanLeave(data, f.from, f.to, f.half, f.skip);
+  const proj = !plan.error && plan.days.length ? ofProject(data, f.typeId, plan.days, todayKey) : [];
+  const total = plan.days.reduce((s, d) => s + d.amount, 0), neg = proj.some((p) => p.after < 0), single = f.from === f.to;
+  const check = () => plan.error || (plan.days.length ? "" : "There are no working days to apply leave for in this range.");
+  const save = () => onApply({ typeId: f.typeId, days: plan.days, side: f.side, note: f.note }, neg ? proj.filter((p) => p.after < 0) : null);
+  return (
+    <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <FormHeader onBack={onBack}>Apply for leave</FormHeader>
+      <FL t="Leave type">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {types.map((t) => <ChipButton key={t.id} label={t.name} active={f.typeId === t.id} onClick={() => set({ typeId: t.id })} />)}
+          <ChipButton label="No deduction" active={!f.typeId} onClick={() => set({ typeId: null })} />
+        </div>
+      </FL>
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}><FL t="From"><TextField type="date" value={f.from} onChange={(e) => { const v = e.target.value; set({ from: v, to: !f.to || f.to < v ? v : f.to }); }} /></FL></div>
+        <div style={{ flex: 1, minWidth: 0 }}><FL t="To"><TextField type="date" value={f.to} min={f.from} onChange={(e) => set({ to: e.target.value })} /></FL></div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, opacity: single ? 1 : 0.5 }}>
+        <div style={{ flex: 1, fontSize: 15, color: INK }}>Half day<div style={{ fontSize: 12.5, color: INK_FAINT }}>{single ? "Counts as 0.5 day" : "Choose a single date to use half day"}</div></div>
+        <OfSwitch on={f.half && single} onChange={(v) => single && set({ half: v })} label="Half day" />
+      </div>
+      {f.half && single ? <div style={{ display: "flex", gap: 6 }}><ChipButton label="First half" active={f.side === "first"} onClick={() => set({ side: "first" })} /><ChipButton label="Second half" active={f.side === "second"} onClick={() => set({ side: "second" })} /></div> : null}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ flex: 1, fontSize: 15, color: INK }}>Skip week offs and holidays<div style={{ fontSize: 12.5, color: INK_FAINT }}>Only working days use leave</div></div>
+        <OfSwitch on={f.skip} onChange={(v) => set({ skip: v })} label="Skip week offs and holidays" />
+      </div>
+      <FL t="Note (optional)"><TextField value={f.note} onChange={(e) => set({ note: e.target.value })} placeholder="e.g. Family function" /></FL>
+      <Card style={{ padding: "12px 14px", borderRadius: 16, background: PANEL_2, boxShadow: "none" }}>
+        {plan.error ? <div style={{ color: CORAL, fontSize: 14, fontWeight: 600 }}>{plan.error}</div> : (
+          <>
+            <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>{ofNum(total)} day{total === 1 ? "" : "s"} of leave{plan.skipped.length ? <span style={{ fontWeight: 500, color: INK_DIM }}> {"\u00b7"} {plan.skipped.length} off day{plan.skipped.length === 1 ? "" : "s"} skipped</span> : null}</div>
+            {f.typeId ? proj.map((p) => (
+              <div key={p.year.id} style={{ fontSize: 13.5, marginTop: 5, color: p.after < 0 ? CORAL : INK_DIM, fontWeight: p.after < 0 ? 700 : 500 }}>
+                {proj.length > 1 ? `${p.year.label}: ` : "Balance: "}{ofNum(p.before)} {"\u2192"} {ofNum(p.after)} days{p.after < 0 ? ` (short by ${ofNum(-p.after)})` : ""}
+              </div>
+            )) : <div style={{ fontSize: 13.5, marginTop: 5, color: INK_DIM }}>No balance will be deducted.</div>}
+            {neg ? <div style={{ fontSize: 13, marginTop: 6, color: CORAL, fontWeight: 700 }}>Warning: this will make your balance negative.</div> : null}
+            {plan.conflicts.length ? <div style={{ fontSize: 12.5, marginTop: 6, color: INK_DIM }}>{plan.conflicts.length} day{plan.conflicts.length === 1 ? " already has" : "s already have"} attendance recorded and will be left as they are: {plan.conflicts.slice(0, 4).map(ofDayLabel).join(", ")}{plan.conflicts.length > 4 ? "\u2026" : ""}</div> : null}
+          </>
+        )}
+      </Card>
+      <FormBar saveLabel={neg ? "Apply anyway" : "Apply leave"} onSave={save} onCancel={onBack} check={check} />
+    </div>
+  );
+}
+
+// ---- Leave type + holiday forms ----
+function OfTypeForm({ init, onBack, onSave }) {
+  const [f, setF] = useState(() => ({ id: init.id || null, name: init.name || "", quota: init.quota != null ? init.quota : 12, carry: init.carry != null ? init.carry : 0, color: init.color || OF_TYPE_COLORS[0] }));
+  const set = (p) => setF((x) => ({ ...x, ...p }));
+  return (
+    <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <FormHeader onBack={onBack}>{f.id ? "Edit leave type" : "New leave type"}</FormHeader>
+      <FL t="Name"><TextField value={f.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Casual Leave" /></FL>
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}><FL t="Days per year"><TextField type="number" inputMode="decimal" min="0" step="0.5" value={f.quota} onChange={(e) => set({ quota: e.target.value })} /></FL></div>
+        <div style={{ flex: 1, minWidth: 0 }}><FL t="Max carry forward"><TextField type="number" inputMode="decimal" min="0" step="0.5" value={f.carry} onChange={(e) => set({ carry: e.target.value })} /></FL></div>
+      </div>
+      <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: -4 }}>Carry forward 0 means unused days expire at the end of the leave year.</div>
+      <FL t="Colour"><div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{OF_TYPE_COLORS.map((c) => <button key={c} type="button" aria-label={c} onClick={() => set({ color: c })} style={{ width: 32, height: 32, borderRadius: 16, background: c, border: f.color === c ? `3px solid ${INK}` : "3px solid transparent", cursor: "pointer" }} />)}</div></FL>
+      <FormBar saveLabel="Save" onSave={() => onSave({ ...f, name: f.name.trim(), quota: Math.max(0, Number(f.quota) || 0), carry: Math.max(0, Number(f.carry) || 0) })} onCancel={onBack} check={() => (f.name.trim() ? "" : "Enter a name for this leave type.")} />
+    </div>
+  );
+}
+function OfHolidayForm({ init, onBack, onSave, existing }) {
+  const [f, setF] = useState(() => ({ id: init.id || null, date: init.date || ofKey(new Date()), name: init.name || "" }));
+  return (
+    <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <FormHeader onBack={onBack}>{f.id ? "Edit holiday" : "Add holiday"}</FormHeader>
+      <FL t="Date"><TextField type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></FL>
+      <FL t="Name"><TextField value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="e.g. Diwali" /></FL>
+      <FormBar saveLabel="Save" onSave={() => onSave({ ...f, name: f.name.trim() })} onCancel={onBack} check={() => !ofValidKey(f.date) ? "Pick a valid date." : !f.name.trim() ? "Enter a holiday name." : existing(f) ? "A holiday with this date and name already exists." : ""} />
+    </div>
+  );
+}
+
+// ---- Settings ----
+function OfSettings({ data, now, setSettings, commit, push, onBack, say, askConfirm }) {
+  const s = data.settings, todayKey = ofKey(new Date(now)), year = ofLeaveYear(data, todayKey), types = ofLive(data.leaveTypes);
+  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], sh = ofShift(s);
+  const hols = ofLive(data.holidays).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+  const toggleDay = (i) => { const has = s.workDays.includes(i); const next = has ? s.workDays.filter((x) => x !== i) : s.workDays.concat(i).sort(); if (!next.length) { say("Pick at least one working day."); return; } setSettings({ workDays: next }); };
+  const autoCarry = (tid) => { const c = { ...data, carryIn: { ...data.carryIn, [year.id]: { ...(data.carryIn[year.id] || {}), [tid]: "" } } }; return ofCarryIn(c, tid, year.id, todayKey); };
+  const setCarry = (tid, v) => { const cur = { ...(data.carryIn[year.id] || {}) }; if (v === "") delete cur[tid]; else cur[tid] = Math.max(0, Number(v) || 0); commit({ ...data, carryIn: { ...data.carryIn, [year.id]: cur }, settings: { ...s, updatedAt: Date.now() } }); };
+  const useHere = () => {
+    if (!navigator.geolocation) { say("Location is not available on this device."); return; }
+    navigator.geolocation.getCurrentPosition((p) => { setSettings({ loc: { ...s.loc, on: true, lat: p.coords.latitude, lng: p.coords.longitude } }); say("Office location saved."); }, () => say("Could not get your location. Check the app's location permission."), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  };
+  const delType = (t) => { const used = Object.values(data.days).filter((r) => r && !r.deleted && r.leaveType === t.id).length; askConfirm({ title: `Delete ${t.name}?`, body: used ? `${used} day${used === 1 ? " is" : "s are"} recorded with this leave type. They will stay in your history but will no longer deduct from any balance.` : "This leave type will be removed.", yesLabel: "Delete", yes: () => commit({ ...data, leaveTypes: data.leaveTypes.map((x) => (x.id === t.id ? { ...x, deleted: true, updatedAt: Date.now() } : x)) }) }); };
+  const delHol = (h) => askConfirm({ title: `Delete ${h.name}?`, body: `${ofDayLabel(h.date)} will become a normal day again.`, yesLabel: "Delete", yes: () => commit({ ...data, holidays: data.holidays.map((x) => (x.id === h.id ? { ...x, deleted: true, updatedAt: Date.now() } : x)) }) });
+  const row = (label, sub, ctl) => <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0" }}><div style={{ flex: 1, minWidth: 0, fontSize: 15, color: INK }}>{label}{sub ? <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 1 }}>{sub}</div> : null}</div>{ctl}</div>;
+  return (
+    <div className="fx-form" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <FormHeader onBack={onBack}>Office settings</FormHeader>
+      <Card style={{ padding: "4px 14px", borderRadius: 18, marginBottom: 10 }}>{row("Quick card on Home", "A slim Check In / Check Out card on the Home screen", <OfSwitch on={s.showOnHome !== false} onChange={(v) => setSettings({ showOnHome: v })} label="Quick card on Home" />)}</Card>
+      <SectionLabel>Working days</SectionLabel>
+      <Card style={{ padding: "12px 14px", borderRadius: 18 }}>
+        <div style={{ display: "flex", gap: 5 }}>{DAYS.map((d, i) => <button key={d} type="button" onClick={() => toggleDay(i)} aria-pressed={s.workDays.includes(i)} style={{ flex: 1, minWidth: 0, padding: "9px 0", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, background: s.workDays.includes(i) ? BRASS : PANEL_2, color: s.workDays.includes(i) ? "#fff" : INK_DIM }}>{d}</button>)}</div>
+        <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 8 }}>Other days are treated as Week Off automatically.</div>
+      </Card>
+      <SectionLabel style={{ marginTop: 10 }}>Normal timings</SectionLabel>
+      <Card style={{ padding: "12px 14px", borderRadius: 18 }}>
+        <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}><FL t="Check-in"><TimeInput value={s.inTime} onChange={(v) => v && setSettings({ inTime: v })} /></FL></div>
+          <div style={{ flex: 1, minWidth: 0 }}><FL t="Check-out"><TimeInput value={s.outTime} onChange={(v) => v && setSettings({ outTime: v })} /></FL></div>
+        </div>
+        <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 8 }}>{sh.overnight ? `Overnight shift detected: check-out is on the next day. Shift length ${ofDur(sh.lenMin)}.` : `Planned day length ${ofDur(sh.lenMin)}.`} These are only planned defaults. They never count as attendance until you check in.</div>
+        {row("Late grace period", "Minutes allowed after check-in time", <div style={{ width: 90 }}><TextField type="number" inputMode="numeric" min="0" value={s.grace} onChange={(e) => setSettings({ grace: e.target.value === "" ? "" : Math.max(0, Number(e.target.value)) })} /></div>)}
+        {row("Half-day hours", "Worked less than this? You are asked about a half day", <div style={{ width: 90 }}><TextField type="number" inputMode="decimal" min="0" step="0.5" value={s.halfDayHours} onChange={(e) => setSettings({ halfDayHours: e.target.value === "" ? "" : Math.max(0, Number(e.target.value)) })} /></div>)}
+      </Card>
+      <SectionLabel style={{ marginTop: 10 }}>Leave year</SectionLabel>
+      <Card style={{ padding: "12px 14px", borderRadius: 18 }}>
+        <SegmentedControl options={[{ id: "1", label: "Jan \u2013 Dec" }, { id: "4", label: "Apr \u2013 Mar" }]} value={String(s.yearStart)} onChange={(v) => setSettings({ yearStart: Number(v) })} />
+        <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 8 }}>Current leave year: {year.range}.</div>
+      </Card>
+      <SectionLabel style={{ marginTop: 10 }}>Leave types and yearly quota</SectionLabel>
+      <Card style={{ padding: "4px 14px 8px", borderRadius: 18 }}>
+        {types.length === 0 ? <div style={{ padding: "12px 0", fontSize: 14, color: INK_DIM }}>No leave types yet.</div> : null}
+        {types.map((t) => (
+          <OfRowCard key={t.id}>
+            <span style={{ width: 10, height: 10, borderRadius: 5, background: t.color, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{t.name}</div><div style={{ fontSize: 12.5, color: INK_FAINT }}>{ofNum(+t.quota || 0)} days / year {"\u00b7"} {+t.carry > 0 ? `carry forward up to ${ofNum(+t.carry)}` : "no carry forward"}</div></div>
+            <IconBtn title={`Edit ${t.name}`} onClick={() => push({ t: "ltype", init: t })}><Pencil size={17} color={INK_DIM} /></IconBtn>
+            <IconBtn title={`Delete ${t.name}`} onClick={() => delType(t)}><Trash2 size={17} color={CORAL} /></IconBtn>
+          </OfRowCard>
+        ))}
+        <button type="button" onClick={() => push({ t: "ltype", init: { id: null } })} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: BRASS, fontSize: 15, fontWeight: 700, padding: "10px 0 2px", cursor: "pointer", fontFamily: "inherit" }}><Plus size={16} /> Add leave type</button>
+      </Card>
+      {types.length ? (
+        <>
+          <SectionLabel style={{ marginTop: 10 }}>Carried in to {year.label}</SectionLabel>
+          <Card style={{ padding: "6px 14px 10px", borderRadius: 18 }}>
+            {types.map((t) => { const man = data.carryIn[year.id] && data.carryIn[year.id][t.id]; return row(t.name, `Automatic: ${ofNum(autoCarry(t.id))} day${autoCarry(t.id) === 1 ? "" : "s"}`, <div style={{ width: 90 }}><TextField type="number" inputMode="decimal" min="0" step="0.5" placeholder="Auto" value={man === undefined ? "" : man} onChange={(e) => setCarry(t.id, e.target.value)} /></div>); })}
+            <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 4 }}>Leave a box empty to carry forward automatically from last year (up to each type's limit). Type a number to set the opening balance yourself.</div>
+          </Card>
+        </>
+      ) : null}
+      <SectionLabel style={{ marginTop: 10 }}>Company holidays</SectionLabel>
+      <Card style={{ padding: "4px 14px 8px", borderRadius: 18 }}>
+        {hols.length === 0 ? <div style={{ padding: "12px 0", fontSize: 14, color: INK_DIM }}>No holidays added.</div> : null}
+        {hols.map((h) => (
+          <OfRowCard key={h.id}>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{h.name}</div><div style={{ fontSize: 12.5, color: INK_FAINT }}>{ofDayLabel(h.date)} {ofParse(h.date).getFullYear()}</div></div>
+            <IconBtn title={`Edit ${h.name}`} onClick={() => push({ t: "holiday", init: h })}><Pencil size={17} color={INK_DIM} /></IconBtn>
+            <IconBtn title={`Delete ${h.name}`} onClick={() => delHol(h)}><Trash2 size={17} color={CORAL} /></IconBtn>
+          </OfRowCard>
+        ))}
+        <button type="button" onClick={() => push({ t: "holiday", init: {} })} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: BRASS, fontSize: 15, fontWeight: 700, padding: "10px 0 2px", cursor: "pointer", fontFamily: "inherit" }}><Plus size={16} /> Add holiday</button>
+      </Card>
+      <SectionLabel style={{ marginTop: 10 }}>Reminders</SectionLabel>
+      <Card style={{ padding: "4px 14px 8px", borderRadius: 18 }}>
+        {row("Check-in reminder", "At your normal check-in time", <OfSwitch on={s.remindIn} onChange={(v) => setSettings({ remindIn: v })} label="Check-in reminder" />)}
+        {row("Check-out reminder", "At your normal check-out time", <OfSwitch on={s.remindOut} onChange={(v) => setSettings({ remindOut: v })} label="Check-out reminder" />)}
+        {row("Remind me early", "Applies to the check-in reminder", <div style={{ width: 110 }}><Select value={String(s.remindLead)} onChange={(e) => setSettings({ remindLead: Number(e.target.value) })}>{[0, 5, 10, 15, 30].map((m) => <option key={m} value={m}>{m ? `${m} min before` : "On time"}</option>)}</Select></div>)}
+        <div style={{ fontSize: 12.5, color: INK_FAINT, paddingBottom: 4 }}>Reminders are sent as notifications in the Android app. They skip leave days, holidays and week offs, and they never record attendance.</div>
+      </Card>
+      <SectionLabel style={{ marginTop: 10 }}>Office location (optional)</SectionLabel>
+      <Card style={{ padding: "4px 14px 12px", borderRadius: 18 }}>
+        {row("Suggest check-in near office", "Only while this screen is open. You always confirm yourself.", <OfSwitch on={s.loc.on && s.loc.lat != null} onChange={(v) => { if (!v) setSettings({ loc: { ...s.loc, on: false } }); else if (s.loc.lat != null) setSettings({ loc: { ...s.loc, on: true } }); else useHere(); }} label="Suggest check-in near office" />)}
+        <OfBtn label={s.loc.lat != null ? "Update office location to where I am now" : "Use my current location as office"} onClick={useHere} style={{ background: PANEL_2, color: BRASS }} />
+        {s.loc.lat != null ? <div style={{ fontSize: 12.5, color: INK_FAINT, marginTop: 8 }}>Saved: {s.loc.lat.toFixed(4)}, {s.loc.lng.toFixed(4)}</div> : null}
+        {row("Distance that counts as 'at office'", "", <div style={{ width: 110 }}><Select value={String(s.loc.radius)} onChange={(e) => setSettings({ loc: { ...s.loc, radius: Number(e.target.value) } })}>{[100, 200, 300, 500, 1000].map((m) => <option key={m} value={m}>{m} m</option>)}</Select></div>)}
+      </Card>
+    </div>
+  );
+}
+
+// ---- Dialog bodies that need their own state ----
+function OfResolveDialog({ data, rec, onDone, onLater }) {
+  const p = ofPlanned(data, rec.date), inM = ofMin(ofHHMM(rec.in));
+  const [t, setT] = useState(() => { const d = ofHHMM(p.outAt); return d || data.settings.outTime; });
+  const next = ofMin(t) <= inM;
+  const save = () => { const out = ofAt(rec.date, t, next ? 1 : 0); onDone("time", out.toISOString()); };
+  return (
+    <OfDialog title="Forgot to check out?" onClose={onLater} actions={<>
+      <OfBtn label="Save this check-out time" onClick={save} disabled={!t} />
+      <OfBtn label="Keep as present, no check-out time" onClick={() => onDone("keep")} style={{ background: PANEL_2, color: INK }} />
+      <OfBtn label="Remove this check-in" onClick={() => onDone("remove")} ghost style={{ color: CORAL }} />
+      <OfBtn label="Decide later" onClick={onLater} ghost />
+    </>}>
+      You checked in on <b style={{ color: INK }}>{ofDayLabel(rec.date)} at {fmtTime(rec.in)}</b> but there is no check-out. When did you leave?
+      <div style={{ marginTop: 10 }}><TimeInput value={t} onChange={setT} /></div>
+      {next ? <div style={{ fontSize: 12.5, marginTop: 6 }}>This time is earlier than check-in, so it will be saved on the next day.</div> : null}
+    </OfDialog>
+  );
+}
+function OfHalfDialog({ data, rec, worked, todayKey, onYes, onNo }) {
+  const types = ofLive(data.leaveTypes), bal = ofBalances(data, rec.date, todayKey);
+  const [tid, setTid] = useState((types[0] || {}).id || null);
+  return (
+    <OfDialog title="Mark as half day?" onClose={onNo} actions={<>
+      <OfBtn label="Mark as half day" onClick={() => onYes(tid)} />
+      <OfBtn label="Keep as full present day" onClick={onNo} style={{ background: PANEL_2, color: INK }} />
+    </>}>
+      You worked <b style={{ color: INK }}>{ofDur(worked)}</b>, which is below your half-day limit of {ofNum(+data.settings.halfDayHours)} hours. A half day uses 0.5 day of leave.
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+        {types.map((t) => { const b = bal.find((x) => x.type.id === t.id); return <ChipButton key={t.id} label={`${t.name}${b ? " (" + ofNum(b.remaining) + ")" : ""}`} active={tid === t.id} onClick={() => setTid(t.id)} />; })}
+        <ChipButton label="No deduction" active={!tid} onClick={() => setTid(null)} />
+      </div>
+    </OfDialog>
+  );
+}
+
+// ---- The Office & Leave section ----
+function OfficeLeave({ data, onChange, onDepth, backRef }) {
+  const [tab, setTab] = useState("today");
+  const [stack, setStack] = useState([]);
+  const [dlg, setDlg] = useState(null);
+  const [now, setNow] = useState(Date.now());
+  const [toast, setToast] = useState("");
+  const [insMonth, setInsMonth] = useState(monthKey());
+  const [yearId, setYearId] = useState(() => ofLeaveYear(data, ofKey(new Date())).id);
+  const [repMode, setRepMode] = useState("month");
+  const [near, setNear] = useState(null);
+  const [dismissed, setDismissed] = useState({});
+  const busyRef = useRef(false), toastRef = useRef(null);
+  const todayKey = ofKey(new Date(now)), s = data.settings, types = ofLive(data.leaveTypes);
+  const openRec = ofOpenRecord(data), stale = ofStaleOpen(data, now);
+  const commit = (nd) => onChange(nd);
+  const setSettings = (patch) => commit({ ...data, settings: { ...s, ...patch, updatedAt: Date.now() } });
+  const say = (m) => { setToast(m); clearTimeout(toastRef.current); toastRef.current = setTimeout(() => setToast(""), 3200); };
+  const push = (x) => setStack((a) => a.concat([x]));
+  const pop = () => setStack((a) => a.slice(0, -1));
+  const askConfirm = (o) => setDlg({ t: "confirm", ...o });
+  backRef.current = () => { if (dlg) { setDlg(null); return true; } if (stack.length) { pop(); return true; } return false; };
+  useEffect(() => { if (onDepth) onDepth(stack.length + (dlg ? 1 : 0)); }, [stack.length, !!dlg]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (onDepth) onDepth(0); backRef.current = null; clearTimeout(toastRef.current); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), openRec ? 1000 : 30000); return () => clearInterval(id); }, [!!openRec]);
+  useEffect(() => { if (stale && !dismissed["stale-" + stale.date] && !dlg) setDlg({ t: "resolve", key: stale.date }); }, [stale && stale.date]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const loc = s.loc; if (!loc.on || loc.lat == null || !navigator.geolocation || tab !== "today" || stack.length) return;
+    let dead = false;
+    const poll = () => { if (document.hidden) return; try { navigator.geolocation.getCurrentPosition((p) => { if (!dead) setNear(ofDist(p.coords.latitude, p.coords.longitude, loc.lat, loc.lng) <= loc.radius); }, () => {}, { maximumAge: 60000, timeout: 10000, enableHighAccuracy: false }); } catch (e) {} };
+    poll(); const id = setInterval(poll, 60000); return () => { dead = true; clearInterval(id); };
+  }, [tab, s.loc.on, s.loc.lat, s.loc.lng, s.loc.radius, stack.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- today actions ----
+  const guard = () => { if (busyRef.current) return false; busyRef.current = true; setTimeout(() => { busyRef.current = false; }, 700); return true; };
+  const doIn = (force) => {
+    if (!force && !guard()) return;
+    const r = ofCheckIn(data, new Date(), force);
+    if (r.error === "open") say("You are already checked in.");
+    else if (r.error === "duplicate") say("You already checked in today. Edit it from Recent days.");
+    else if (r.error === "off-status" || r.error === "off-day") setDlg({ t: "offday", status: r.rec ? r.rec.status : r.auto, hol: r.hol });
+    else if (r.data) commit(r.data);
+  };
+  const doOut = () => {
+    if (!guard()) return;
+    const r = ofCheckOut(data, new Date());
+    if (r.error === "none") say("You are not checked in.");
+    else if (r.error === "stale") setDlg({ t: "resolve", key: r.rec.date });
+    else if (r.error === "before-in") say("Check-out can't be before check-in.");
+    else if (r.data) { commit(r.data); if (r.suggestHalf) setDlg({ t: "half", key: r.rec.date, worked: r.worked }); }
+  };
+  const tInfo = ofDayInfo(data, todayKey), rec = tInfo.rec;
+  const saveQuick = (st) => { const timed = st === "present" || st === "wfh"; const r = ofSaveManual(data, { date: todayKey, status: st, inT: timed && rec && rec.in ? ofHHMM(rec.in) : "", outT: timed && rec && rec.out ? ofHHMM(rec.out) : "", leaveType: null, note: rec ? rec.note || "" : "" }, new Date()); if (r.error) say(r.error); else commit(r.data); };
+  const quick = (st) => {
+    if (st === "leave" || st === "half") { push({ t: "apply", init: { from: todayKey, half: st === "half" } }); return; }
+    const timed = st === "present" || st === "wfh";
+    if (!timed && rec && rec.in) askConfirm({ title: `Mark today as ${OF_STATUS[st].label}?`, body: "This removes today's check-in and check-out times.", yesLabel: "Mark and remove times", yes: () => saveQuick(st) });
+    else saveQuick(st);
+  };
+  const resolve = (key, action, outIso) => { const r = ofResolveOpen(data, key, action, outIso, new Date()); if (r.error) { say(r.error === "out-before-in" ? "Check-out must be after check-in." : r.error === "too-long" ? "That would be longer than 24 hours." : "Could not save."); return; } commit(r.data); setDlg(null); };
+  const exportCsv = async (name, text) => { try { const r = await saveBackupFile(name, text, "text/csv", { share: true, download: true }); say(r && r.ok ? "Report saved." : "Could not save the report."); } catch (e) { say("Could not save the report."); } };
+
+  // ---- sheets (full-screen sub pages) ----
+  const top = stack[stack.length - 1];
+  let sheet = null;
+  if (top) {
+    if (top.t === "entry") sheet = <OfEntryForm key={top.date} data={data} date={top.date} now={now} onBack={pop} say={say}
+      onSave={(nd, neg) => { const go = () => { commit(nd); pop(); }; if (neg) setDlg({ t: "neg", proj: [neg], yes: go }); else go(); }}
+      onDelete={(k) => askConfirm({ title: "Delete this day's record?", body: `${ofDayLabel(k)} will go back to its default (no attendance recorded).`, yesLabel: "Delete", yes: () => { commit(ofDelete(data, k, new Date())); pop(); } })} />;
+    else if (top.t === "apply") sheet = <OfApplyForm data={data} init={top.init || {}} now={now} onBack={pop}
+      onApply={(o, negList) => { const go = () => { const r = ofApplyLeave(data, o, new Date()); commit(r.data); pop(); setTab("leave"); say("Leave applied."); }; if (negList) setDlg({ t: "neg", proj: negList, yes: go }); else go(); }} />;
+    else if (top.t === "settings") sheet = <OfSettings data={data} now={now} setSettings={setSettings} commit={commit} push={push} onBack={pop} say={say} askConfirm={askConfirm} />;
+    else if (top.t === "ltype") sheet = <OfTypeForm init={top.init || {}} onBack={pop} onSave={(f) => { const id = f.id || ofId("lt"), t = { id, name: f.name, quota: f.quota, carry: f.carry, color: f.color, updatedAt: Date.now() }; commit({ ...data, leaveTypes: f.id ? data.leaveTypes.map((x) => (x.id === f.id ? { ...x, ...t } : x)) : data.leaveTypes.concat([t]), settings: { ...s, updatedAt: Date.now() } }); pop(); }} />;
+    else if (top.t === "holiday") sheet = <OfHolidayForm init={top.init || {}} onBack={pop} existing={(f) => ofLive(data.holidays).some((h) => h.id !== f.id && h.date === f.date && h.name.toLowerCase() === f.name.trim().toLowerCase())}
+      onSave={(f) => { const id = f.id || ofId("hol"), h = { id, date: f.date, name: f.name, updatedAt: Date.now() }; commit({ ...data, holidays: f.id ? data.holidays.map((x) => (x.id === f.id ? h : x)) : data.holidays.concat([h]) }); pop(); }} />;
+  }
+
+  // ---- dialogs ----
+  let dialog = null;
+  if (dlg) {
+    if (dlg.t === "resolve") { const r = ofRec(data, dlg.key); if (r && r.in && !r.out && !r.outMissing) dialog = <OfResolveDialog data={data} rec={r} onDone={(a, o) => resolve(dlg.key, a, o)} onLater={() => { setDismissed((d) => ({ ...d, ["stale-" + dlg.key]: true })); setDlg(null); }} />; }
+    else if (dlg.t === "half") { const r = ofRec(data, dlg.key); if (r) dialog = <OfHalfDialog data={data} rec={r} worked={dlg.worked} todayKey={todayKey} onNo={() => setDlg(null)} onYes={(tid) => { const x = ofMarkHalf(data, dlg.key, tid, new Date()); if (x.data) commit(x.data); setDlg(null); }} />; }
+    else if (dlg.t === "offday") dialog = <OfDialog title="Check in today?" onClose={() => setDlg(null)} actions={<><OfBtn label="Check in anyway" onClick={() => { setDlg(null); doIn(true); }} /><OfBtn label="Cancel" ghost onClick={() => setDlg(null)} /></>}>{dlg.status === "leave" ? "Today is marked as leave. Checking in will cancel the leave for today and return that day to your balance." : dlg.status === "holiday" ? `Today is a holiday${dlg.hol ? " (" + dlg.hol.name + ")" : ""}. Checking in records that you worked.` : "Today is a week off. Checking in records that you worked."}</OfDialog>;
+    else if (dlg.t === "neg") dialog = <OfDialog title="Leave balance will be negative" onClose={() => setDlg(null)} actions={<><OfBtn label="Apply anyway" tone={CORAL} onClick={() => { const y = dlg.yes; setDlg(null); y(); }} /><OfBtn label="Go back" ghost onClick={() => setDlg(null)} /></>}>{dlg.proj.map((p) => <div key={p.year.id}>{p.year.label}: {ofNum(p.before)} {"\u2192"} {ofNum(p.after)} days (short by {ofNum(-p.after)}).</div>)}<div style={{ marginTop: 6 }}>You can still go ahead, but the balance will show below zero.</div></OfDialog>;
+    else if (dlg.t === "confirm") dialog = <OfDialog title={dlg.title} onClose={() => setDlg(null)} actions={<><OfBtn label={dlg.yesLabel || "Yes"} tone={CORAL} onClick={() => { const y = dlg.yes; setDlg(null); y(); }} /><OfBtn label="Cancel" ghost onClick={() => setDlg(null)} /></>}>{dlg.body}</OfDialog>;
+  }
+  const toastEl = toast ? <div role="status" style={{ position: "fixed", left: 16, right: 16, bottom: "calc(24px + env(safe-area-inset-bottom))", zIndex: 20100, display: "flex", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: "#1C1C1E", color: "#fff", borderRadius: 14, padding: "10px 14px", fontSize: 14, fontWeight: 600, maxWidth: 360, boxShadow: "0 8px 30px rgba(0,0,0,.35)" }}>{toast}</div></div> : null;
+  if (sheet) return <div data-office="sheet">{sheet}{dialog}{toastEl}</div>;
+
+  // ---- Today ----
+  const sh = ofShift(s), plan = `${fmtTimeString12(s.inTime)} \u2013 ${fmtTimeString12(s.outTime)}${sh.overnight ? " (+1 day)" : ""}`;
+  const staleOpen = stale && !dismissed["stale-" + stale.date] ? null : stale;
+  const checkedInToday = !!(rec && rec.in), canIn = !openRec && !checkedInToday, canOut = !!openRec && !stale;
+  const elapsed = openRec ? Math.max(0, now - new Date(openRec.in).getTime()) : 0;
+  const hms = (ms) => { const t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sc = t % 60; return `${h}:${OF_P2(m)}:${OF_P2(sc)}`; };
+  const workable = tInfo.auto === "working" || (rec && (rec.status === "present" || rec.status === "wfh" || rec.status === "half"));
+  const chipFor = rec ? <OfChip status={rec.status} /> : tInfo.auto === "working" ? <OfChip label="Working day" status="x" /> : <OfChip status={tInfo.auto} label={tInfo.auto === "holiday" && tInfo.hol ? `Holiday \u00b7 ${tInfo.hol.name}` : undefined} />;
+  const recent = []; for (let i = 0; i < 7; i++) { const k = ofAdd(todayKey, -i), info = ofDayInfo(data, k); recent.push(info); }
+  const unmarkedNow = ofMonthStats(data, monthKey(new Date(now)), todayKey).unmarked;
+  const todayView = (
+    <>
+      {stale ? <Card style={{ padding: "11px 14px", borderRadius: 16, marginBottom: 10, background: hexA("#F59E0B", 0.14), boxShadow: "none" }}><div style={{ fontSize: 14, color: INK, fontWeight: 600 }}>No check-out for {ofDayLabel(stale.date)}</div><button type="button" onClick={() => { setDismissed((d) => ({ ...d, ["stale-" + stale.date]: false })); setDlg({ t: "resolve", key: stale.date }); }} style={{ background: "transparent", border: "none", color: BRASS, fontWeight: 700, fontSize: 14, padding: "4px 0 0", cursor: "pointer", fontFamily: "inherit" }}>Resolve now</button></Card> : null}
+      {near === true && canIn && workable && !dismissed["near-in-" + todayKey] ? <Card style={{ padding: "11px 14px", borderRadius: 16, marginBottom: 10, background: hexA(TEAL_HEX_OF(), 0.14), boxShadow: "none" }}><div style={{ fontSize: 14, color: INK, fontWeight: 600 }}>You seem to be at the office. Check in?</div><div style={{ display: "flex", gap: 16, paddingTop: 4 }}><button type="button" onClick={() => doIn(false)} style={{ background: "transparent", border: "none", color: BRASS, fontWeight: 700, fontSize: 14, padding: 0, cursor: "pointer", fontFamily: "inherit" }}>Check in now</button><button type="button" onClick={() => setDismissed((d) => ({ ...d, ["near-in-" + todayKey]: true }))} style={{ background: "transparent", border: "none", color: INK_DIM, fontSize: 14, padding: 0, cursor: "pointer", fontFamily: "inherit" }}>Not now</button></div></Card> : null}
+      {near === false && canOut && !dismissed["near-out-" + openRec.date] ? <Card style={{ padding: "11px 14px", borderRadius: 16, marginBottom: 10, background: hexA("#0A84FF", 0.12), boxShadow: "none" }}><div style={{ fontSize: 14, color: INK, fontWeight: 600 }}>You seem to have left the office. Check out?</div><div style={{ display: "flex", gap: 16, paddingTop: 4 }}><button type="button" onClick={doOut} style={{ background: "transparent", border: "none", color: BRASS, fontWeight: 700, fontSize: 14, padding: 0, cursor: "pointer", fontFamily: "inherit" }}>Check out now</button><button type="button" onClick={() => setDismissed((d) => ({ ...d, ["near-out-" + openRec.date]: true }))} style={{ background: "transparent", border: "none", color: INK_DIM, fontSize: 14, padding: 0, cursor: "pointer", fontFamily: "inherit" }}>Not now</button></div></Card> : null}
+      <Card style={{ padding: "14px 14px 12px", borderRadius: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ minWidth: 0 }}><div style={{ fontSize: 13, color: INK_FAINT, fontWeight: 600 }}>Today</div><div style={{ fontSize: 17, fontWeight: 800, color: INK, fontFamily: disp }}>{ofDayLabel(todayKey)}</div></div>
+          <div style={{ flexShrink: 0 }}>{chipFor}</div>
+        </div>
+        <div style={{ margin: "12px 0", minHeight: 58 }} data-testid="office-status">
+          {stale ? (
+            <>
+              <div style={{ fontSize: 18, fontWeight: 800, color: INK, fontFamily: disp }}>Earlier check-in is still open</div>
+              <div style={{ fontSize: 13.5, color: INK_DIM, marginTop: 3 }}>Checked in {fmtTime(stale.in)} on {ofDayLabel(stale.date)} with no check-out. Resolve it before checking in today.</div>
+            </>
+          ) : openRec ? (
+            <>
+              <div style={{ fontSize: 30, fontWeight: 800, color: INK, fontFamily: mono, letterSpacing: "-0.02em" }} data-testid="office-timer">{hms(elapsed)}</div>
+              <div style={{ fontSize: 13.5, color: INK_DIM, marginTop: 2 }}>Working {"\u00b7"} checked in {fmtTime(openRec.in)}{openRec.date !== todayKey ? ` (${ofDayLabel(openRec.date)})` : ""}</div>
+              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>{openRec.lateMin > 0 ? <OfFlag text={`Late by ${ofDur(openRec.lateMin)}`} color="#FF6B35" /> : <OfFlag text="On time" color="#34C759" />}</div>
+            </>
+          ) : rec && rec.in ? (
+            <>
+              <div style={{ fontSize: 20, fontWeight: 800, color: INK, fontFamily: disp }}>{fmtTime(rec.in)}{rec.out ? ` \u2013 ${fmtTime(rec.out)}` : " \u2013 no check-out"}</div>
+              <div style={{ fontSize: 13.5, color: INK_DIM, marginTop: 2 }}>{rec.out && ofWorked(rec) != null ? `${ofDur(ofWorked(rec))} worked` : "Hours unknown"}</div>
+              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>{rec.lateMin > 0 ? <OfFlag text={`Late by ${ofDur(rec.lateMin)}`} color="#FF6B35" /> : null}{rec.earlyMin > 0 ? <OfFlag text={`Left ${ofDur(rec.earlyMin)} early`} color="#F59E0B" /> : null}</div>
+            </>
+          ) : rec ? (
+            <div style={{ fontSize: 15, color: INK, fontWeight: 600 }}>Marked as {OF_STATUS[rec.status].label}{rec.status === "leave" || rec.status === "half" ? (rec.leaveType ? ` \u00b7 ${(types.find((t) => t.id === rec.leaveType) || { name: "Leave" }).name}` : "") : ""}</div>
+          ) : (
+            <>
+              <div style={{ fontSize: 18, fontWeight: 800, color: INK, fontFamily: disp }}>{tInfo.auto === "working" ? "Not checked in" : tInfo.auto === "holiday" ? "Holiday" : "Week off"}</div>
+              <div style={{ fontSize: 13, color: INK_FAINT, marginTop: 3 }}>{tInfo.auto === "working" ? `Planned ${plan} (a default, not recorded)` : "No attendance needed today."}</div>
+            </>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button type="button" data-testid="office-checkin" disabled={!canIn} onClick={() => doIn(false)} style={{ flex: 1, minHeight: 52, borderRadius: 16, border: "none", cursor: canIn ? "pointer" : "default", background: canIn ? "#34C759" : PANEL_2, color: canIn ? "#fff" : INK_FAINT, fontSize: 16, fontWeight: 800, fontFamily: disp, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Play size={17} /> Check In</button>
+          <button type="button" data-testid="office-checkout" disabled={!canOut} onClick={doOut} style={{ flex: 1, minHeight: 52, borderRadius: 16, border: "none", cursor: canOut ? "pointer" : "default", background: canOut ? BRASS : PANEL_2, color: canOut ? "#fff" : INK_FAINT, fontSize: 16, fontWeight: 800, fontFamily: disp, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Square size={15} /> Check Out</button>
+        </div>
+        <div style={{ fontSize: 12, color: INK_FAINT, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", margin: "14px 0 7px" }}>Mark today as</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{Object.keys(OF_STATUS).map((st) => <ChipButton key={st} label={OF_STATUS[st].label} active={!!rec && rec.status === st} onClick={() => quick(st)} />)}</div>
+        <button type="button" onClick={() => push({ t: "entry", date: todayKey })} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: BRASS, fontSize: 14.5, fontWeight: 700, padding: "12px 0 0", cursor: "pointer", fontFamily: "inherit" }}><Pencil size={14} /> Add or edit attendance manually</button>
+      </Card>
+      {unmarkedNow > 0 ? <button type="button" onClick={() => { setInsMonth(monthKey(new Date(now))); setTab("insights"); }} style={{ width: "100%", textAlign: "left", marginTop: 10, background: hexA("#F59E0B", 0.12), border: "none", borderRadius: 14, padding: "10px 14px", fontSize: 13.5, color: INK, cursor: "pointer", fontFamily: "inherit" }}>{unmarkedNow} working day{unmarkedNow === 1 ? "" : "s"} this month {unmarkedNow === 1 ? "has" : "have"} no attendance recorded. <b style={{ color: BRASS }}>Review</b></button> : null}
+      <SectionLabel style={{ margin: "14px 4px 6px" }}>Recent days</SectionLabel>
+      <Card style={{ padding: "2px 14px", borderRadius: 18 }}>
+        {recent.map((i, idx) => { const r = i.rec; return (
+          <OfRowCard key={i.key} onClick={() => push({ t: "entry", date: i.key })} style={{ borderBottom: idx === recent.length - 1 ? "none" : `1px solid ${LINE}` }}>
+            <div style={{ width: 74, flexShrink: 0, fontSize: 13.5, color: INK, fontWeight: 600 }}>{ofDayLabel(i.key)}</div>
+            <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: INK_DIM, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r && r.in ? `${fmtTime(r.in)} \u2013 ${r.out ? fmtTime(r.out) : "\u2026"}${r.out && ofWorked(r) != null ? " \u00b7 " + ofDur(ofWorked(r)) : ""}` : i.auto === "working" && !r ? (i.key === todayKey ? "Not checked in yet" : "Not recorded") : ""}</div>
+            {r && r.lateMin > 0 ? <OfFlag text="Late" color="#FF6B35" /> : null}
+            {i.status ? <OfChip status={i.status} small /> : <span style={{ fontSize: 11.5, color: INK_FAINT }}>{"\u2014"}</span>}
+          </OfRowCard>); })}
+      </Card>
+    </>
+  );
+
+  // ---- Leave ----
+  const yr = ofYearById(data, yearId), bals = ofBalances(data, yr.start, todayKey), apps = ofLeaveApps(data);
+  const upcoming = apps.filter((a) => a.to >= todayKey).sort((a, b) => (a.from < b.from ? -1 : 1)), past = apps.filter((a) => a.to < todayKey).slice(0, 8);
+  const appRow = (a) => { const t = types.find((x) => x.id === a.typeId); return (
+    <OfRowCard key={a.id}>
+      <span style={{ width: 10, height: 10, borderRadius: 5, background: t ? t.color : "#8E8E93", flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14.5, fontWeight: 600, color: INK }}>{a.from === a.to ? ofDayLabel(a.from) : `${ofDayLabel(a.from)} \u2013 ${ofDayLabel(a.to)}`}</div><div style={{ fontSize: 12.5, color: INK_FAINT }}>{t ? t.name : "No deduction"} {"\u00b7"} {ofNum(a.total)} day{a.total === 1 ? "" : "s"}{a.note ? ` \u00b7 ${a.note}` : ""}</div></div>
+      <IconBtn title="Cancel leave" onClick={() => askConfirm({ title: "Cancel this leave?", body: `${a.from === a.to ? ofDayLabel(a.from) : ofDayLabel(a.from) + " to " + ofDayLabel(a.to)} (${ofNum(a.total)} day${a.total === 1 ? "" : "s"}) will be removed and returned to your balance.`, yesLabel: "Cancel leave", yes: () => { const r = a.id.startsWith("single-") ? { data: ofDelete(data, a.from, new Date()) } : ofCancelApp(data, a.id, new Date()); commit(r.data); } })}><Trash2 size={17} color={CORAL} /></IconBtn>
+    </OfRowCard>); };
+  const leaveView = (
+    <>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <IconBtn title="Previous leave year" onClick={() => setYearId(String(+yearId - 1))}><ChevronLeft size={20} color={INK_DIM} /></IconBtn>
+        <div style={{ textAlign: "center" }}><div style={{ fontSize: 16, fontWeight: 800, color: INK, fontFamily: disp }}>Leave year {yr.label}</div><div style={{ fontSize: 12.5, color: INK_FAINT }}>{yr.range}</div></div>
+        <IconBtn title="Next leave year" onClick={() => setYearId(String(+yearId + 1))}><ChevronRight size={20} color={INK_DIM} /></IconBtn>
+      </div>
+      {bals.length === 0 ? <Card style={{ padding: 14, borderRadius: 18 }}><div style={{ fontSize: 14, color: INK_DIM }}>No leave types yet. Add them in Office settings.</div></Card> : null}
+      {bals.map((b) => { const used = b.taken + b.planned, pct = b.available > 0 ? Math.min(100, (used / b.available) * 100) : used > 0 ? 100 : 0; return (
+        <Card key={b.type.id} style={{ padding: "12px 14px", borderRadius: 18, marginBottom: 8 }} data-testid={`bal-${b.type.id}`}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 5, background: b.type.color }} />
+            <div style={{ flex: 1, fontSize: 15, fontWeight: 700, color: INK, minWidth: 0 }}>{b.type.name}</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: b.remaining < 0 ? CORAL : INK, fontFamily: disp }} data-testid={`rem-${b.type.id}`}>{ofNum(b.remaining)}<span style={{ fontSize: 12.5, fontWeight: 600, color: INK_FAINT }}> left</span></div>
+          </div>
+          <div style={{ height: 6, background: PANEL_2, borderRadius: 3, margin: "9px 0 7px", overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: b.remaining < 0 ? CORAL : b.type.color, borderRadius: 3 }} /></div>
+          <div style={{ fontSize: 12.5, color: INK_DIM }}>Available {ofNum(b.available)}{b.carryIn > 0 ? ` (${ofNum(b.quota)} + ${ofNum(b.carryIn)} carried)` : ""} {"\u00b7"} Used {ofNum(b.taken)} {"\u00b7"} Planned {ofNum(b.planned)}</div>
+          {b.remaining < 0 ? <div style={{ fontSize: 12.5, color: CORAL, fontWeight: 700, marginTop: 4 }}>Balance is negative by {ofNum(-b.remaining)} day{b.remaining === -1 ? "" : "s"}.</div> : null}
+        </Card>); })}
+      <div style={{ margin: "12px 0 4px" }}><OfBtn label="Apply for leave" onClick={() => push({ t: "apply", init: {} })} /></div>
+      <SectionLabel style={{ margin: "14px 4px 6px" }}>Upcoming leave</SectionLabel>
+      <Card style={{ padding: "2px 14px", borderRadius: 18 }}>{upcoming.length ? upcoming.map(appRow) : <div style={{ padding: "14px 0", fontSize: 14, color: INK_DIM }}>No upcoming leave.</div>}</Card>
+      {past.length ? <><SectionLabel style={{ margin: "14px 4px 6px" }}>Recent leave</SectionLabel><Card style={{ padding: "2px 14px", borderRadius: 18 }}>{past.map(appRow)}</Card></> : null}
+    </>
+  );
+
+  // ---- Insights ----
+  const st = ofMonthStats(data, insMonth, todayKey), [iy, im] = insMonth.split("-").map(Number), nDays = new Date(iy, im, 0).getDate(), first = ofDow(`${insMonth}-01`);
+  let workingInMonth = 0; for (let d = 1; d <= nDays; d++) if (ofDayInfo(data, `${insMonth}-${OF_P2(d)}`).auto === "working") workingInMonth++;
+  const cells = []; for (let i = 0; i < first; i++) cells.push(null); for (let d = 1; d <= nDays; d++) cells.push(`${insMonth}-${OF_P2(d)}`);
+  const tile = (label, value, color) => <div style={{ background: PANEL_2, borderRadius: 14, padding: "9px 8px", textAlign: "center", minWidth: 0 }}><div style={{ fontSize: 17, fontWeight: 800, color: color || INK, fontFamily: disp, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div><div style={{ fontSize: 11.5, color: INK_FAINT, marginTop: 1 }}>{label}</div></div>;
+  const rep = ofYearReport(data, yearId, todayKey);
+  const insightsView = (
+    <>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <IconBtn title="Previous month" onClick={() => setInsMonth(ofShiftYm(insMonth, -1))}><ChevronLeft size={20} color={INK_DIM} /></IconBtn>
+        <div style={{ fontSize: 16, fontWeight: 800, color: INK, fontFamily: disp }} data-testid="ins-month">{ofMonthName(insMonth)}</div>
+        <IconBtn title="Next month" onClick={() => setInsMonth(ofShiftYm(insMonth, 1))}><ChevronRight size={20} color={INK_DIM} /></IconBtn>
+      </div>
+      <Card style={{ padding: "10px 10px 8px", borderRadius: 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 4 }}>{["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} style={{ textAlign: "center", fontSize: 11.5, color: INK_FAINT, fontWeight: 700 }}>{d}</div>)}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
+          {cells.map((k, i) => { if (!k) return <div key={"e" + i} />; const info = ofDayInfo(data, k), m = info.status ? OF_STATUS[info.status] : null, unm = !m && k <= todayKey, r = info.rec; return (
+            <button key={k} type="button" data-day={k} onClick={() => push({ t: "entry", date: k })} aria-label={`${ofDayLabel(k)} ${m ? m.label : unm ? "not recorded" : ""}`} style={{ position: "relative", height: 40, borderRadius: 10, border: k === todayKey ? `2px solid ${BRASS}` : unm ? `1px dashed ${INK_FAINT}` : "1px solid transparent", background: m ? hexA(m.color, 0.2) : "transparent", color: m ? m.color : INK, fontSize: 13.5, fontWeight: 700, cursor: "pointer", padding: 0, fontFamily: "inherit", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", lineHeight: 1.1 }}>
+              <span>{+k.slice(8)}</span>{m ? <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.9 }}>{m.short}</span> : null}
+              {r && r.lateMin > 0 ? <span style={{ position: "absolute", top: 3, right: 4, width: 5, height: 5, borderRadius: 3, background: "#FF3B30" }} /> : null}
+            </button>); })}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", marginTop: 8, padding: "0 2px" }}>{Object.keys(OF_STATUS).map((k) => <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: INK_DIM }}><span style={{ width: 8, height: 8, borderRadius: 4, background: OF_STATUS[k].color }} />{OF_STATUS[k].label}</span>)}<span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: INK_DIM }}><span style={{ width: 8, height: 8, borderRadius: 4, background: "#FF3B30" }} />Late</span></div>
+      </Card>
+      <div style={{ fontSize: 13.5, color: INK_DIM, margin: "10px 4px 8px" }}>Attended <b style={{ color: INK }}>{ofNum(st.attended)}</b> of {workingInMonth} working days</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }} data-testid="ins-tiles">
+        {tile("Present", ofNum(st.present), "#34C759")}{tile("Work from home", ofNum(st.wfh), "#0A84FF")}{tile("Half days", ofNum(st.half), "#F59E0B")}
+        {tile("Leave days", ofNum(st.leaveDays), "#FF6B35")}{tile("Holidays", ofNum(st.holidays), "#8B5CF6")}{tile("Week offs", ofNum(st.weekoffs), "#8E8E93")}
+        {tile("Late arrivals", ofNum(st.late), st.late ? "#FF3B30" : undefined)}{tile("Avg check-in", st.avgIn == null ? "-" : ofTod(st.avgIn))}{tile("Avg check-out", st.avgOut == null ? "-" : ofTod(st.avgOut))}
+        {tile("Total hours", st.workedMin ? (st.workedMin / 60).toFixed(1) + "h" : "0h")}{tile("Left early", ofNum(st.early))}{tile("Not recorded", ofNum(st.unmarked), st.unmarked ? "#F59E0B" : undefined)}
+      </div>
+      <SectionLabel style={{ margin: "16px 4px 8px" }}>Reports</SectionLabel>
+      <SegmentedControl options={[{ id: "month", label: "Monthly" }, { id: "year", label: "Yearly" }]} value={repMode} onChange={setRepMode} variant="secondary" />
+      <Card style={{ padding: "12px 14px", borderRadius: 18, marginTop: 10 }}>
+        {repMode === "month" ? (
+          <>
+            <div style={{ fontSize: 15, fontWeight: 800, color: INK, fontFamily: disp, marginBottom: 6 }}>{ofMonthName(insMonth)}</div>
+            {[["Attended days", ofNum(st.attended)], ["Leave days", ofNum(st.leaveDays)], ["Work from home", ofNum(st.wfh)], ["Holidays / week offs", `${ofNum(st.holidays)} / ${ofNum(st.weekoffs)}`], ["Late arrivals", ofNum(st.late)], ["Total working hours", ofDur(st.workedMin)], ["Avg check-in / out", `${st.avgIn == null ? "-" : ofTod(st.avgIn)} / ${st.avgOut == null ? "-" : ofTod(st.avgOut)}`]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "5px 0", fontSize: 14, color: INK_DIM }}><span>{a}</span><b style={{ color: INK }}>{b}</b></div>)}
+            <div style={{ marginTop: 8 }}><OfBtn label="Export month as CSV" onClick={() => exportCsv(`office-attendance-${insMonth}.csv`, ofCsvMonth(data, insMonth, todayKey))} style={{ background: PANEL_2, color: BRASS }} /></div>
+          </>
+        ) : (
+          <>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <IconBtn title="Previous year" onClick={() => setYearId(String(+yearId - 1))}><ChevronLeft size={19} color={INK_DIM} /></IconBtn>
+              <div style={{ fontSize: 15, fontWeight: 800, color: INK, fontFamily: disp }}>{rep.year.range}</div>
+              <IconBtn title="Next year" onClick={() => setYearId(String(+yearId + 1))}><ChevronRight size={19} color={INK_DIM} /></IconBtn>
+            </div>
+            <div style={{ overflowX: "auto", marginTop: 6 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, color: INK_DIM, minWidth: 300 }}>
+                <thead><tr style={{ color: INK_FAINT }}>{["Month", "Att.", "Leave", "WFH", "Late", "Hrs"].map((h, i) => <th key={h} style={{ textAlign: i ? "right" : "left", padding: "4px 3px", fontWeight: 700 }}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {rep.rows.map((r) => <tr key={r.ym} style={{ borderTop: `1px solid ${LINE}` }}><td style={{ padding: "5px 3px", color: INK }}>{OF_MON[+r.ym.slice(5) - 1]} {r.ym.slice(2, 4)}</td><td style={{ textAlign: "right", padding: "5px 3px" }}>{ofNum(r.attended)}</td><td style={{ textAlign: "right", padding: "5px 3px" }}>{ofNum(r.leaveDays)}</td><td style={{ textAlign: "right", padding: "5px 3px" }}>{ofNum(r.wfh)}</td><td style={{ textAlign: "right", padding: "5px 3px" }}>{ofNum(r.late)}</td><td style={{ textAlign: "right", padding: "5px 3px" }}>{(r.workedMin / 60).toFixed(0)}</td></tr>)}
+                  <tr style={{ borderTop: `2px solid ${LINE}`, fontWeight: 800, color: INK }}><td style={{ padding: "6px 3px" }}>Total</td><td style={{ textAlign: "right", padding: "6px 3px" }}>{ofNum(rep.total.attended)}</td><td style={{ textAlign: "right", padding: "6px 3px" }}>{ofNum(rep.total.leaveDays)}</td><td style={{ textAlign: "right", padding: "6px 3px" }}>{ofNum(rep.total.wfh)}</td><td style={{ textAlign: "right", padding: "6px 3px" }}>{ofNum(rep.total.late)}</td><td style={{ textAlign: "right", padding: "6px 3px" }}>{(rep.total.workedMin / 60).toFixed(0)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style={{ marginTop: 8 }}><OfBtn label="Export year as CSV" onClick={() => exportCsv(`office-attendance-${rep.year.label}.csv`, ofCsvYear(data, yearId, todayKey))} style={{ background: PANEL_2, color: BRASS }} /></div>
+          </>
+        )}
+      </Card>
+    </>
+  );
+
+  return (
+    <div data-office="main" style={{ paddingBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}><SegmentedControl options={[{ id: "today", label: "Today" }, { id: "leave", label: "Leave" }, { id: "insights", label: "Insights" }]} value={tab} onChange={setTab} /></div>
+        <button type="button" aria-label="Office settings" title="Office settings" onClick={() => push({ t: "settings" })} style={{ flexShrink: 0, width: 42, height: 42, borderRadius: 21, border: "none", background: PANEL_2, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Settings2 size={19} color={INK_DIM} /></button>
+      </div>
+      {tab === "today" ? todayView : tab === "leave" ? leaveView : insightsView}
+      {dialog}{toastEl}
+    </div>
+  );
+}
+const TEAL_HEX_OF = () => (LT_DARK ? "#30D158" : "#34C759");
+
+// ---- Slim one-tap card for the Home screen ----
+function OfficeQuick({ data, onCommit, onOpen }) {
+  const [now, setNow] = useState(Date.now());
+  const busy = useRef(false);
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(id); }, []);
+  const todayKey = ofKey(new Date(now)), info = ofDayInfo(data, todayKey), rec = info.rec, openRec = ofOpenRecord(data), stale = ofStaleOpen(data, now), s = data.settings;
+  const workable = info.auto === "working" || (rec && (rec.status === "present" || rec.status === "wfh" || rec.status === "half"));
+  let sub, btn = null;
+  if (stale) { sub = `No check-out for ${ofDayLabel(stale.date)}`; btn = { label: "Resolve", go: onOpen }; }
+  else if (openRec) { sub = `Working ${ofDur((now - new Date(openRec.in).getTime()) / 60000)} \u00b7 in ${fmtTime(openRec.in)}`; btn = { label: "Check Out", go: () => { if (busy.current) return; busy.current = true; setTimeout(() => { busy.current = false; }, 700); const r = ofCheckOut(data, new Date()); if (r.data && !r.suggestHalf) onCommit(r.data); else onOpen(); } }; }
+  else if (rec && rec.in) sub = `${fmtTime(rec.in)}${rec.out ? " \u2013 " + fmtTime(rec.out) : ""}${rec.out && ofWorked(rec) != null ? " \u00b7 " + ofDur(ofWorked(rec)) : ""}`;
+  else if (rec) sub = OF_STATUS[rec.status].label;
+  else if (info.auto === "holiday") sub = info.hol ? `Holiday \u00b7 ${info.hol.name}` : "Holiday";
+  else if (info.auto === "weekoff") sub = "Week off";
+  else { sub = `Not checked in \u00b7 planned ${fmtTimeString12(s.inTime)}`; btn = { label: "Check In", go: () => { if (busy.current) return; busy.current = true; setTimeout(() => { busy.current = false; }, 700); const r = ofCheckIn(data, new Date(), false); if (r.data) onCommit(r.data); else onOpen(); } }; }
+  return (
+    <div data-testid="office-quick" onClick={onOpen} role="button" style={{ display: "flex", alignItems: "center", gap: 10, background: PANEL, boxShadow: CARD_SHADOW, borderRadius: 16, padding: "9px 10px 9px 12px", marginBottom: 12, cursor: "pointer" }}>
+      <div style={{ width: 34, height: 34, borderRadius: 11, background: "rgba(2,132,199,0.13)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Building2 size={17} color="#0284C7" /></div>
+      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14.5, fontWeight: 750, color: INK, fontFamily: disp }}>Office</div><div style={{ fontSize: 12.5, color: INK_DIM, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</div></div>
+      {btn ? <button type="button" data-testid="office-quick-btn" onClick={(e) => { e.stopPropagation(); btn.go(); }} style={{ flexShrink: 0, minHeight: 38, padding: "0 16px", borderRadius: 980, border: "none", background: btn.label === "Check In" ? "#34C759" : BRASS, color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: disp }}>{btn.label}</button> : <ChevronRight size={18} color={INK_FAINT} />}
+    </div>
+  );
+}
+
 const blankItemForm = () => ({ reminderType: "", id: null, name: "", type: "instant", icon: "Target", intervalValue: 2, periodUnit: "hours", amount: 250, unit: "ml", requiredDurationValue: 20, requiredDurationUnit: "minutes", groups: {}, days: [], scheduledTime: "" });
 
 function LifeTracker() {
@@ -4067,6 +4944,11 @@ function LifeTracker() {
   const TEAL_HEX = darkMode ? "#30D158" : "#34C759";
   const CORAL_HEX = darkMode ? "#FF453A" : "#FF3B30";
   const [showHolidays, setShowHolidays] = useState(false);
+  // Office & Leave: one self-contained record (settings, leave types, holidays, attendance by date). Written to storage immediately on every change.
+  const [officeData, setOfficeData] = useState(() => ofNormalize(readPersistedSync("officeData", null)));
+  const [officeDepth, setOfficeDepth] = useState(0);
+  const officeBackRef = useRef(null);
+  const commitOffice = (nd) => { setOfficeData(nd); try { window.storage.set("officeData", JSON.stringify(nd), false).catch(() => {}); } catch (e) {} };
   const [moreSection, setMoreSection] = useState(null); // More page: null = category list, otherwise the open option
   // Open every main page, Planner category and More option at the top. The app scrolls as the whole document and nothing
   // used to reset it, so a short page could open under the old scroll offset (header + back-row cut off). Runs before paint.
@@ -4185,6 +5067,7 @@ function LifeTracker() {
   useEffect(() => { if (loaded) window.storage.set("inboxItems", JSON.stringify(inboxItems), false).catch(() => {}); }, [inboxItems, loaded]);
   useEffect(() => { if (loaded) window.storage.set("financeMonthly", JSON.stringify(financeMonthly), false).catch(() => {}); }, [financeMonthly, loaded]);
   useEffect(() => { if (loaded) window.storage.set("shoppingLists", JSON.stringify(shoppingLists), false).catch(() => {}); }, [shoppingLists, loaded]);
+  useEffect(() => { if (loaded) window.storage.set("officeData", JSON.stringify(officeData), false).catch(() => {}); }, [officeData, loaded]);
   useEffect(() => { if (loaded) window.storage.set("savedShopNames", JSON.stringify(savedShopNames), false).catch(() => {}); }, [savedShopNames, loaded]);
   useEffect(() => { if (loaded) window.storage.set("savedShoppingCategories", JSON.stringify(savedShoppingCategories), false).catch(() => {}); }, [savedShoppingCategories, loaded]);
   useEffect(() => { if (loaded) window.storage.set("remindersEnabled", JSON.stringify(remindersEnabled), false).catch(() => {}); }, [remindersEnabled, loaded]);
@@ -4230,7 +5113,7 @@ function LifeTracker() {
   // ---- Data Link: export / import (offline backup) ----
   const exportData = async (auto) => {
     const isAuto = auto === true; // the button passes a click event, the daily timer passes true
-    const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, exportedAt: new Date().toISOString() };
+    const payload = { dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, officeData, exportedAt: new Date().toISOString() };
     const fname = `life-tracker-backup-${formatDMYForFilename(dateKey())}.json`;
     let r;
     try { r = await saveBackupFile(fname, JSON.stringify(payload, null, 2), "application/json", { share: !isAuto, askPermission: !isAuto, download: true }); }
@@ -4254,8 +5137,8 @@ function LifeTracker() {
     }, 2500);
     return () => clearTimeout(autoExportTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, loaded, autoExportEnabled, dataMode, lastAutoExportAt, today]);
-  const applyImportedData = (data) => {
+  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, officeData, loaded, autoExportEnabled, dataMode, lastAutoExportAt, today]);
+  const applyImportedData = (data, mode) => {
     if (!data || typeof data !== "object") return false;
     if (data.dailyItems) setDailyItems(data.dailyItems);
     if (data.dailyLogs) setDailyLogs(data.dailyLogs);
@@ -4269,6 +5152,8 @@ function LifeTracker() {
     if (data.savedShopNames) setSavedShopNames(data.savedShopNames);
     if (data.savedShoppingCategories) setSavedShoppingCategories(data.savedShoppingCategories);
     if (data.remindersEnabled !== undefined) setRemindersEnabled(data.remindersEnabled);
+    // Office & Leave: a restored backup replaces it; a Google Sheet pull merges by date so nothing is duplicated or overwritten by older data.
+    if (data.officeData) { try { const inc = ofNormalize(data.officeData); setOfficeData((cur) => (mode === "merge" ? ofMerge(cur, inc) : inc)); } catch (e) {} }
     return true;
   };
   const importDataFile = (file) => {
@@ -4292,7 +5177,7 @@ function LifeTracker() {
   const cancelImport = () => setPendingImportData(null);
 
   // ---- Data Link: online sync (Google Sheet via Apps Script Web App URL) ----
-  const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, syncedAt: new Date().toISOString() });
+  const buildSyncPayload = () => JSON.stringify({ dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, officeData, syncedAt: new Date().toISOString() });
   // Google Apps Script can hang instead of erroring (e.g. a stale/misconfigured deployment),
   // which would otherwise leave the "Syncing…" spinner running forever with no way out for the
   // user. Aborting after 15s guarantees pushToSheet/pullFromSheet always settle into success or
@@ -4322,7 +5207,7 @@ function LifeTracker() {
       const sep = sheetUrl.includes("?") ? "&" : "?";
       const res = await fetch(sheetUrl + sep + "t=" + Date.now(), { signal: controller.signal });
       const data = await res.json();
-      applyImportedData(data);
+      applyImportedData(data, "merge");
       setSyncStatus("success");
       setLastSyncedAt(new Date().toISOString());
     } catch (e) {
@@ -4335,7 +5220,7 @@ function LifeTracker() {
   useEffect(() => {
     if (!loaded || dataMode !== "online" || !sheetUrl || didInitialPull.current) return;
     didInitialPull.current = true;
-    const hasLocalData = dailyItems.length || Object.keys(dailyLogs).length || goals.length || repayments.length || travelPlans.length || myDayEvents.length || Object.keys(financeMonthly).length || shoppingLists.length;
+    const hasLocalData = dailyItems.length || Object.keys(dailyLogs).length || goals.length || repayments.length || travelPlans.length || myDayEvents.length || Object.keys(financeMonthly).length || shoppingLists.length || ofHasData(officeData);
     if (hasLocalData) {
       pullSettledRef.current = true;
       pushToSheet();
@@ -4350,7 +5235,7 @@ function LifeTracker() {
     syncTimerRef.current = setTimeout(() => { pushToSheet(); }, 2500);
     return () => clearTimeout(syncTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled]);
+  }, [dailyItems, dailyLogs, goals, repayments, travelPlans, myDayEvents, inboxItems, financeMonthly, shoppingLists, savedShopNames, savedShoppingCategories, remindersEnabled, officeData]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -5957,6 +6842,7 @@ frequency: myDayFormFreq, monthDay: myDayFormFreq === "Monthly" ? (parseInt(myDa
       // Today page: opened category -> Today main
       if (page === "daily" && expandedDailyCategory) { setExpandedDailyCategory(null); return true; }
       // Planner page: opened category -> Planner main
+      if (page === "categories" && catTab === "office" && officeBackRef.current && officeBackRef.current()) return true;
       if (page === "categories" && catTab) { setCatTab(null); return true; }
       return false;
   };
@@ -5965,7 +6851,7 @@ frequency: myDayFormFreq, monthDay: myDayFormFreq === "Monthly" ? (parseInt(myDa
     + ((showAddTravel || editingTravelId) ? 1 : 0) + ((showAddRepayment || editingRepaymentId) ? 1 : 0) + (shoppingForm ? 1 : 0)
     + (bikeServiceForm ? 1 : 0) + (selectedStreakId ? 1 : 0) + (showQuickCapture ? 1 : 0)
     + (page === "datalink" && moreSection ? (moreSection === "sheet" ? 2 : 1) : 0)
-    + (page === "daily" && expandedDailyCategory ? 1 : 0) + (page === "categories" && catTab ? 1 : 0);
+    + (page === "daily" && expandedDailyCategory ? 1 : 0) + (page === "categories" && catTab ? 1 : 0) + (page === "categories" && catTab === "office" ? officeDepth : 0);
   // One extra history level while a return-to-previous-page is pending, so phone Back / browser Back always has an entry to use.
   const backDepth = baseDepth + (navStack.length > 0 ? 1 : 0);
   const closeAllSubpages = () => {
@@ -6216,6 +7102,8 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             if (lead > 0) { const d = new Date(`${r.dueDate}T09:00:00`); d.setDate(d.getDate() - lead); add(`Upcoming payment: ${nm}`, `Due ${formatDMY(r.dueDate)}${amt}`, d, "repay", r); }
             add(`Payment due today: ${nm}`, `${formatDMY(r.dueDate)}${amt}`, new Date(`${r.dueDate}T09:00:00`), "repay", r);
           });
+          // Office & Leave: check-in / check-out reminders at the planned times (they never record attendance).
+          try { ofReminders(officeData, nowMs).forEach((r) => add(r.title, r.body, r.at, "office", { id: r.key }, r.key)); } catch (e) {}
           // Build the final list: soonest first, never more than Android's alarm limit.
           mains.sort((x, y) => x.at.getTime() - y.at.getTime());
           const list = [], ring = []; let nid = 10;
@@ -6251,7 +7139,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
     }, 1200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [travelPlans, dailyItems, myDayEvents, shoppingLists, repayments, today, reminderStyle, dailySig, exactAlarmOk, notifBlocked, notifMode, soundSig]);
+  }, [travelPlans, dailyItems, myDayEvents, shoppingLists, repayments, today, reminderStyle, dailySig, exactAlarmOk, notifBlocked, notifMode, soundSig, officeData]);
 
   // Tapping an alarm in the notification panel opens the full-screen alarm screen.
   useEffect(() => {
@@ -6262,6 +7150,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
     try {
       Promise.resolve(LN.addListener("localNotificationActionPerformed", (ev) => {
         const n = ev && ev.notification;
+        if (n && n.extra && n.extra.kind === "office") { setPage("categories"); setCatTab("office"); return; }
         if (!n || !n.extra || !n.extra.alarm) return;
         if (alarmDoneRef.current && alarmDoneRef.current(n.extra.kind, n.extra.itemId)) { ackNativeAlarm(n.title, n.id); return; }
         setAlarmScreen({ title: n.title || "Alarm", body: n.body || "", kind: n.extra.kind || "", itemId: n.extra.itemId || "", nid: n.id });
@@ -7929,6 +8818,8 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             return <HomeSlides stats={homeSlides} focus={[]} />;
           })()}
 
+          {officeData.settings.showOnHome !== false ? <OfficeQuick data={officeData} onCommit={commitOffice} onOpen={() => { setPage("categories"); setCatTab("office"); }} /> : null}
+
           {nextActivities.length > 0 && (
             <div style={{ marginBottom: 12 }}>
               <HomeSectionHead icon={Clock} label="Next up" count={nextActivities.length} action="View all" onAction={() => setPage("daily")} />
@@ -9058,6 +9949,7 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
                   { label: "Daily", ids: ["myday", "activity", "shopping"] },
                   { label: "Money", ids: ["finance", "financegoals"] },
                   { label: "Growth & Life", ids: ["career", "health", "trip"] },
+                  { label: "Work", ids: ["office"] },
                 ];
                 const known = groups.reduce((a, g) => a.concat(g.ids), []);
                 const extra = CATEGORY_DEFS.filter((d) => !known.includes(d.id)).map((d) => d.id);
@@ -9176,7 +10068,9 @@ const rd = fqE === "Daily" ? Object.keys(NATIVE_WD) : datedRepeat ? [] : (e.repe
             );
           })()}
 
-          {(catTab === "trip" || catTab === "activity") ? (
+          {catTab === "office" ? (
+            <OfficeLeave data={officeData} onChange={commitOffice} onDepth={setOfficeDepth} backRef={officeBackRef} />
+          ) : (catTab === "trip" || catTab === "activity") ? (
             <>
               {!itemForm && catTab === "trip" && (
                 <>
